@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <!-- Courier Prime (SIL OFL) — committed in this folder so the build is
+         identical on every machine; no system font dependency. -->
+    <FontName>CourierPrime-Regular.ttf</FontName>
+    <!-- Baked large (design res is 4K) and scaled DOWN in code; scaling up blurs. -->
+    <Size>96</Size>
+    <Spacing>0</Spacing>
+    <UseKerning>true</UseKerning>
+    <Style>Regular</Style>
+    <DefaultCharacter>?</DefaultCharacter>
+    <CharacterRegions>
+      <CharacterRegion>
+        <Start>&#32;</Start>
+        <End>&#126;</End>
+      </CharacterRegion>
+    </CharacterRegions>
+  </Asset>
+</XnaContent>

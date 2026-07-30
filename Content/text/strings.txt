@@ -1,0 +1,30 @@
+# Every line of player-facing text in the game lives here.
+# Format:  key = text     (everything after the first = is the text, verbatim)
+# Rewrite the right-hand side freely — the game only cares about the keys.
+# Room dialogue is NOT here; that lives in the mission .txt files.
+
+# --- Title screen ---
+title = The Timeline Is
+menu_new_game = New Game
+menu_continue = Continue
+
+# --- Map & room ---
+map_save = Save
+room_save = Save
+saved = Game saved.
+
+# --- Battle (placeholder) ---
+battle_placeholder = A battle rages!
+battle_win = Fine!
+battle_lose = Fall in battle (debug)
+
+# --- Death ---
+death_title = You died.
+death_reload = Reload
+death_no_save = No save found. The map awaits, but your progress is gone.
+
+# --- Dev map mode (only shown with --devmap) ---
+devmap_hint = DEV MAP: click anywhere to place a destination
+devmap_name_prompt = Name this place, then press Enter:
+devmap_mission_prompt = Mission folder name, then press Enter:
+devmap_saved = Destination saved to destinations.txt.

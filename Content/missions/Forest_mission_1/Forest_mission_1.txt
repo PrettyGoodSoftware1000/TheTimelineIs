@@ -1,0 +1,10 @@
+Room 1:
+Background: forest_clearing.png
+Cast: Joe_dirtbag, Goblin
+Joe_dirtbag: Goddamn if my balls ain't itching.
+Goblin: Give gold or I EAT BALLS!
+Joe_dirtbag: Sounds like he's looking for some ass whoopin'.
+Room 2:
+Cast: Joe_dirtbag, Goblin, Goblin, Goblin
+Goblin: EAT BALLS!
+[Battle!]

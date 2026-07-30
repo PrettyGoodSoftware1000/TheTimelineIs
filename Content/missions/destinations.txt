@@ -1,0 +1,3 @@
+# name              x     y     mission
+Forest Clearing     412   688   Forest_mission_1
+Ruined Bridge       905   1240  Bridge_mission_1

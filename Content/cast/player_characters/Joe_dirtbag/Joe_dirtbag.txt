@@ -1,0 +1,3 @@
+# Sprite variants for Joe_dirtbag. One file name per line.
+# Each sprite needs a matching thumbnail: Joe_dirtbag.png -> Joe_dirtbag_thumb.png
+Joe_dirtbag.png
