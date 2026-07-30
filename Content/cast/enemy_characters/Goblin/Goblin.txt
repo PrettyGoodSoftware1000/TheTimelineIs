@@ -1,7 +1,0 @@
-# Sprite variants for Goblin. One file name per line.
-# When several goblins share a room, each takes an unused variant first.
-# Drop in Goblin4.png and add a line here — nothing else needed.
-# Each sprite needs a matching thumbnail: Goblin1.png -> Goblin1_thumb.png
-Goblin1.png
-Goblin2.png
-Goblin3.png
