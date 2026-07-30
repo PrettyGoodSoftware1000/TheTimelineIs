@@ -14,14 +14,14 @@ room_save = Save
 saved = Game saved.
 
 # --- Battle (placeholder) ---
-battle_placeholder = A battle rages!
+battle_placeholder = Battle Begins! 
 battle_win = Fine!
-battle_lose = Fall in battle (debug)
+battle_lose = You're dead. (debug)
 
 # --- Death ---
 death_title = You died.
 death_reload = Reload
-death_no_save = No save found. The map awaits, but your progress is gone.
+death_no_save = You didn't save so you're screwed. (Going to the map)
 
 # --- Dev map mode (only shown with --devmap) ---
 devmap_hint = DEV MAP: click anywhere to place a destination
