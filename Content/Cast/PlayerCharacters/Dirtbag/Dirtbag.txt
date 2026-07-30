@@ -1,0 +1,4 @@
+# Sprite variants for Dirtbag. One file name per line.
+# Optional thumbnail per sprite: Dirtbag.png -> DirtbagThumb.png
+# If a thumbnail is missing, the full sprite is used instead.
+Dirtbag.png

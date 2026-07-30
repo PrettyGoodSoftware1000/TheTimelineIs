@@ -8,7 +8,7 @@ namespace TheTimelineIs.Core.Data;
 public record Destination(string Name, int X, int Y, string Mission);
 
 /// <summary>
-/// Parses Content/missions/destinations.txt. Columns are whitespace-separated;
+/// Parses Content/Missions/Destinations.txt. Columns are whitespace-separated;
 /// the LAST three tokens are x, y, mission, and everything before them is the
 /// destination name — so names may contain spaces. '#' lines are comments.
 /// Coordinates are in map-image pixel space, not screen space.
@@ -17,7 +17,7 @@ public class DestinationTable
 {
     public List<Destination> All { get; } = new();
 
-    public const string Path = "Content/missions/destinations.txt";
+    public const string Path = "Content/Missions/Destinations.txt";
 
     public static DestinationTable Load()
     {

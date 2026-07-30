@@ -27,4 +27,4 @@ death_no_save = You didn't save so you're screwed. (Going to the map)
 devmap_hint = DEV MAP: click anywhere to place a destination
 devmap_name_prompt = Name this place, then press Enter:
 devmap_mission_prompt = Mission folder name, then press Enter:
-devmap_saved = Destination saved to destinations.txt.
+devmap_saved = Destination saved to Destinations.txt.

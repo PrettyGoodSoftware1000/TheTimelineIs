@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework;
 namespace TheTimelineIs.Core.Data;
 
 /// <summary>
-/// All player-facing text lives in Content/text/strings.txt so the writer
+/// All player-facing text lives in Content/Text/Strings.txt so the writer
 /// can rework tone without touching code. Format: key = text, one per line.
 /// </summary>
 public class Strings
@@ -18,7 +18,7 @@ public class Strings
         var result = new Strings();
         try
         {
-            using var stream = TitleContainer.OpenStream("Content/text/strings.txt");
+            using var stream = TitleContainer.OpenStream("Content/Text/Strings.txt");
             using var reader = new StreamReader(stream);
             string? line;
             while ((line = reader.ReadLine()) != null)
@@ -32,7 +32,7 @@ public class Strings
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[strings] failed to load Content/text/strings.txt: {ex.Message}");
+            Console.WriteLine($"[strings] failed to load Content/Text/Strings.txt: {ex.Message}");
         }
         return result;
     }

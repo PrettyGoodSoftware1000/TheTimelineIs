@@ -43,7 +43,7 @@ public class RoomScreen : IScreen
             : new Room();
         _present = CastResolver.EnterRoom(ctx.State.Instances, _room.Cast);
         _background = _room.Background.Length > 0
-            ? ctx.Assets.LoadTexture($"Content/images/backgrounds/{_room.Background}")
+            ? ctx.Assets.LoadTexture($"Content/Images/Backgrounds/{_room.Background}")
             : ctx.Pixel;
         _entryIndex = 0;
     }
@@ -73,9 +73,17 @@ public class RoomScreen : IScreen
 
     public void Draw(SpriteBatch batch)
     {
-        batch.Draw(_background,
-            new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height),
-            _background == _ctx.Pixel ? new Color(20, 30, 20) : Color.White);
+        var screen = new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height);
+        if (_background == _ctx.Pixel)
+        {
+            batch.Draw(_background, screen, new Color(20, 30, 20));
+        }
+        else
+        {
+            // undersized backgrounds are scaled up, then fitted without distortion
+            var size = AssetLoader.DisplaySize(_background, AssetKind.Background);
+            batch.Draw(_background, Ui.FitCentered(size, screen), Color.White);
+        }
 
         DrawCast(batch);
 
@@ -139,14 +147,14 @@ public class RoomScreen : IScreen
         const int zoneWidth = 1650;
         int zoneStart = left ? 120 : VirtualViewport.Width - 120 - zoneWidth;
 
+        int slot = zoneWidth / System.Math.Max(1, side.Count);
         for (int i = 0; i < side.Count; i++)
         {
             var tex = _ctx.Assets.LoadTexture(side[i].SpritePath);
-            float scale = spriteHeight / (float)tex.Height;
-            int w = (int)(tex.Width * scale);
-            int slot = zoneWidth / System.Math.Max(1, side.Count);
-            int x = zoneStart + slot * i + (slot - w) / 2;
-            batch.Draw(tex, new Rectangle(x, baseline - spriteHeight, w, spriteHeight), Color.White);
+            var size = AssetLoader.DisplaySize(tex, AssetKind.Sprite);
+            // fit the stage slot without distortion; tall art keeps its full height
+            var stage = new Rectangle(zoneStart + slot * i, baseline - spriteHeight, slot, spriteHeight);
+            batch.Draw(tex, Ui.FitCentered(size, stage), Color.White);
         }
     }
 
@@ -158,7 +166,12 @@ public class RoomScreen : IScreen
             i.Name.Equals(dialogue.Speaker, System.StringComparison.OrdinalIgnoreCase) && i.Alive);
         var thumbRect = new Rectangle(DialogueBox.X + 40, DialogueBox.Y + 38, 384, 384);
         if (speaker != null)
-            batch.Draw(_ctx.Assets.LoadTexture(speaker.ThumbPath), thumbRect, Color.White);
+        {
+            // a dedicated thumbnail if one exists, otherwise the full sprite
+            var thumb = _ctx.Assets.LoadFirstAvailable(speaker.ThumbPath, speaker.SpritePath);
+            var size = AssetLoader.DisplaySize(thumb, AssetKind.Thumb);
+            batch.Draw(thumb, Ui.FitCentered(size, thumbRect), Color.White);
+        }
 
         var namePos = new Vector2(DialogueBox.X + 480, DialogueBox.Y + 40);
         batch.DrawString(_ctx.Font, dialogue.Speaker, namePos, Color.Gold,

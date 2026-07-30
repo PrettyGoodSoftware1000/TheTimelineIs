@@ -5,7 +5,7 @@ using TheTimelineIs.Core.Platform;
 namespace TheTimelineIs.Desktop;
 
 /// <summary>
-/// Appends rows to the SOURCE destinations.txt, found by walking up from the
+/// Appends rows to the SOURCE Destinations.txt, found by walking up from the
 /// executable to the directory containing TheTimelineIs.sln — so a point
 /// placed in dev mode survives the next build. Falls back to the copy next
 /// to the executable if the repo isn't found (with a console warning).
@@ -33,11 +33,11 @@ public class DesktopDevDestinationWriter : IDevDestinationWriter
         while (dir != null)
         {
             if (File.Exists(Path.Combine(dir.FullName, "TheTimelineIs.sln")))
-                return Path.Combine(dir.FullName, "Content", "missions", "destinations.txt");
+                return Path.Combine(dir.FullName, "Content", "Missions", "Destinations.txt");
             dir = dir.Parent;
         }
         Console.WriteLine("[devmap] WARNING: repo root not found; writing next to the executable. " +
             "This copy is overwritten on the next build.");
-        return Path.Combine(AppContext.BaseDirectory, "Content", "missions", "destinations.txt");
+        return Path.Combine(AppContext.BaseDirectory, "Content", "Missions", "Destinations.txt");
     }
 }

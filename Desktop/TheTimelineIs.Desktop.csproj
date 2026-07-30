@@ -36,20 +36,20 @@
   <!-- Raw game data: copied verbatim next to the executable so
        TitleContainer can open it with repo-relative "Content/..." paths. -->
   <ItemGroup>
-    <None Include="..\Content\images\**\*.*">
-      <Link>Content\images\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    <None Include="..\Content\Images\**\*.*">
+      <Link>Content\Images\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\missions\**\*.*">
-      <Link>Content\missions\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    <None Include="..\Content\Missions\**\*.*">
+      <Link>Content\Missions\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\cast\**\*.*">
-      <Link>Content\cast\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    <None Include="..\Content\Cast\**\*.*">
+      <Link>Content\Cast\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\text\**\*.*">
-      <Link>Content\text\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    <None Include="..\Content\Text\**\*.*">
+      <Link>Content\Text\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

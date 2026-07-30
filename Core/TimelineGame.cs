@@ -47,7 +47,7 @@ public class TimelineGame : Game
         _ctx = new GameContext
         {
             Game = this,
-            Font = Content.Load<SpriteFont>("fonts/courier"),
+            Font = Content.Load<SpriteFont>("Fonts/Courier"),
             Strings = Strings.Load(),
             Assets = new AssetLoader(GraphicsDevice),
             Viewport = _viewport,

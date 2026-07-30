@@ -14,7 +14,7 @@ dotnet run --project Desktop
 ```
 
 Dev map mode (click the map to place destinations, rows are appended to
-`Content/missions/destinations.txt` in the repo):
+`Content/Missions/Destinations.txt` in the repo):
 
 ```
 dotnet run --project Desktop -- --devmap
@@ -39,47 +39,65 @@ dotnet run --project Desktop -- --devmap
   pipeline rebuild needed when art or text changes). The one exception is the
   font, which MonoGame must bake at build time via `Content/Content.mgcb`.
 
+## Naming convention
+
+Folders and files use initial caps with no underscores; multi-word names run
+together with each word capitalized — `EnemyCharacters`, `ForestMission1`,
+`RuinedBridge.png`. Character names follow the same rule (`Dirtbag`, not
+`Joe_dirtbag`), and a character's folder, sprite, manifest, and the speaker
+name in mission scripts must all match exactly.
+
 ## How to refer to files
 
 Always use repo-relative paths with forward slashes, e.g.
-`Content/cast/enemy_characters/Goblin/Goblin2.png`. Never absolute paths
+`Content/Cast/EnemyCharacters/Goblin/Goblin2.png`. Never absolute paths
 (`C:\...`) — the repo lives at different roots on different machines.
 
 ## Content authoring
 
 The game is authored at **3840x2160** and letterboxes to any window or screen.
 
-| Asset | Path | Size |
+| Asset | Path | Optimal size |
 |---|---|---|
-| World map | `Content/images/map/map.png` | 7680x4320 (bigger than the view so it scrolls) |
-| Room backgrounds | `Content/images/backgrounds/*.png` | 3840x2160 |
-| Character sprites | `Content/cast/.../{Name}/{Name}N.png` | 1200x1800, transparent background |
-| Dialogue thumbnails | same folder, `{Name}N_thumb.png` | 512x512 |
+| World map | `Content/Images/Map/Map.png` | 7680x4320 (bigger than the view so it scrolls) |
+| Room backgrounds | `Content/Images/Backgrounds/*.png` | 3840x2160 |
+| Character sprites | `Content/Cast/.../{Name}/{Name}N.png` | 1200x1800, transparent background |
+| Dialogue thumbnails | same folder, `{Name}NThumb.png` | 512x512 (optional) |
 
-### Destinations — `Content/missions/destinations.txt`
+**Undersized art is scaled up automatically.** If an image is smaller than the
+optimal size for its kind, it is enlarged until its longer side matches the
+corresponding optimal dimension, with the aspect ratio preserved — so a
+960x1440 sprite renders as 1200x1800, and a 1000x500 one renders as 1200x600.
+Art already at or above the optimal size is left at its native resolution.
+Nothing is ever stretched to fit; images are centered in their slot instead.
+
+Thumbnails are optional: if `Goblin1Thumb.png` doesn't exist, the dialogue box
+falls back to the full `Goblin1.png` sprite.
+
+### Destinations — `Content/Missions/Destinations.txt`
 
 ```
 # name              x     y     mission
-Forest Clearing     412   688   Forest_mission_1
+Forest Clearing     412   688   ForestMission1
 ```
 
 The last three columns are x, y (in **map-image pixels**), and the mission
 folder name; everything before them is the display name (spaces allowed).
 Easiest way to add one: run with `--devmap` and click the map.
 
-### Missions — `Content/missions/{Mission}/{Mission}.txt`
+### Missions — `Content/Missions/{Mission}/{Mission}.txt`
 
 ```
 Room 1:
-Background: forest_clearing.png
-Cast: Joe_dirtbag, Goblin
-Joe_dirtbag: Goddamn if my balls ain't itching.
+Background: ForestClearing.png
+Cast: Dirtbag, Goblin
+Dirtbag: Goddamn if my balls ain't itching.
 [Battle!]
 Room 2:
-Cast: Joe_dirtbag, Goblin, Goblin
+Cast: Dirtbag, Goblin, Goblin
 ```
 
-- `Background:` names a file in `Content/images/backgrounds/`. Omit it in a
+- `Background:` names a file in `Content/Images/Backgrounds/`. Omit it in a
   later room to keep the previous room's background.
 - `Cast:` lists who's on stage. The Nth mention of a name is the same
   individual across rooms — it keeps its sprite. Anyone who died in an
@@ -89,14 +107,14 @@ Cast: Joe_dirtbag, Goblin, Goblin
   now: win continues, lose reloads the last save).
 - After the last room, the mission completes and the map returns.
 
-### Characters — `Content/cast/{player_characters|enemy_characters}/{Name}/`
+### Characters — `Content/Cast/{PlayerCharacters|EnemyCharacters}/{Name}/`
 
-Each folder holds sprite variants (`Goblin1.png`, `Goblin2.png`, ...), matching
-thumbnails (`Goblin1_thumb.png`, ...), and a manifest `{Name}.txt` listing the
+Each folder holds sprite variants (`Goblin1.png`, `Goblin2.png`, ...), optional
+thumbnails (`Goblin1Thumb.png`, ...), and a manifest `{Name}.txt` listing the
 variant file names one per line. The manifest exists because mobile app bundles
 can't list directory contents — when you add `Goblin4.png`, add a line for it.
 
-### Player-facing text — `Content/text/strings.txt`
+### Player-facing text — `Content/Text/Strings.txt`
 
 Every string the game shows outside of room dialogue (menus, buttons, save
 confirmations, the death screen) lives here as `key = text`. Edit the text
@@ -104,8 +122,8 @@ freely; keys must stay.
 
 ### Font
 
-`Content/fonts/CourierPrime-Regular.ttf` (Courier Prime, SIL OFL — license in
-the same folder) is baked at build time via `Content/fonts/courier.spritefont`.
+`Content/Fonts/CourierPrime-Regular.ttf` (Courier Prime, SIL OFL — license in
+the same folder) is baked at build time via `Content/Fonts/Courier.spritefont`.
 
 ## Saves
 

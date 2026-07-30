@@ -14,6 +14,20 @@ public static class Ui
     public static void FillRect(SpriteBatch batch, Texture2D pixel, Rectangle rect, Color color) =>
         batch.Draw(pixel, rect, color);
 
+    /// <summary>
+    /// Largest rectangle of the given aspect that fits inside bounds, centered.
+    /// Art is never stretched — letterboxed within its slot instead.
+    /// </summary>
+    public static Rectangle FitCentered(Vector2 size, Rectangle bounds)
+    {
+        float scale = System.Math.Min(bounds.Width / size.X, bounds.Height / size.Y);
+        int w = (int)(size.X * scale);
+        int h = (int)(size.Y * scale);
+        return new Rectangle(
+            bounds.X + (bounds.Width - w) / 2,
+            bounds.Y + (bounds.Height - h) / 2, w, h);
+    }
+
     public static void DrawTextCentered(SpriteBatch batch, SpriteFont font, string text,
         Rectangle bounds, Color color, float scale)
     {

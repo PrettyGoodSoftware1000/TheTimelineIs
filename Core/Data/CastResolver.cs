@@ -18,10 +18,11 @@ public class CharacterInstance
     public bool Alive = true;
 
     public string Folder => IsPlayer
-        ? $"Content/cast/player_characters/{Name}"
-        : $"Content/cast/enemy_characters/{Name}";
+        ? $"Content/Cast/PlayerCharacters/{Name}"
+        : $"Content/Cast/EnemyCharacters/{Name}";
     public string SpritePath => $"{Folder}/{SpriteFile}";
-    public string ThumbPath => $"{Folder}/{System.IO.Path.GetFileNameWithoutExtension(SpriteFile)}_thumb.png";
+    /// <summary>Optional: Goblin1.png -> Goblin1Thumb.png. Falls back to the full sprite.</summary>
+    public string ThumbPath => $"{Folder}/{System.IO.Path.GetFileNameWithoutExtension(SpriteFile)}Thumb.png";
 
     public CharacterInstance Clone() => (CharacterInstance)MemberwiseClone();
 }
@@ -44,18 +45,18 @@ public class CastManifest
         if (Cache.TryGetValue(name, out var cached)) return cached;
 
         var manifest = new CastManifest { Name = name };
-        var lines = AssetLoader.TryReadLines($"Content/cast/player_characters/{name}/{name}.txt");
+        var lines = AssetLoader.TryReadLines($"Content/Cast/PlayerCharacters/{name}/{name}.txt");
         if (lines.Count > 0)
         {
             manifest.IsPlayer = true;
         }
         else
         {
-            lines = AssetLoader.TryReadLines($"Content/cast/enemy_characters/{name}/{name}.txt");
+            lines = AssetLoader.TryReadLines($"Content/Cast/EnemyCharacters/{name}/{name}.txt");
             if (lines.Count == 0)
             {
                 Console.WriteLine($"[cast] no manifest found for '{name}' — expected " +
-                    $"Content/cast/player_characters/{name}/{name}.txt or Content/cast/enemy_characters/{name}/{name}.txt");
+                    $"Content/Cast/PlayerCharacters/{name}/{name}.txt or Content/Cast/EnemyCharacters/{name}/{name}.txt");
                 lines = new List<string> { $"{name}.png" };
             }
         }

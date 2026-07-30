@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheTimelineIs.Core.Data;
@@ -8,10 +9,10 @@ using TheTimelineIs.Core.Render;
 namespace TheTimelineIs.Core.Screens;
 
 /// <summary>
-/// The scrolling world map. Destinations come from destinations.txt in
+/// The scrolling world map. Destinations come from Destinations.txt in
 /// map-image pixel coordinates. With --devmap, tapping an empty spot starts
 /// the click-to-place flow: type a name, then a mission folder name, and the
-/// row is appended to the source destinations.txt.
+/// row is appended to the source Destinations.txt.
 /// </summary>
 public class MapScreen : IScreen
 {
@@ -20,6 +21,7 @@ public class MapScreen : IScreen
 
     private readonly GameContext _ctx;
     private readonly Texture2D _map;
+    private readonly Point _mapSize;   // after undersized art is scaled up
     private readonly DestinationTable _destinations;
     private Vector2 _camera;
     private Point? _tap;
@@ -38,7 +40,9 @@ public class MapScreen : IScreen
     public MapScreen(GameContext ctx)
     {
         _ctx = ctx;
-        _map = ctx.Assets.LoadTexture("Content/images/map/map.png");
+        _map = ctx.Assets.LoadTexture("Content/Images/Map/Map.png");
+        var size = AssetLoader.DisplaySize(_map, AssetKind.Map);
+        _mapSize = new Point((int)size.X, (int)size.Y);
         _destinations = DestinationTable.Load();
     }
 
@@ -57,8 +61,8 @@ public class MapScreen : IScreen
                 _ctx.SwitchTo(new TitleScreen(_ctx));
         }
 
-        _camera.X = MathHelper.Clamp(_camera.X, 0, Math.Max(0, _map.Width - VirtualViewport.Width));
-        _camera.Y = MathHelper.Clamp(_camera.Y, 0, Math.Max(0, _map.Height - VirtualViewport.Height));
+        _camera.X = MathHelper.Clamp(_camera.X, 0, Math.Max(0, _mapSize.X - VirtualViewport.Width));
+        _camera.Y = MathHelper.Clamp(_camera.Y, 0, Math.Max(0, _mapSize.Y - VirtualViewport.Height));
         if (_toastTimer > 0) _toastTimer -= dt;
     }
 
@@ -85,7 +89,7 @@ public class MapScreen : IScreen
         else if (_devPhase == DevPhase.TypingMission && _devMission.Trim().Length > 0)
         {
             string name = _devName.Trim();
-            string mission = _devMission.Trim().Replace(' ', '_');
+            string mission = ToPascalCase(_devMission);
             _ctx.DevWriter!.Append(name, _devPoint.X, _devPoint.Y, mission);
             _destinations.All.Add(new Destination(name, _devPoint.X, _devPoint.Y, mission));
             _devPhase = DevPhase.Idle;
@@ -99,9 +103,17 @@ public class MapScreen : IScreen
         _toastTimer = 2.5f;
     }
 
+    /// <summary>"forest mission 2" -> "ForestMission2", matching the folder naming convention.</summary>
+    private static string ToPascalCase(string input)
+    {
+        var words = input.Split(new[] { ' ', '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(words.Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
+    }
+
     public void Draw(SpriteBatch batch)
     {
-        batch.Draw(_map, -_camera, Color.White);
+        batch.Draw(_map, new Rectangle(
+            -(int)_camera.X, -(int)_camera.Y, _mapSize.X, _mapSize.Y), Color.White);
 
         foreach (var dest in _destinations.All)
         {

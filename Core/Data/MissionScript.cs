@@ -19,7 +19,7 @@ public class Room
 }
 
 /// <summary>
-/// Parses a mission file: Content/missions/{name}/{name}.txt.
+/// Parses a mission file: Content/Missions/{name}/{name}.txt.
 /// "Room N:" starts a room; "Background:" and "Cast:" are room headers;
 /// "[Battle!]" is a battle marker; "Speaker: text" is dialogue.
 /// A room without its own Background inherits the previous room's.
@@ -34,7 +34,7 @@ public class MissionScript
     public static MissionScript Load(string missionName)
     {
         var script = new MissionScript { Name = missionName };
-        string path = $"Content/missions/{missionName}/{missionName}.txt";
+        string path = $"Content/Missions/{missionName}/{missionName}.txt";
         try
         {
             using var stream = TitleContainer.OpenStream(path);

@@ -1,7 +1,7 @@
 namespace TheTimelineIs.Core.Platform;
 
 /// <summary>
-/// Dev-mode only: appends a row to the source-tree destinations.txt.
+/// Dev-mode only: appends a row to the source-tree Destinations.txt.
 /// Desktop-only by design — it writes into the repo, which doesn't exist
 /// on a tablet install.
 /// </summary>

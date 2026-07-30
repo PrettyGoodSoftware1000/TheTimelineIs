@@ -1,5 +1,5 @@
 Room 1:
-Background: forest_clearing.png
+Background: ForestClearing.png
 Cast: Dirtbag, Goblin
 Dirtbag: Goddamn if my balls ain't itching.
 Goblin: Give gold or I EAT BALLS!
