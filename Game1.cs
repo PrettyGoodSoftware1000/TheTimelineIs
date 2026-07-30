@@ -19,7 +19,6 @@ public class Game1 : Game
     protected override void Initialize()
     {
         Window.Title = "The Timeline Is";
-    base.Initialize();
 
         base.Initialize();
     }
