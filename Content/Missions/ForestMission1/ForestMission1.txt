@@ -1,10 +1,10 @@
 Room 1:
 Background: ForestClearing.png
-Cast: Dirtbag, Goblin
+Cast: Dirtbag, Gun-O-Mancer, Goblin
 Dirtbag: Goddamn if my balls ain't itching.
 Goblin: Give gold or I EAT BALLS!
 Dirtbag: Have it your way.
 Room 2:
-Cast: Dirtbag, Goblin, Goblin, Goblin
+Cast: Dirtbag, Gun-O-Mancer, Goblin, Goblin, Goblin
 Goblin: EAT BALLS!
 [Battle!]
