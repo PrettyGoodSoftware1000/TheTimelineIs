@@ -1,0 +1,22 @@
+﻿Class: Dirtbag
+Required Trait: Criminal or Dishonorable 
+Required Trait: Has an STD
+
+
+Class: ‘Mancer
+Required Trait: Brilliant or Bloodline
+
+
+Class: Gun-O-Mancer
+Required Trait: Brilliant or Bloodline
+Required Trait: Armed or American
+Card Tags: ‘Mancer, Gun-O-Mancer
+
+
+Class: Florida Man
+Required Trait: From Florida 
+Required Trait: Did Bath Salts or Convicted of a Reptile-related Crime
+Card Tags: Florida Man, Gatormancy
+
+
+Class: Cyborg
