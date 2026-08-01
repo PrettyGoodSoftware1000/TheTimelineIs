@@ -17,6 +17,13 @@ public class CharacterInstance
     public bool IsPlayer;
     public bool Alive = true;
 
+    public int MaxHp = 20;
+    public int Hp = 20;
+    public int AttackDmg;            // enemies auto-attack with this; players use cards
+    public string AttackType = "Hit";
+    /// <summary>0 = Back, 1 = Mid, 2 = Front. -1 = not yet placed.</summary>
+    public int Row = -1;
+
     public string Folder => IsPlayer
         ? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";
@@ -37,6 +44,9 @@ public class CastManifest
     public string Name = "";
     public bool IsPlayer;
     public List<string> Variants = new();
+    public int Hp = -1;              // "HP: 25" in the manifest; -1 = use default
+    public int AttackDmg = -1;       // "Attack: 3 Smash" — damage and type
+    public string AttackType = "Hit";
 
     private static readonly Dictionary<string, CastManifest> Cache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -60,7 +70,39 @@ public class CastManifest
                 lines = new List<string> { $"{name}.png" };
             }
         }
-        manifest.Variants = lines;
+        // manifest lines are either "Key: value" stats or bare sprite file names
+        foreach (var line in lines)
+        {
+            int colon = line.IndexOf(':');
+            if (colon > 0)
+            {
+                string key = line[..colon].Trim();
+                string value = line[(colon + 1)..].Trim();
+                if (key.Equals("HP", StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(value, out int hp))
+                {
+                    manifest.Hp = hp;
+                }
+                else if (key.Equals("Attack", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length > 0 && int.TryParse(parts[0], out int dmg))
+                        manifest.AttackDmg = dmg;
+                    if (parts.Length > 1)
+                        manifest.AttackType = parts[1];
+                }
+                else
+                {
+                    Console.WriteLine($"[cast] {name}: unknown manifest line ignored: {line}");
+                }
+            }
+            else
+            {
+                manifest.Variants.Add(line);
+            }
+        }
+        if (manifest.Variants.Count == 0)
+            manifest.Variants.Add($"{name}.png");
         Cache[name] = manifest;
         return manifest;
     }
@@ -97,12 +139,17 @@ public static class CastResolver
             }
 
             var manifest = CastManifest.Get(name);
+            int maxHp = manifest.Hp > 0 ? manifest.Hp : (manifest.IsPlayer ? 25 : 12);
             var inst = new CharacterInstance
             {
                 Name = manifest.Name,
                 OccurrenceIndex = occ,
                 IsPlayer = manifest.IsPlayer,
                 SpriteFile = PickVariant(manifest, runInstances),
+                MaxHp = maxHp,
+                Hp = maxHp,
+                AttackDmg = manifest.AttackDmg > 0 ? manifest.AttackDmg : (manifest.IsPlayer ? 0 : 3),
+                AttackType = manifest.AttackType,
             };
             runInstances.Add(inst);
             present.Add(inst);

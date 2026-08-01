@@ -1,0 +1,9 @@
+# Art scale tuning. 100% = authored size; 90% shrinks, 110% grows.
+# Rule: the MOST SPECIFIC line wins outright (override, not multiply).
+#   "<Character> scale" beats "Cast scale", which beats "Global scale".
+# Global scale covers all art (map, backgrounds, cast). Cast scale covers
+# every cast sprite. A character line covers just that character.
+# UI text, buttons, the dialogue box, and the F12 ruler never scale.
+Global scale: 100%
+Cast scale: 100%
+Dirtbag scale: 100%

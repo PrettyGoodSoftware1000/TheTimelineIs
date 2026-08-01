@@ -39,4 +39,13 @@ public class Strings
 
     /// <summary>Missing keys render as the key in brackets so they're obvious in-game.</summary>
     public string Get(string key) => _map.TryGetValue(key, out var v) ? v : $"[{key}]";
+
+    /// <summary>Fills {name}-style placeholders: Format("battle_turn", ("name", "Dirtbag")).</summary>
+    public string Format(string key, params (string Token, string Value)[] subs)
+    {
+        string s = Get(key);
+        foreach (var (token, value) in subs)
+            s = s.Replace("{" + token + "}", value);
+        return s;
+    }
 }

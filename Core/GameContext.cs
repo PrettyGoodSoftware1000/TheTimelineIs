@@ -19,6 +19,9 @@ public class GameContext
     public required GameState State;
     public required ISaveStore SaveStore;
     public required Texture2D Pixel;
+    public required GameConfig Config;
+    public required CardLibrary Cards;
+    public required ClassLibrary Classes;
     public IDevDestinationWriter? DevWriter;
 
     public IScreen Screen = null!;

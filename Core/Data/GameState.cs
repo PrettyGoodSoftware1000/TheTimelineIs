@@ -12,6 +12,11 @@ public class SavedInstance
     public string SpriteFile { get; set; } = "";
     public bool IsPlayer { get; set; }
     public bool Alive { get; set; } = true;
+    public int MaxHp { get; set; } = 20;
+    public int Hp { get; set; } = 20;
+    public int AttackDmg { get; set; }
+    public string AttackType { get; set; } = "Hit";
+    public int Row { get; set; } = -1;
 }
 
 public class SaveData
@@ -21,6 +26,7 @@ public class SaveData
     public string? Mission { get; set; }
     public int RoomIndex { get; set; }
     public List<string> CompletedMissions { get; set; } = new();
+    public List<string> Party { get; set; } = new();
     /// <summary>Cast state as it was on room entry — a room save replays the room.</summary>
     public List<SavedInstance> Instances { get; set; } = new();
 }
@@ -35,6 +41,24 @@ public class GameState
     public string? CurrentMission;
     public int RoomIndex;
     public List<CharacterInstance> Instances = new();
+
+    /// <summary>The 3 classes chosen at New Game, in pick order.</summary>
+    public List<string> Party = new();
+
+    /// <summary>Old saves and dev shortcuts have no party — fall back to one of each class.</summary>
+    public List<string> PartyOrDefault() =>
+        Party.Count > 0 ? Party : new List<string> { "Dirtbag", "Gun-O-Mancer", "Cyborg" };
+
+    /// <summary>New Game: wipe everything and set the chosen party.</summary>
+    public void Reset(List<string> party)
+    {
+        CompletedMissions.Clear();
+        CurrentMission = null;
+        RoomIndex = 0;
+        Instances.Clear();
+        RoomEntrySnapshot.Clear();
+        Party = party;
+    }
 
     /// <summary>Instances as they were when the current room began (for room saves).</summary>
     public List<CharacterInstance> RoomEntrySnapshot = new();
@@ -68,6 +92,7 @@ public class GameState
             Mission = location == "room" ? CurrentMission : null,
             RoomIndex = location == "room" ? RoomIndex : 0,
             CompletedMissions = CompletedMissions.ToList(),
+            Party = Party.ToList(),
             Instances = (location == "room" ? RoomEntrySnapshot : new List<CharacterInstance>())
                 .Select(i => new SavedInstance
                 {
@@ -76,6 +101,11 @@ public class GameState
                     SpriteFile = i.SpriteFile,
                     IsPlayer = i.IsPlayer,
                     Alive = i.Alive,
+                    MaxHp = i.MaxHp,
+                    Hp = i.Hp,
+                    AttackDmg = i.AttackDmg,
+                    AttackType = i.AttackType,
+                    Row = i.Row,
                 }).ToList(),
         };
         return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
@@ -86,6 +116,7 @@ public class GameState
     {
         var data = JsonSerializer.Deserialize<SaveData>(json) ?? new SaveData();
         CompletedMissions = new HashSet<string>(data.CompletedMissions, StringComparer.OrdinalIgnoreCase);
+        Party = data.Party ?? new List<string>();
         if (data.Location == "room" && data.Mission != null)
         {
             CurrentMission = data.Mission;
@@ -97,6 +128,11 @@ public class GameState
                 SpriteFile = s.SpriteFile,
                 IsPlayer = s.IsPlayer,
                 Alive = s.Alive,
+                MaxHp = s.MaxHp,
+                Hp = s.Hp,
+                AttackDmg = s.AttackDmg,
+                AttackType = s.AttackType,
+                Row = s.Row,
             }).ToList();
         }
         else

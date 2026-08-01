@@ -80,7 +80,7 @@ public class MissionScript
                 if (colon > 0)
                 {
                     room.Entries.Add(new DialogueEntry(
-                        trimmed[..colon].Trim(), trimmed[(colon + 1)..].Trim()));
+                        TextUtil.Clean(trimmed[..colon]), TextUtil.Clean(trimmed[(colon + 1)..])));
                 }
                 else
                 {

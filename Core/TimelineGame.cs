@@ -54,6 +54,9 @@ public class TimelineGame : Game
             State = new GameState(),
             SaveStore = _platform.SaveStore,
             Pixel = pixel,
+            Config = GameConfig.Load(),
+            Cards = CardLibrary.Load(),
+            Classes = ClassLibrary.Load(),
             DevWriter = _platform.DevWriter,
         };
         _ctx.SwitchTo(new TitleScreen(_ctx));
@@ -63,9 +66,14 @@ public class TimelineGame : Game
     {
         _viewport.Update(GraphicsDevice);
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
-        _ctx.Screen.Update(_input.Poll(_viewport, dt), dt);
+        var input = _input.Poll(_viewport, dt);
+        if (input.ToggleRuler)
+            _rulerVisible = !_rulerVisible;
+        _ctx.Screen.Update(input, dt);
         base.Update(gameTime);
     }
+
+    private bool _rulerVisible;
 
     protected override void Draw(GameTime gameTime)
     {
@@ -79,6 +87,8 @@ public class TimelineGame : Game
         _batch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
             SamplerState.LinearClamp, null, null, null, _viewport.Matrix);
         _ctx.Screen.Draw(_batch);
+        if (_rulerVisible)
+            Ruler.Draw(_batch, _ctx);
         _batch.End();
         base.Draw(gameTime);
     }

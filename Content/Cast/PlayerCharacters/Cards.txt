@@ -1,3 +1,21 @@
+# ============================ CARD FORMAT ============================
+# Card Name:    (Text shown at the top of the card.)
+# Tags:         (Which classes see this card in their hand and can play it.
+#                A class matches if it shares any tag - see Classes.txt.)
+# Type:         (Which piece of game code runs. Reuse these exactly:
+#                  "AoE damage"            - hits every enemy in the room
+#                  "Single target, X hits." - one chosen target, X hits
+#                  "Two targets, 1 hit."   - pick 2 targets, one hit each)
+# Effect:       (Machine-readable numbers. The player never sees this line.
+#                Keep the same wording pattern per Type so the parser
+#                finds the numbers.)
+# Card Text:    (Flavor text the player reads on the card.)
+# Bottom Right: (Damage TYPE for the corner label, e.g. "15 Fire" -> Fire.
+#                The number is ignored and recomputed live: total damage
+#                against the enemies currently in the room.)
+# A trailing (note in parentheses) on any line is stripped by the parser.
+# =====================================================================
+
 Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: AoE damage

@@ -21,7 +21,8 @@ public class MapScreen : IScreen
 
     private readonly GameContext _ctx;
     private readonly Texture2D _map;
-    private readonly Point _mapSize;   // after undersized art is scaled up
+    private readonly Point _mapSize;   // after undersized-art scale-up and the global config scale
+    private readonly float _scale;     // Config.txt global scale: destination coords scale with the map
     private readonly DestinationTable _destinations;
     private Vector2 _camera;
     private Point? _tap;
@@ -41,7 +42,8 @@ public class MapScreen : IScreen
     {
         _ctx = ctx;
         _map = ctx.Assets.LoadTexture("Content/Images/Map/Map.png");
-        var size = AssetLoader.DisplaySize(_map, AssetKind.Map);
+        _scale = ctx.Config.GlobalScale;
+        var size = AssetLoader.DisplaySize(_map, AssetKind.Map) * _scale;
         _mapSize = new Point((int)size.X, (int)size.Y);
         _destinations = DestinationTable.Load();
     }
@@ -117,7 +119,7 @@ public class MapScreen : IScreen
 
         foreach (var dest in _destinations.All)
         {
-            var screen = new Point(dest.X - (int)_camera.X, dest.Y - (int)_camera.Y);
+            var screen = new Point((int)(dest.X * _scale - _camera.X), (int)(dest.Y * _scale - _camera.Y));
             bool done = _ctx.State.CompletedMissions.Contains(dest.Mission);
             var rect = new Rectangle(screen.X - MarkerRadius, screen.Y - MarkerRadius,
                 MarkerRadius * 2, MarkerRadius * 2);
@@ -151,7 +153,7 @@ public class MapScreen : IScreen
 
         foreach (var dest in _destinations.All)
         {
-            int dx = world.X - dest.X, dy = world.Y - dest.Y;
+            int dx = world.X - (int)(dest.X * _scale), dy = world.Y - (int)(dest.Y * _scale);
             if (dx * dx + dy * dy <= TapRadius * TapRadius)
             {
                 _ctx.State.StartMission(dest.Mission);
@@ -160,10 +162,11 @@ public class MapScreen : IScreen
             }
         }
 
-        // empty spot: in dev mode, begin placement (but not on the save button)
+        // empty spot: in dev mode, begin placement (but not on the save button).
+        // stored point is in unscaled map-image pixels, like the file expects
         if (_ctx.DevWriter != null && !SaveRect.Contains(tap))
         {
-            _devPoint = world;
+            _devPoint = new Point((int)Math.Round(world.X / _scale), (int)Math.Round(world.Y / _scale));
             _devName = "";
             _devMission = "";
             _devPhase = DevPhase.TypingName;
@@ -177,7 +180,7 @@ public class MapScreen : IScreen
 
         if (_devPhase == DevPhase.Idle) return;
 
-        var screen = new Point(_devPoint.X - (int)_camera.X, _devPoint.Y - (int)_camera.Y);
+        var screen = new Point((int)(_devPoint.X * _scale - _camera.X), (int)(_devPoint.Y * _scale - _camera.Y));
         Ui.FillRect(batch, _ctx.Pixel,
             new Rectangle(screen.X - 30, screen.Y - 30, 60, 60), Color.Yellow);
 

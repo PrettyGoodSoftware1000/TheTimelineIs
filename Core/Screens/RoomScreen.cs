@@ -1,5 +1,6 @@
-using System.Linq;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheTimelineIs.Core.Data;
@@ -9,11 +10,10 @@ using TheTimelineIs.Core.Render;
 namespace TheTimelineIs.Core.Screens;
 
 /// <summary>
-/// Plays one room of a mission: background, cast on stage (players left,
-/// enemies right), and dialogue advancing on tap/confirm. [Battle!] hands
-/// off to BattleScreen; winning resumes after the marker. When the last
-/// entry of the last room finishes, the mission completes and we return
-/// to the map.
+/// Plays one room of a mission: background, cast arranged in formation rows,
+/// dialogue advancing on tap/confirm. Player sprites can be dragged between
+/// the three player-side rows. [Battle!] hands off to BattleScreen; when the
+/// last entry of the last room finishes, the mission completes.
 /// </summary>
 public class RoomScreen : IScreen
 {
@@ -26,6 +26,8 @@ public class RoomScreen : IScreen
     private Point? _tap;
     private bool _advance;
     private float _toastTimer;
+    private CharacterInstance? _dragging;
+    private Point _pointer;
 
     private static readonly Rectangle SaveRect = new(60, 60, 400, 160);
     private static readonly Rectangle DialogueBox = new(60, 1640, 3720, 460);
@@ -41,11 +43,24 @@ public class RoomScreen : IScreen
         _room = script.Rooms.Count > ctx.State.RoomIndex
             ? script.Rooms[ctx.State.RoomIndex]
             : new Room();
-        _present = CastResolver.EnterRoom(ctx.State.Instances, _room.Cast);
+        _present = CastResolver.EnterRoom(ctx.State.Instances, ExpandCast(_room.Cast, ctx.State));
+        Formation.AssignDefaultRows(_present);
         _background = _room.Background.Length > 0
             ? ctx.Assets.LoadTexture($"Content/Images/Backgrounds/{_room.Background}")
             : ctx.Pixel;
         _entryIndex = 0;
+    }
+
+    /// <summary>"Player characters" in a Cast line becomes the chosen party.</summary>
+    public static List<string> ExpandCast(List<string> cast, GameState state)
+    {
+        var result = new List<string>();
+        foreach (var name in cast)
+            if (name.Equals("Player characters", StringComparison.OrdinalIgnoreCase))
+                result.AddRange(state.PartyOrDefault());
+            else
+                result.Add(name);
+        return result;
     }
 
     /// <summary>Called by BattleScreen when the player wins: skip past the marker.</summary>
@@ -63,11 +78,33 @@ public class RoomScreen : IScreen
         // a [Battle!] marker fires as soon as it's current — no tap needed
         if (_entryIndex < _room.Entries.Count && _room.Entries[_entryIndex] is BattleEntry)
         {
-            _ctx.SwitchTo(new BattleScreen(_ctx, this));
+            _ctx.SwitchTo(new BattleScreen(_ctx, this, _present, _background));
             return;
         }
+
+        _pointer = input.PointerPos;
         _tap = input.Tap;
         _advance = input.Confirm;
+
+        // press on a player sprite starts a row drag instead of advancing
+        if (_tap is Point press && _dragging == null)
+        {
+            var layout = Formation.Layout(_ctx, _present);
+            for (int i = layout.Count - 1; i >= 0; i--)
+                if (layout[i].Inst.IsPlayer && layout[i].Rect.Contains(press))
+                {
+                    _dragging = layout[i].Inst;
+                    _tap = null;
+                    break;
+                }
+        }
+        if (_dragging != null && input.Released is Point drop)
+        {
+            if (Formation.PlayerRowAt(drop) is int row)
+                _dragging.Row = row;
+            _dragging = null;
+        }
+
         if (_toastTimer > 0) _toastTimer -= dt;
     }
 
@@ -80,12 +117,12 @@ public class RoomScreen : IScreen
         }
         else
         {
-            // undersized backgrounds are scaled up, then fitted without distortion
-            var size = AssetLoader.DisplaySize(_background, AssetKind.Background);
+            var size = AssetLoader.DisplaySize(_background, AssetKind.Background)
+                * _ctx.Config.GlobalScale;
             batch.Draw(_background, Ui.FitCentered(size, screen), Color.White);
         }
 
-        DrawCast(batch);
+        Formation.DrawCast(batch, _ctx, _present, null, null, _dragging, _pointer);
 
         var entry = _entryIndex < _room.Entries.Count ? _room.Entries[_entryIndex] : null;
         if (entry is DialogueEntry dialogue)
@@ -101,9 +138,8 @@ public class RoomScreen : IScreen
             Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("saved"),
                 new Rectangle(0, 240, 1000, 100), Color.LightGreen, 0.45f);
 
-        // advance on confirm or any tap that wasn't the save button
         bool tapAdvance = _tap.HasValue && !tappedSave && !SaveRect.Contains(_tap.Value);
-        if (_advance || tapAdvance)
+        if ((_advance || tapAdvance) && _dragging == null)
             Advance();
 
         _tap = null;
@@ -132,38 +168,12 @@ public class RoomScreen : IScreen
         }
     }
 
-    private void DrawCast(SpriteBatch batch)
-    {
-        var players = _present.Where(i => i.IsPlayer).ToList();
-        var enemies = _present.Where(i => !i.IsPlayer).ToList();
-        DrawSide(batch, players, left: true);
-        DrawSide(batch, enemies, left: false);
-    }
-
-    private void DrawSide(SpriteBatch batch, List<CharacterInstance> side, bool left)
-    {
-        const int spriteHeight = 1050;  // virtual px on stage
-        const int baseline = 1600;      // feet sit just above the dialogue box
-        const int zoneWidth = 1650;
-        int zoneStart = left ? 120 : VirtualViewport.Width - 120 - zoneWidth;
-
-        int slot = zoneWidth / System.Math.Max(1, side.Count);
-        for (int i = 0; i < side.Count; i++)
-        {
-            var tex = _ctx.Assets.LoadTexture(side[i].SpritePath);
-            var size = AssetLoader.DisplaySize(tex, AssetKind.Sprite);
-            // fit the stage slot without distortion; tall art keeps its full height
-            var stage = new Rectangle(zoneStart + slot * i, baseline - spriteHeight, slot, spriteHeight);
-            batch.Draw(tex, Ui.FitCentered(size, stage), Color.White);
-        }
-    }
-
     private void DrawDialogue(SpriteBatch batch, DialogueEntry dialogue)
     {
         Ui.FillRect(batch, _ctx.Pixel, DialogueBox, new Color(0, 0, 0, 210));
 
         var speaker = _present.FirstOrDefault(i =>
-            i.Name.Equals(dialogue.Speaker, System.StringComparison.OrdinalIgnoreCase) && i.Alive);
+            i.Name.Equals(dialogue.Speaker, StringComparison.OrdinalIgnoreCase) && i.Alive);
         var thumbRect = new Rectangle(DialogueBox.X + 40, DialogueBox.Y + 38, 384, 384);
         if (speaker != null)
         {

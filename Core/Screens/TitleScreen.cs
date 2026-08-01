@@ -30,7 +30,7 @@ public class TitleScreen : IScreen
             new Rectangle(0, 500, VirtualViewport.Width, 300), Color.White, 1.6f);
 
         if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, NewGameRect, _ctx.Strings.Get("menu_new_game"), _tap))
-            _ctx.SwitchTo(new MapScreen(_ctx));
+            _ctx.SwitchTo(new PartySelectScreen(_ctx));
 
         if (_ctx.SaveStore.Exists &&
             Ui.Button(batch, _ctx.Pixel, _ctx.Font, ContinueRect, _ctx.Strings.Get("menu_continue"), _tap))

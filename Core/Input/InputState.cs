@@ -29,4 +29,16 @@ public struct InputState
 
     /// <summary>Backspace pressed this frame (dev-mode text entry).</summary>
     public bool Backspace;
+
+    /// <summary>Current pointer position (mouse cursor / last touch), virtual coords.</summary>
+    public Point PointerPos;
+
+    /// <summary>Primary button / finger currently held down (drives dragging).</summary>
+    public bool PointerHeld;
+
+    /// <summary>Where the pointer was released this frame, if it was.</summary>
+    public Point? Released;
+
+    /// <summary>F12: toggle the debug ruler overlay.</summary>
+    public bool ToggleRuler;
 }

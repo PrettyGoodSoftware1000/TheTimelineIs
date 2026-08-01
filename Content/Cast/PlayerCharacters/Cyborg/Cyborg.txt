@@ -1,0 +1,5 @@
+# Sprite variants for Cyborg. One file name per line.
+# Optional thumbnail per sprite: Cyborg.png -> CyborgThumb.png
+# Stats use "Key: value" lines. HP is hit points at full health.
+HP: 22
+Cyborg.png

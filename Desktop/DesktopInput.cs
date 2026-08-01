@@ -64,9 +64,15 @@ public class DesktopInput : IInputSource
         if (mouse.LeftButton == ButtonState.Pressed && _prevMouse.LeftButton == ButtonState.Released)
             state.Tap = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
 
+        state.PointerPos = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
+        state.PointerHeld = mouse.LeftButton == ButtonState.Pressed;
+        if (mouse.LeftButton == ButtonState.Released && _prevMouse.LeftButton == ButtonState.Pressed)
+            state.Released = state.PointerPos;
+
         state.Submit = Pressed(keys, Keys.Enter);
         state.Confirm = state.Submit || Pressed(keys, Keys.Space);
         state.Cancel = Pressed(keys, Keys.Escape);
+        state.ToggleRuler = Pressed(keys, Keys.F12);
 
         _prevKeys = keys;
         _prevMouse = mouse;

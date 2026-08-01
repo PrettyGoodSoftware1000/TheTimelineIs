@@ -16,7 +16,6 @@ saved = Game saved.
 # --- Battle (placeholder) ---
 battle_placeholder = Battle Begins! 
 battle_win = Fine!
-battle_lose = You're dead. (debug)
 
 # --- Death ---
 death_title = You died.
@@ -28,3 +27,18 @@ devmap_hint = DEV MAP: click anywhere to place a destination
 devmap_name_prompt = Name this place, then press Enter:
 devmap_mission_prompt = Mission folder name, then press Enter:
 devmap_saved = Destination saved to Destinations.txt.
+
+# --- Party select ---
+party_title = Pick your 3 characters.
+party_start = Start
+party_slot_empty = (empty)
+
+# --- Battle ---
+# {name}, {target}, {attacker}, {dmg}, {type}, {count} are filled in by the game.
+battle_turn = {name}'s turn
+battle_pick_target = Pick a target.
+battle_pick_targets = Pick {count} targets.
+battle_hit = {target} takes {dmg} {type} damage.
+battle_enemy_hit = {attacker} hits {target} for {dmg} {type}.
+battle_down = {name} goes down!
+battle_victory = Victory!
