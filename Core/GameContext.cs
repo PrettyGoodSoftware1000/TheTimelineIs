@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using TheTimelineIs.Core.Audio;
 using TheTimelineIs.Core.Data;
 using TheTimelineIs.Core.Platform;
 using TheTimelineIs.Core.Render;
@@ -22,6 +23,7 @@ public class GameContext
     public required GameConfig Config;
     public required CardLibrary Cards;
     public required ClassLibrary Classes;
+    public required SoundBank Sounds;
     public IDevDestinationWriter? DevWriter;
 
     public IScreen Screen = null!;

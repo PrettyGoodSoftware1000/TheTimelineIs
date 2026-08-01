@@ -144,10 +144,12 @@ on the same canvas size and they stay seamless.
 
 ## Debug ruler
 
-Press **F12** to toggle a ruler along the left edge and across the top.
-The screen is 12 units tall (1 unit = 180 virtual px = 1/12 of the screen
-height at any window size); a 16:9 screen is 21.3 units wide. The ruler
-ignores all Config scaling — it's a fixed yardstick.
+Press **F12** to toggle a ruler measured in **feet**, with **(0,0) at the
+bottom-left** of the screen: feet run up the left edge and right along the
+bottom. One foot = 180 virtual px = 1/12 of the screen height at any window
+size, so the screen is 12 feet tall and (at 16:9) 21.3 feet wide. Whole-foot
+ticks are yellow and labeled; half-foot ticks are teal. The ruler ignores all
+Config scaling — it's a fixed yardstick.
 
 ## Party and formation
 
@@ -174,6 +176,27 @@ Card definitions; the format legend is commented at the top of the file.
 `Effect:` is the machine-readable line (keep the wording pattern per Type);
 `Card Text:` is what the player reads; the bottom-right number is computed
 live as total damage against the current room.
+
+Two optional pieces drive presentation:
+
+- **`Type: [melee] ...` or `Type: [ranged] ...`** — `[melee]` walks the
+  attacker to the target and back; `[ranged]` throws a projectile
+  (`Content/Images/Effects/Projectile.png`, a magenta ball placeholder —
+  replace it, or later give each card its own).
+- **`Sounds: Activation[cast.wav], 0.6, Hit[boom.wav]`** — Activation plays
+  when the card is clicked; the number is how many seconds the walk or
+  projectile takes; Hit plays on impact, together with the target's recoil.
+  WAVs live in `Content/Sounds/` (PCM `.wav` only — not MP3 or OGG). Any part
+  may be omitted; with no travel time the card resolves instantly. A missing
+  sound file is logged once and then ignored, so timing still works silently.
+
+## Battle presentation
+
+The hand rests half below the bottom edge; hovering a card lifts it into full
+view at 130% size, and cards may overlap the characters. Characters stand in
+their formation rows, staggered down and across so nobody is fully hidden,
+with a compact HP bar under each one's feet. Anything struck recoils
+side-to-side once over a quarter second.
 
 ## Character stats
 

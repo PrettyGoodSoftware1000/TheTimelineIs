@@ -4,41 +4,68 @@ using Microsoft.Xna.Framework.Graphics;
 namespace TheTimelineIs.Core.Render;
 
 /// <summary>
-/// F12 debug ruler. The screen is 12 units tall (1 unit = 180 virtual px =
-/// 1/12 of the letterboxed height at any window size); the same unit runs
-/// across the top (a 16:9 screen is 21.33 units wide). Deliberately exempt
-/// from every Config.txt scale so it stays a fixed yardstick.
+/// F12 debug ruler. Origin (0,0) is the BOTTOM-LEFT of the screen; feet run
+/// up the left edge and right along the bottom. One foot = 180 virtual px =
+/// 1/12 of the screen height at any window size, so the screen is 12 feet
+/// tall and (at 16:9) 21.3 feet wide. Deliberately exempt from every
+/// Config.txt scale so it stays a fixed yardstick.
 /// </summary>
 public static class Ruler
 {
-    public const int UnitPx = VirtualViewport.Height / 12; // 180
+    public const int UnitPx = VirtualViewport.Height / 12; // 180 px = 1 foot
+    public const int FeetTall = 12;
+
+    private static readonly Color Major = Color.Yellow;
+    private static readonly Color Half = new(0, 200, 200); // teal half-foot ticks
+
+    /// <summary>Feet above the bottom of the screen -> virtual y (which grows downward).</summary>
+    public static int FeetToY(float feet) => VirtualViewport.Height - (int)(feet * UnitPx);
+
+    /// <summary>Feet from the left edge -> virtual x.</summary>
+    public static int FeetToX(float feet) => (int)(feet * UnitPx);
 
     public static void Draw(SpriteBatch batch, GameContext ctx)
     {
         var pixel = ctx.Pixel;
-        Ui.FillRect(batch, pixel, new Rectangle(0, 0, 130, VirtualViewport.Height), Color.Black * 0.55f);
-        Ui.FillRect(batch, pixel, new Rectangle(0, 0, VirtualViewport.Width, 130), Color.Black * 0.55f);
+        Ui.FillRect(batch, pixel, new Rectangle(0, 0, 210, VirtualViewport.Height), Color.Black * 0.55f);
+        Ui.FillRect(batch, pixel,
+            new Rectangle(0, VirtualViewport.Height - 130, VirtualViewport.Width, 130), Color.Black * 0.55f);
 
-        for (int i = 0; i <= 12; i++)
+        // half-foot ticks first, so whole-foot ticks draw over them
+        for (float f = 0.5f; f < FeetTall; f += 1f)
         {
-            int y = System.Math.Min(i * UnitPx, VirtualViewport.Height - 4);
-            Ui.FillRect(batch, pixel, new Rectangle(0, y, 100, 4), Color.Yellow);
-            if (i < 12)
-                batch.DrawString(ctx.Font, i.ToString(), new Vector2(24, y + 14),
-                    Color.Yellow, 0f, Vector2.Zero, 0.35f, SpriteEffects.None, 0f);
+            int y = FeetToY(f);
+            Ui.FillRect(batch, pixel, new Rectangle(0, y - 1, 60, 3), Half);
         }
-        for (int i = 0; i <= VirtualViewport.Width / UnitPx; i++)
+        for (float f = 0.5f; f < VirtualViewport.Width / (float)UnitPx; f += 1f)
         {
-            int x = i * UnitPx;
-            Ui.FillRect(batch, pixel, new Rectangle(x, 0, 4, 100), Color.Yellow);
-            if (i > 0) // 0 is already labeled on the vertical ruler
-                batch.DrawString(ctx.Font, i.ToString(), new Vector2(x + 12, 20),
-                    Color.Yellow, 0f, Vector2.Zero, 0.35f, SpriteEffects.None, 0f);
+            int x = FeetToX(f);
+            Ui.FillRect(batch, pixel, new Rectangle(x - 1, VirtualViewport.Height - 60, 3, 60), Half);
         }
-        // half-unit minor ticks
-        for (int y = UnitPx / 2; y < VirtualViewport.Height; y += UnitPx)
-            Ui.FillRect(batch, pixel, new Rectangle(0, y, 50, 3), Color.Yellow * 0.6f);
-        for (int x = UnitPx / 2; x < VirtualViewport.Width; x += UnitPx)
-            Ui.FillRect(batch, pixel, new Rectangle(x, 0, 3, 50), Color.Yellow * 0.6f);
+
+        // whole feet up the left edge
+        for (int f = 0; f <= FeetTall; f++)
+        {
+            int y = Mathf(FeetToY(f), 4);
+            Ui.FillRect(batch, pixel, new Rectangle(0, y - 2, 110, 4), Major);
+            batch.DrawString(ctx.Font, $"{f} feet", new Vector2(26, y - 60),
+                Major, 0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
+        }
+
+        // whole feet across the bottom
+        int wide = VirtualViewport.Width / UnitPx;
+        for (int f = 1; f <= wide; f++)
+        {
+            int x = FeetToX(f);
+            Ui.FillRect(batch, pixel,
+                new Rectangle(x - 2, VirtualViewport.Height - 110, 4, 110), Major);
+            batch.DrawString(ctx.Font, $"{f} feet",
+                new Vector2(x + 12, VirtualViewport.Height - 105),
+                Major, 0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
+        }
     }
+
+    /// <summary>Keeps the topmost/bottommost tick fully on screen.</summary>
+    private static int Mathf(int y, int thickness) =>
+        System.Math.Clamp(y, thickness, VirtualViewport.Height - thickness);
 }

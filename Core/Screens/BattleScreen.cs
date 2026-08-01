@@ -13,14 +13,21 @@ namespace TheTimelineIs.Core.Screens;
 /// <summary>
 /// Turn-based combat. Turn order is rolled once at battle start: each side is
 /// shuffled, then the sides alternate (random side first; leftovers append).
-/// On a player character's turn, their class's cards appear at the bottom —
-/// click one, pick targets if it needs them, and it resolves. Enemies attack
-/// a random living player character. All enemies dead = victory and the room
-/// continues; all player characters dead = death screen and reload.
+/// On a player character's turn, their class's cards sit half off the bottom
+/// of the screen — hover to magnify one into full view, click to play it.
+/// A card's [melee] tag walks the attacker to the target and [ranged] throws
+/// a projectile; either way the hit lands after the card's travel time, when
+/// the Hit sound plays and the target recoils.
 /// </summary>
 public class BattleScreen : IScreen
 {
-    private enum Phase { Pause, PlayerChoose, PlayerTarget, EnemyTurn, Victory }
+    private enum Phase { Pause, PlayerChoose, PlayerTarget, Acting, EnemyTurn, Victory }
+    private enum Stage { Travel, Return }
+
+    private class Projectile
+    {
+        public Vector2 From, To;
+    }
 
     private readonly GameContext _ctx;
     private readonly RoomScreen _room;
@@ -41,8 +48,23 @@ public class BattleScreen : IScreen
     private Point _pointer;
     private Point? _tap;
 
+    // in-flight action
+    private Stage _stage;
+    private float _actionElapsed, _actionDuration;
+    private CharacterInstance? _actor;
+    private Vector2 _walkTo;
+    private readonly List<Projectile> _projectiles = new();
+    private Action? _onImpact;
+    private string? _impactSound;
+
+    private const float ReturnSeconds = 0.28f;
+    private const float EnemyTravelSeconds = 0.35f;
+
     private static readonly Rectangle WinRect = new(1620, 1250, 600, 180);
-    private const int CardW = 430, CardH = 600, CardGap = 30, CardY = 1530;
+    private const int CardW = 430, CardH = 600, CardGap = 30;
+    /// <summary>Hand rests half below the bottom edge; hovering lifts a card into full view.</summary>
+    private static readonly int CardRestY = VirtualViewport.Height - CardH / 2;
+    private const float HoverScale = 1.3f;
 
     public BattleScreen(GameContext ctx, RoomScreen room,
         List<CharacterInstance> present, Texture2D background)
@@ -52,6 +74,7 @@ public class BattleScreen : IScreen
         _present = present;
         _background = background;
         _toast = ctx.Strings.Get("battle_placeholder");
+        foreach (var inst in _present) { inst.WalkOffset = Vector2.Zero; inst.ShakeTimer = 0f; }
         BuildOrder();
     }
 
@@ -93,7 +116,7 @@ public class BattleScreen : IScreen
         else
         {
             _phase = Phase.EnemyTurn;
-            _timer = 1.0f;
+            _timer = 0.7f;
         }
     }
 
@@ -102,6 +125,7 @@ public class BattleScreen : IScreen
         _pointer = input.PointerPos;
         _tap = input.Tap;
         if (_toastTimer > 0) _toastTimer -= dt;
+        Formation.UpdateShakes(_present, dt);
 
         switch (_phase)
         {
@@ -112,6 +136,9 @@ public class BattleScreen : IScreen
             case Phase.EnemyTurn:
                 _timer -= dt;
                 if (_timer <= 0) EnemyAct();
+                break;
+            case Phase.Acting:
+                UpdateAction(dt);
                 break;
             case Phase.PlayerChoose:
             case Phase.PlayerTarget:
@@ -143,7 +170,7 @@ public class BattleScreen : IScreen
                 _selected = _hand[i];
                 _targets.Clear();
                 if (_selected.Kind == CardKind.AoEDamage)
-                    ResolveCard();       // no targeting needed
+                    PlayCard();          // no targeting needed
                 else
                     _phase = Phase.PlayerTarget;
                 _tap = null;
@@ -162,7 +189,7 @@ public class BattleScreen : IScreen
                     int needed = _selected.Kind == CardKind.SingleTargetHits
                         ? 1 : Math.Min(_selected.Targets, Living(false).Count);
                     if (_targets.Count >= needed)
-                        ResolveCard();
+                        PlayCard();
                     _tap = null;
                     return;
                 }
@@ -178,65 +205,175 @@ public class BattleScreen : IScreen
             }
     }
 
-    private void ResolveCard()
+    private static Vector2 Center(Rectangle r) => new(r.Center.X, r.Center.Y);
+
+    /// <summary>
+    /// Starts a card: activation sound now, then the walk or projectile, then
+    /// the impact after the card's travel time. Cards with no travel time
+    /// resolve immediately.
+    /// </summary>
+    private void PlayCard()
     {
         if (_selected == null) return;
         var card = _selected;
-        var report = new StringBuilder();
+        var victims = card.Kind == CardKind.AoEDamage ? Living(false) : _targets.ToList();
+        _ctx.Sounds.Play(card.ActivationSound);
 
-        void Hit(CharacterInstance target, int dmg)
+        void Impact() => ApplyCardDamage(card, victims);
+
+        BeginAction(Current, victims, card.Delivery, card.TravelSeconds, card.HitSound, Impact);
+        _selected = null;
+        _targets.Clear();
+    }
+
+    private void BeginAction(CharacterInstance actor, List<CharacterInstance> victims,
+        Delivery delivery, float travel, string? hitSound, Action onImpact)
+    {
+        _projectiles.Clear();
+        _actor = null;
+        _onImpact = onImpact;
+        _impactSound = hitSound;
+
+        if (travel <= 0f || delivery == Delivery.Instant || victims.Count == 0)
         {
-            target.Hp -= dmg;
-            report.AppendLine(_ctx.Strings.Format("battle_hit",
-                ("target", target.Name), ("dmg", dmg.ToString()), ("type", card.DamageType)));
-            if (target.Hp <= 0 && target.Alive)
-            {
-                target.Hp = 0;
-                target.Alive = false;
-                report.AppendLine(_ctx.Strings.Format("battle_down", ("name", target.Name)));
-            }
+            Impact();
+            return;
         }
 
+        var from = Center(Formation.CurrentRect(_ctx, _present, actor));
+        _actionElapsed = 0f;
+        _actionDuration = travel;
+        _stage = Stage.Travel;
+        _phase = Phase.Acting;
+
+        if (delivery == Delivery.Melee)
+        {
+            // stop just short of the first victim rather than standing on them
+            var targetRect = Formation.CurrentRect(_ctx, _present, victims[0]);
+            var to = Center(targetRect);
+            float standoff = (targetRect.Width + 120) * (actor.IsPlayer ? -0.5f : 0.5f);
+            _actor = actor;
+            _walkTo = new Vector2(to.X + standoff - from.X, to.Y - from.Y);
+        }
+        else
+        {
+            foreach (var victim in victims)
+                _projectiles.Add(new Projectile
+                {
+                    From = from,
+                    To = Center(Formation.CurrentRect(_ctx, _present, victim)),
+                });
+        }
+    }
+
+    private void UpdateAction(float dt)
+    {
+        _actionElapsed += dt;
+        float t = MathHelper.Clamp(_actionElapsed / Math.Max(0.0001f, _actionDuration), 0f, 1f);
+
+        if (_actor != null)
+            _actor.WalkOffset = _stage == Stage.Travel ? _walkTo * t : _walkTo * (1f - t);
+
+        if (t < 1f) return;
+
+        if (_stage == Stage.Travel)
+        {
+            Impact();
+        }
+        else
+        {
+            if (_actor != null) _actor.WalkOffset = Vector2.Zero;
+            _actor = null;
+            _phase = Phase.Pause;
+            _timer = 0.5f;
+        }
+    }
+
+    /// <summary>The moment the blow lands: sound, damage, recoil, then walk back.</summary>
+    private void Impact()
+    {
+        _ctx.Sounds.Play(_impactSound);
+        _projectiles.Clear();
+        _onImpact?.Invoke();
+        _onImpact = null;
+
+        if (_actor != null)
+        {
+            _stage = Stage.Return;
+            _actionElapsed = 0f;
+            _actionDuration = ReturnSeconds;
+            _phase = Phase.Acting;
+        }
+        else
+        {
+            _phase = Phase.Pause;
+            _timer = 0.7f;
+        }
+    }
+
+    private void ApplyCardDamage(Card card, List<CharacterInstance> victims)
+    {
+        var report = new StringBuilder();
         switch (card.Kind)
         {
             case CardKind.AoEDamage:
-                foreach (var enemy in Living(false))
-                    Hit(enemy, card.Damage);
+                foreach (var enemy in victims.Where(v => v.Alive))
+                    Hit(enemy, card.Damage, card.DamageType, report);
                 break;
             case CardKind.SingleTargetHits:
-                Hit(_targets[0], card.Damage * card.Hits);
+                if (victims.Count > 0)
+                    Hit(victims[0], card.Damage * card.Hits, card.DamageType, report);
                 break;
             case CardKind.MultiTarget:
-                foreach (var target in _targets)
-                    Hit(target, card.Damage);
+                foreach (var target in victims)
+                    Hit(target, card.Damage, card.DamageType, report);
                 break;
         }
-
         Toast(report.ToString().TrimEnd());
-        _selected = null;
-        _targets.Clear();
-        _phase = Phase.Pause;
-        _timer = 0.9f;
+    }
+
+    private void Hit(CharacterInstance target, int dmg, string type, StringBuilder report)
+    {
+        target.Hp -= dmg;
+        target.ShakeTimer = Formation.ShakeDuration;
+        report.AppendLine(_ctx.Strings.Format("battle_hit",
+            ("target", target.Name), ("dmg", dmg.ToString()), ("type", type)));
+        if (target.Hp <= 0 && target.Alive)
+        {
+            target.Hp = 0;
+            target.Alive = false;
+            report.AppendLine(_ctx.Strings.Format("battle_down", ("name", target.Name)));
+        }
     }
 
     private void EnemyAct()
     {
         var players = Living(true);
+        if (players.Count == 0) { _phase = Phase.Pause; _timer = 0.2f; return; }
+
+        var attacker = Current;
         var target = players[Rng.Next(players.Count)];
-        int dmg = Math.Max(1, Current.AttackDmg);
-        target.Hp -= dmg;
-        var report = new StringBuilder(_ctx.Strings.Format("battle_enemy_hit",
-            ("attacker", Current.Name), ("target", target.Name),
-            ("dmg", dmg.ToString()), ("type", Current.AttackType)));
-        if (target.Hp <= 0)
+        int dmg = Math.Max(1, attacker.AttackDmg);
+
+        void Impact()
         {
-            target.Hp = 0;
-            target.Alive = false;
-            report.Append('\n').Append(_ctx.Strings.Format("battle_down", ("name", target.Name)));
+            var report = new StringBuilder();
+            target.Hp -= dmg;
+            target.ShakeTimer = Formation.ShakeDuration;
+            report.Append(_ctx.Strings.Format("battle_enemy_hit",
+                ("attacker", attacker.Name), ("target", target.Name),
+                ("dmg", dmg.ToString()), ("type", attacker.AttackType)));
+            if (target.Hp <= 0 && target.Alive)
+            {
+                target.Hp = 0;
+                target.Alive = false;
+                report.Append('\n').Append(_ctx.Strings.Format("battle_down", ("name", target.Name)));
+            }
+            Toast(report.ToString());
         }
-        Toast(report.ToString());
-        _phase = Phase.Pause;
-        _timer = 0.9f;
+
+        BeginAction(attacker, new List<CharacterInstance> { target },
+            Delivery.Melee, EnemyTravelSeconds, null, Impact);
     }
 
     private void Toast(string text)
@@ -251,7 +388,7 @@ public class BattleScreen : IScreen
         int x0 = (VirtualViewport.Width - total) / 2;
         var rects = new List<Rectangle>();
         for (int i = 0; i < _hand.Count; i++)
-            rects.Add(new Rectangle(x0 + i * (CardW + CardGap), CardY, CardW, CardH));
+            rects.Add(new Rectangle(x0 + i * (CardW + CardGap), CardRestY, CardW, CardH));
         return rects;
     }
 
@@ -271,11 +408,8 @@ public class BattleScreen : IScreen
 
         var current = _turn >= 0 && _order[_turn].Alive ? _order[_turn] : null;
         Formation.DrawCast(batch, _ctx, _present, current, _targets, _dragging, _pointer);
-
+        DrawProjectiles(batch);
         DrawTurnStrip(batch);
-
-        if (_phase is Phase.PlayerChoose or Phase.PlayerTarget)
-            DrawHand(batch);
 
         if (_phase == Phase.PlayerTarget && _selected != null)
         {
@@ -286,12 +420,16 @@ public class BattleScreen : IScreen
                 : _ctx.Strings.Format("battle_pick_targets",
                     ("count", (needed - _targets.Count).ToString()));
             Ui.DrawTextCentered(batch, _ctx.Font, prompt,
-                new Rectangle(0, 1380, VirtualViewport.Width, 120), Color.OrangeRed, 0.5f);
+                new Rectangle(0, 1300, VirtualViewport.Width, 120), Color.OrangeRed, 0.5f);
         }
 
         if (_toastTimer > 0)
-            batch.DrawString(_ctx.Font, _toast, new Vector2(1200, 260), Color.White,
+            batch.DrawString(_ctx.Font, _toast, new Vector2(1200, 300), Color.White,
                 0f, Vector2.Zero, 0.42f, SpriteEffects.None, 0f);
+
+        // the hand draws last so cards may overlap the characters
+        if (_phase is Phase.PlayerChoose or Phase.PlayerTarget)
+            DrawHand(batch);
 
         if (_phase == Phase.Victory)
         {
@@ -302,6 +440,20 @@ public class BattleScreen : IScreen
         }
 
         _tap = null;
+    }
+
+    private void DrawProjectiles(SpriteBatch batch)
+    {
+        if (_projectiles.Count == 0) return;
+        float t = MathHelper.Clamp(_actionElapsed / Math.Max(0.0001f, _actionDuration), 0f, 1f);
+        var tex = _ctx.Assets.LoadTexture("Content/Images/Effects/Projectile.png");
+        var size = AssetLoader.DisplaySize(tex, AssetKind.Effect);
+        foreach (var p in _projectiles)
+        {
+            var pos = Vector2.Lerp(p.From, p.To, t);
+            batch.Draw(tex, new Rectangle((int)(pos.X - size.X / 2), (int)(pos.Y - size.Y / 2),
+                (int)size.X, (int)size.Y), Color.White);
+        }
     }
 
     private void DrawTurnStrip(SpriteBatch batch)
@@ -325,30 +477,50 @@ public class BattleScreen : IScreen
     {
         var rects = HandRects();
         int living = Living(false).Count;
+        int hovered = -1;
         for (int i = 0; i < _hand.Count; i++)
+            if (rects[i].Contains(_pointer)) hovered = i;
+
+        for (int i = 0; i < _hand.Count; i++)
+            if (i != hovered)
+                DrawCard(batch, _hand[i], rects[i], living, false);
+
+        // the hovered card draws last, lifted into full view and magnified
+        if (hovered >= 0)
         {
-            var card = _hand[i];
-            var rect = rects[i];
-            Ui.FillRect(batch, _ctx.Pixel, rect, new Color(24, 24, 40, 245));
-            var border = card == _selected ? Color.Gold : Color.White * 0.5f;
-            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Y, rect.Width, 6), border);
-            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Bottom - 6, rect.Width, 6), border);
-            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Y, 6, rect.Height), border);
-            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.Right - 6, rect.Y, 6, rect.Height), border);
-
-            Ui.DrawTextCentered(batch, _ctx.Font, card.Name,
-                new Rectangle(rect.X, rect.Y + 20, rect.Width, 90), Color.White, 0.42f);
-
-            string body = Ui.Wrap(_ctx.Font, card.CardText, rect.Width - 60, 0.32f);
-            batch.DrawString(_ctx.Font, body, new Vector2(rect.X + 30, rect.Y + 140),
-                Color.White * 0.9f, 0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
-
-            // dynamic bottom-right: total damage against the current room
-            string total = $"{card.TotalDamage(living)} {card.DamageType}";
-            var size = _ctx.Font.MeasureString(total) * 0.38f;
-            batch.DrawString(_ctx.Font, total,
-                new Vector2(rect.Right - 26 - size.X, rect.Bottom - 30 - size.Y),
-                Color.Gold, 0f, Vector2.Zero, 0.38f, SpriteEffects.None, 0f);
+            int w = (int)(CardW * HoverScale), h = (int)(CardH * HoverScale);
+            var lifted = new Rectangle(
+                rects[hovered].Center.X - w / 2,
+                VirtualViewport.Height - h - 30, w, h);
+            DrawCard(batch, _hand[hovered], lifted, living, true);
         }
+    }
+
+    private void DrawCard(SpriteBatch batch, Card card, Rectangle rect, int livingEnemies, bool hovered)
+    {
+        float s = hovered ? HoverScale : 1f;
+        Ui.FillRect(batch, _ctx.Pixel, rect, new Color(24, 24, 40, 250));
+        var border = card == _selected ? Color.Gold : hovered ? Color.White : Color.White * 0.5f;
+        int bw = (int)(6 * s);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Y, rect.Width, bw), border);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Bottom - bw, rect.Width, bw), border);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Y, bw, rect.Height), border);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.Right - bw, rect.Y, bw, rect.Height), border);
+
+        Ui.DrawTextCentered(batch, _ctx.Font, card.Name,
+            new Rectangle(rect.X, rect.Y + (int)(20 * s), rect.Width, (int)(90 * s)),
+            Color.White, 0.42f * s);
+
+        string body = Ui.Wrap(_ctx.Font, card.CardText, rect.Width - 60 * s, 0.32f * s);
+        batch.DrawString(_ctx.Font, body,
+            new Vector2(rect.X + 30 * s, rect.Y + 140 * s),
+            Color.White * 0.9f, 0f, Vector2.Zero, 0.32f * s, SpriteEffects.None, 0f);
+
+        // dynamic bottom-right: total damage against the current room
+        string total = $"{card.TotalDamage(livingEnemies)} {card.DamageType}";
+        var size = _ctx.Font.MeasureString(total) * (0.38f * s);
+        batch.DrawString(_ctx.Font, total,
+            new Vector2(rect.Right - 26 * s - size.X, rect.Bottom - 30 * s - size.Y),
+            Color.Gold, 0f, Vector2.Zero, 0.38f * s, SpriteEffects.None, 0f);
     }
 }

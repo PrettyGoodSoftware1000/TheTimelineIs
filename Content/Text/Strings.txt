@@ -4,7 +4,9 @@
 # Room dialogue is NOT here; that lives in the mission .txt files.
 
 # --- Title screen ---
-title = The Timeline Is
+title = The Timeline is
+# The word below is scrambled on screen and never shows in the right order.
+title_scramble_word = fucked
 menu_new_game = New Game
 menu_continue = Continue
 

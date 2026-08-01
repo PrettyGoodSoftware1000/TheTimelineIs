@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Microsoft.Xna.Framework;
 
 namespace TheTimelineIs.Core.Data;
 
@@ -11,6 +13,9 @@ public enum CardKind
     SingleTargetHits, // "Single target, X hits.": one target, X hits of N damage
     MultiTarget,      // "Two targets, 1 hit.": pick N targets, one hit each
 }
+
+/// <summary>How the card reaches its target: [melee] walks, [ranged] throws.</summary>
+public enum Delivery { Instant, Melee, Ranged }
 
 public class Card
 {
@@ -23,6 +28,14 @@ public class Card
     public int Damage;      // per hit / per target / per enemy
     public int Hits = 1;    // SingleTargetHits only
     public int Targets = 1; // MultiTarget only
+
+    public Delivery Delivery = Delivery.Instant;
+
+    // "Sounds: Activation[cast.wav], 0.6, Hit[boom.wav]"
+    public string? ActivationSound;
+    public string? HitSound;
+    /// <summary>Seconds for the walk or projectile to reach the target before the hit lands.</summary>
+    public float TravelSeconds;
 
     /// <summary>The dynamic bottom-right number: total damage against the current room.</summary>
     public int TotalDamage(int livingEnemies) => Kind switch
@@ -47,6 +60,9 @@ public class CardLibrary
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
     private static readonly Regex Ints = new(@"\d+");
+    private static readonly Regex DeliveryTag = new(@"\[\s*(melee|ranged)\s*\]", RegexOptions.IgnoreCase);
+    private static readonly Regex SoundTag = new(@"(activation|hit)\s*\[\s*([^\]]+?)\s*\]", RegexOptions.IgnoreCase);
+    private static readonly Regex Seconds = new(@"(?<![\[\w.])(\d+(?:\.\d+)?)(?![\w.])");
 
     public static CardLibrary Load()
     {
@@ -73,7 +89,18 @@ public class CardLibrary
                     card.Tags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
                     break;
                 case "type":
+                    // an optional [melee] / [ranged] tag leads the type line
+                    var delivery = DeliveryTag.Match(value);
+                    if (delivery.Success)
+                    {
+                        card.Delivery = delivery.Groups[1].Value.Equals("melee", StringComparison.OrdinalIgnoreCase)
+                            ? Delivery.Melee : Delivery.Ranged;
+                        value = DeliveryTag.Replace(value, "").Trim();
+                    }
                     card.TypeLine = value;
+                    break;
+                case "sounds":
+                    ApplySounds(card, value);
                     break;
                 case "effect":
                     ApplyEffect(card, value);
@@ -94,6 +121,27 @@ public class CardLibrary
             if (c.Damage <= 0)
                 Console.WriteLine($"[cards] '{c.Name}' has no parsable damage in its Effect line");
         return lib;
+    }
+
+    /// <summary>
+    /// "Activation[cast.wav], 0.6, Hit[boom.wav]" — file names live inside the
+    /// brackets; the bare number is the travel time in seconds before the hit
+    /// lands. Any part may be omitted.
+    /// </summary>
+    private static void ApplySounds(Card card, string value)
+    {
+        foreach (Match m in SoundTag.Matches(value))
+        {
+            if (m.Groups[1].Value.Equals("activation", StringComparison.OrdinalIgnoreCase))
+                card.ActivationSound = m.Groups[2].Value;
+            else
+                card.HitSound = m.Groups[2].Value;
+        }
+        // read the delay from whatever is left once the bracketed names are gone
+        var seconds = Seconds.Match(SoundTag.Replace(value, ""));
+        if (seconds.Success &&
+            float.TryParse(seconds.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float s))
+            card.TravelSeconds = MathHelper.Clamp(s, 0f, 10f);
     }
 
     private static void ApplyEffect(Card card, string effect)

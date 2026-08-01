@@ -2,10 +2,18 @@
 # Card Name:    (Text shown at the top of the card.)
 # Tags:         (Which classes see this card in their hand and can play it.
 #                A class matches if it shares any tag - see Classes.txt.)
-# Type:         (Which piece of game code runs. Reuse these exactly:
-#                  "AoE damage"            - hits every enemy in the room
+# Type:         (Optional [melee] or [ranged] first, then which piece of game
+#                code runs. [melee] walks the attacker to the target and back;
+#                [ranged] throws a projectile. Reuse these exactly:
+#                  "AoE damage"             - hits every enemy in the room
 #                  "Single target, X hits." - one chosen target, X hits
-#                  "Two targets, 1 hit."   - pick 2 targets, one hit each)
+#                  "Two targets, 1 hit."    - pick 2 targets, one hit each)
+# Sounds:       (Activation[file.wav], 0.0, Hit[file.wav]
+#                Activation plays when the card is clicked. The number is how
+#                long the walk or projectile takes to reach the target, in
+#                seconds. Hit plays when it lands, along with the target's
+#                recoil. WAV files live in Content/Sounds/. Any part may be
+#                left out; a missing file is logged once, then silent.)
 # Effect:       (Machine-readable numbers. The player never sees this line.
 #                Keep the same wording pattern per Type so the parser
 #                finds the numbers.)
@@ -18,21 +26,24 @@
 
 Card Name: Fireball
 Tags: Gun-O-Mancer
-Type: AoE damage
+Type: [ranged] AoE damage
+Sounds: Activation[FireballCast.wav], 0.6, Hit[FireballBoom.wav]
 Effect: AoE 5 fire damage to enemies
 Card Text: Goes boom. Does 5 fire damage to everything.
 Bottom Right: 15 Fire
 
 Card Name: Shank
 Tags: Dirtbag
-Type: Single target, X hits.
+Type: [melee] Single target, X hits.
+Sounds: Activation[ShankDraw.wav], 0.45, Hit[ShankStab.wav]
 Effect: Single target. 3 times x 4 damage.
 Card Text: Stab something for 4 Stabby damage 3 times.
 Bottom Right: 9 Stabby
 
 Card Name: Pew Pew
 Tags: Cyborg
-Type: Two targets, 1 hit.
+Type: [ranged] Two targets, 1 hit.
+Sounds: Activation[PewPewCharge.wav], 0.5, Hit[PewPewZap.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys for 5 damage.
 Bottom Right: 10 Energy

@@ -24,6 +24,14 @@ public class CharacterInstance
     /// <summary>0 = Back, 1 = Mid, 2 = Front. -1 = not yet placed.</summary>
     public int Row = -1;
 
+    // --- transient render state: never saved, reset every battle ---
+
+    /// <summary>Melee walk displacement, in virtual px.</summary>
+    public Microsoft.Xna.Framework.Vector2 WalkOffset;
+
+    /// <summary>Counts down while the sprite is recoiling from a hit.</summary>
+    public float ShakeTimer;
+
     public string Folder => IsPlayer
         ? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";

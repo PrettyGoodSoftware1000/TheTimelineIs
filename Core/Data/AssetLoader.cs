@@ -16,7 +16,7 @@ namespace TheTimelineIs.Core.Data;
 /// The size each kind of art is authored at. Undersized uploads are scaled up
 /// to match (see <see cref="DisplaySize"/>); oversized ones are left alone.
 /// </summary>
-public enum AssetKind { Map, Background, Sprite, Thumb }
+public enum AssetKind { Map, Background, Sprite, Thumb, Effect }
 
 public class AssetLoader
 {
@@ -32,6 +32,7 @@ public class AssetLoader
         AssetKind.Map => new Point(7680, 4320),
         AssetKind.Background => new Point(3840, 2160),
         AssetKind.Sprite => new Point(1200, 1800),
+        AssetKind.Effect => new Point(140, 140),
         _ => new Point(512, 512),
     };
 

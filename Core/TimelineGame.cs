@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using TheTimelineIs.Core.Audio;
 using TheTimelineIs.Core.Data;
 using TheTimelineIs.Core.Input;
 using TheTimelineIs.Core.Platform;
@@ -57,6 +58,7 @@ public class TimelineGame : Game
             Config = GameConfig.Load(),
             Cards = CardLibrary.Load(),
             Classes = ClassLibrary.Load(),
+            Sounds = new SoundBank(),
             DevWriter = _platform.DevWriter,
         };
         _ctx.SwitchTo(new TitleScreen(_ctx));
