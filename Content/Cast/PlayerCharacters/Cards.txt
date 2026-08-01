@@ -27,7 +27,7 @@
 Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage
-Sounds: Activation[FireballCast.wav], 0.6, Hit[FireballBoom.wav]
+Sounds: Activation[FireballCast.wav], 1.1, Hit[FireballBoom.wav]
 Effect: AoE 5 fire damage to enemies
 Card Text: Goes boom. Does 5 fire damage to everything.
 Bottom Right: 15 Fire
@@ -35,7 +35,7 @@ Bottom Right: 15 Fire
 Card Name: Shank
 Tags: Dirtbag
 Type: [melee] Single target, X hits.
-Sounds: Activation[ShankDraw.wav], 0.45, Hit[ShankStab.wav]
+Sounds: Activation[ShankDraw.wav], 1.45, Hit[hitbasic.wav]
 Effect: Single target. 3 times x 4 damage.
 Card Text: Stab something for 4 Stabby damage 3 times.
 Bottom Right: 9 Stabby
@@ -43,7 +43,7 @@ Bottom Right: 9 Stabby
 Card Name: Pew Pew
 Tags: Cyborg
 Type: [ranged] Two targets, 1 hit.
-Sounds: Activation[PewPewCharge.wav], 0.5, Hit[PewPewZap.wav]
+Sounds: Activation[PewPewCharge.wav], 0.5, Hit[hitbasic.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys for 5 damage.
 Bottom Right: 10 Energy
