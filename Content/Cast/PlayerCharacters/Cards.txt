@@ -1,26 +1,20 @@
-﻿Class: Dirtbag
-  Card Tags: Dirtbag
-  Required Trait: Criminal or Dishonorable 
-  Required Trait: Has an STD
+Card Name: Fireball
+Tags: Gun-O-Mancer
+Type: AoE damage
+Effect: AoE 5 fire damage to enemies
+Card Text: Goes boom. Does 5 fire damage to everything.
+Bottom Right: 15 Fire
 
+Card Name: Shank
+Tags: Dirtbag
+Type: Single target, X hits.
+Effect: Single target. 3 times x 4 damage.
+Card Text: Stab something for 4 Stabby damage 3 times.
+Bottom Right: 9 Stabby
 
-Class: ‘Mancer
-  Card Tags: ‘Mancer
-  Required Trait: Brilliant or Bloodline
-
-
-Class: Gun-O-Mancer
-  Card Tags: ‘Mancer, Gun-O-Mancer
-  Required Trait: Brilliant or Bloodline
-  Required Trait: Armed or American
-  Card Tags: ‘Mancer, Gun-O-Mancer
-
-
-Class: Florida Man
-  Required Trait: From Florida 
-  Required Trait: Did Bath Salts or Convicted of a Reptile-related Crime
-  Card Tags: Florida Man, Gatormancy
-
-Class: Cyborg
-  Card Tags: Cyborg
-  Required Trait: Future-born
+Card Name: Pew Pew
+Tags: Cyborg
+Type: Two targets, 1 hit.
+Effect: Two targets. 5 damage each.
+Card Text: Blast 2 guys for 5 damage.
+Bottom Right: 10 Energy
