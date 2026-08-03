@@ -4,6 +4,6 @@
 # Global scale covers all art (map, backgrounds, cast). Cast scale covers
 # every cast sprite. A character line covers just that character.
 # UI text, buttons, the dialogue box, and the F12 ruler never scale.
-Global scale: 115%
-Cast scale: 100%
-Dirtbag scale: 100%
+Global scale: 100%
+Cast scale: 125%
+Dirtbag scale: 0
