@@ -58,7 +58,7 @@ Casting Time: 1.2
 Speed: 30
 Hit Sound: [FireballBoom.wav]
 Effect: AoE 5 fire damage to enemies
-Card Text: Goes boom. Does 5 fire damage to everything.
+Card Text: Goes boom. Does 5 fire damage to everything
 Bottom Right: 15 Fire
 []
 
