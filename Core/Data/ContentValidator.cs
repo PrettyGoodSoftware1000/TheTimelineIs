@@ -6,7 +6,7 @@ namespace TheTimelineIs.Core.Data;
 
 /// <summary>
 /// Runs once at startup and cross-checks the content files against each other
-/// and against the files on disk: cards against classes, missions against
+/// and against the files on disk: card tags against Classes.txt, missions against
 /// backgrounds and cast folders, every referenced sound and image against
 /// whether it actually exists. Everything it finds lands in Diagnostics, which
 /// becomes the startup popup and the log file.
@@ -16,28 +16,30 @@ namespace TheTimelineIs.Core.Data;
 /// </summary>
 public static class ContentValidator
 {
-    public static void Run(CardLibrary cards, Strings strings)
+    public static void Run(CardLibrary cards, ClassLibrary classes, Strings strings)
     {
         var diag = Diagnostics.Current;
-        ValidateCards(cards, diag);
-        ValidateRoster(cards, diag);
+        ValidateCards(cards, classes, diag);
+        ValidateRoster(classes, diag);
         ValidateMissions(diag);
         ValidateStrings(strings, diag);
     }
 
-    private static void ValidateCards(CardLibrary cards, Diagnostics diag)
+    private static void ValidateCards(CardLibrary cards, ClassLibrary classes, Diagnostics diag)
     {
         if (cards.All.Count == 0)
             diag.Error(CardLibrary.Path, 0, "no cards were loaded at all");
 
+        // a tag is a label some class opts into, not a class name itself
+        var playableTags = classes.AllPlayableTags();
+
         foreach (var card in cards.All)
         {
-            // a tag IS a class name now, so it must have a character folder
             foreach (var tag in card.Tags)
-                if (!AssetLoader.Exists($"Content/Cast/PlayerCharacters/{tag}/{tag}.txt"))
+                if (!playableTags.Contains(tag))
                     diag.Error(CardLibrary.Path, card.Line,
-                        $"'{card.Name}': tag '{tag}' has no folder at " +
-                        $"Content/Cast/PlayerCharacters/{tag}/, so nobody can ever play this card");
+                        $"'{card.Name}': no class in {ClassLibrary.Path} plays the tag '{tag}', " +
+                        "so nobody can ever hold this card");
 
             if (card.Delivery == Delivery.Ranged)
             {
@@ -75,17 +77,23 @@ public static class ContentValidator
     }
 
     /// <summary>
-    /// The party roster is whatever the cards name, so the check is that the
-    /// picker will have enough classes to fill three slots.
+    /// Classes.txt is the roster. Every class it declares needs character art
+    /// to be pickable, and the picker needs enough of them to fill three slots.
     /// </summary>
-    private static void ValidateRoster(CardLibrary cards, Diagnostics diag)
+    private static void ValidateRoster(ClassLibrary classes, Diagnostics diag)
     {
-        var playable = cards.PlayableClasses();
-        if (playable.Count == 0)
-            diag.Error(CardLibrary.Path, 0,
-                "no card names a class with a PlayerCharacters folder, so the party picker is empty");
-        else if (playable.Count < 3)
-            diag.Warn(CardLibrary.Path, 0,
+        if (classes.ClassNames.Count == 0)
+            diag.Error(ClassLibrary.Path, 0, "no classes declared, so the party picker is empty");
+
+        foreach (var name in classes.ClassNames)
+            if (!AssetLoader.Exists($"Content/Cast/PlayerCharacters/{name}/{name}.txt"))
+                diag.Warn(ClassLibrary.Path, classes.LineOf(name),
+                    $"class '{name}' has no folder at Content/Cast/PlayerCharacters/{name}/, " +
+                    "so it can't be picked at New Game");
+
+        var playable = classes.PlayableClasses();
+        if (playable.Count is > 0 and < 3)
+            diag.Warn(ClassLibrary.Path, 0,
                 $"only {playable.Count} class(es) can be picked ({string.Join(", ", playable)}); " +
                 "a party is 3, so slots will be filled with duplicates");
 

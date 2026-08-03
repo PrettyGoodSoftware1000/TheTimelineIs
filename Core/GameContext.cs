@@ -22,6 +22,7 @@ public class GameContext
     public required Texture2D Pixel;
     public required GameConfig Config;
     public required CardLibrary Cards;
+    public required ClassLibrary Classes;
     public required SoundBank Sounds;
     public required ILogStore LogStore;
     public IDevDestinationWriter? DevWriter;

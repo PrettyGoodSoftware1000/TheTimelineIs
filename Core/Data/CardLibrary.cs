@@ -361,19 +361,7 @@ public class CardLibrary
                 "so it resolves instantly");
     }
 
-    /// <summary>Cards a class can play: its own name appears in the card's Tags.</summary>
-    public List<Card> HandFor(string className) =>
-        All.Where(c => c.Tags.Contains(className, StringComparer.OrdinalIgnoreCase)).ToList();
-
-    /// <summary>
-    /// Every class named by a card's Tags that also has a PlayerCharacters
-    /// folder — this is the roster the party picker offers. Derived from the
-    /// cards themselves, so there is no separate class list to keep in sync.
-    /// </summary>
-    public List<string> PlayableClasses() =>
-        All.SelectMany(c => c.Tags)
-           .Distinct(StringComparer.OrdinalIgnoreCase)
-           .Where(t => AssetLoader.Exists($"Content/Cast/PlayerCharacters/{t}/{t}.txt"))
-           .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
-           .ToList();
+    /// <summary>Cards a class can play: any tag the class carries appears in the card's Tags.</summary>
+    public List<Card> HandFor(IReadOnlyList<string> classTags) =>
+        All.Where(c => c.Tags.Intersect(classTags, StringComparer.OrdinalIgnoreCase).Any()).ToList();
 }

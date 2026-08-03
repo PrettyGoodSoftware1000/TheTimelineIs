@@ -126,7 +126,7 @@ public class BattleScreen : IScreen
         }
         if (Current.IsPlayer)
         {
-            _hand = _ctx.Cards.HandFor(Current.Name);
+            _hand = _ctx.Cards.HandFor(_ctx.Classes.CardTagsFor(Current.Name));
             _selected = null;
             _targets.Clear();
             _phase = Phase.PlayerChoose;

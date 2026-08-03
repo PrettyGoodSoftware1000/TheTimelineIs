@@ -154,10 +154,15 @@ Config scaling — it's a fixed yardstick.
 ## Party and formation
 
 New Game leads to a party picker: choose 3 from the playable classes
-(duplicates allowed). The roster is derived from the cards — every distinct
-`Tags:` value that also has a `Content/Cast/PlayerCharacters/{Name}/` folder
-is offered, so adding a class means adding its folder and at least one card.
-`Classes.txt` is no longer read. Each side of a room has
+(duplicates allowed). `Classes.txt` is the authoritative roster — one
+`Class: Name` line each — and a class appears in the picker once it also has a
+`Content/Cast/PlayerCharacters/{Name}/` folder.
+
+A card's `Tags:` are **labels, not class names**. A class plays every card
+carrying a tag it holds; with no `Card Tags:` line, a class holds one tag —
+its own name. Adding `Card Tags: 'Mancer, Gun-O-Mancer` to a class lets it
+play cards tagged either way, so several classes can share a card pool without
+the tag having to be anybody's name. Each side of a room has
 three rows: player Back/Mid/Front left-to-right, enemies mirrored. A row
 holds up to 3 characters, stacked. Drag a player sprite between rows with
 the mouse (or a finger, later). Rows are cosmetic for now; combat will use
@@ -167,8 +172,8 @@ them later.
 
 Turn order is rolled once per battle: each side shuffled, sides alternating,
 random side first, leftovers appended. On a player character's turn their
-cards appear — a character plays every card whose `Tags:` include their own
-name; click a card, pick targets if needed, and it resolves. Enemies hit a random player
+cards appear — every card carrying a tag their class holds (see `Classes.txt`);
+click a card, pick targets if needed, and it resolves. Enemies hit a random player
 character with their manifest `Attack`. All enemies dead = victory; all
 player characters dead = death screen and reload. A character killed
 mid-mission stays dead for later rooms of that mission.
@@ -223,7 +228,7 @@ damage type). Defaults if omitted: players 25 HP, enemies 12 HP / 3 attack.
 ## Content checking
 
 Every content file is parsed through one diagnostics channel, and a validator
-cross-checks the results at startup: card tags against character folders, mission
+cross-checks the results at startup: card tags against `Classes.txt`, mission
 backgrounds and cast names against the folders on disk, every referenced sound
 and projectile image against whether the file exists, plus the string keys the
 code depends on.

@@ -9,8 +9,8 @@ using TheTimelineIs.Core.Render;
 namespace TheTimelineIs.Core.Screens;
 
 /// <summary>
-/// New Game: pick 3 party members from the playable classes (those in
-/// Classes.txt that have a PlayerCharacters folder). Duplicates are allowed —
+/// New Game: pick 3 party members from the classes declared in Classes.txt
+/// that have a PlayerCharacters folder. Duplicates are allowed —
 /// three Dirtbags is a legal, if fragrant, party. Click a class to add it,
 /// click a filled slot to clear it, Start when all 3 are chosen.
 /// </summary>
@@ -28,7 +28,7 @@ public class PartySelectScreen : IScreen
     public PartySelectScreen(GameContext ctx)
     {
         _ctx = ctx;
-        _classes = ctx.Cards.PlayableClasses();
+        _classes = ctx.Classes.PlayableClasses();
     }
 
     private static string SpritePathFor(string name)
