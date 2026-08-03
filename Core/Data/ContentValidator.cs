@@ -16,31 +16,28 @@ namespace TheTimelineIs.Core.Data;
 /// </summary>
 public static class ContentValidator
 {
-    public static void Run(CardLibrary cards, ClassLibrary classes, Strings strings)
+    public static void Run(CardLibrary cards, Strings strings)
     {
         var diag = Diagnostics.Current;
-        ValidateCards(cards, classes, diag);
-        ValidateClasses(classes, diag);
+        ValidateCards(cards, diag);
+        ValidateRoster(cards, diag);
         ValidateMissions(diag);
         ValidateStrings(strings, diag);
     }
 
-    private static void ValidateCards(CardLibrary cards, ClassLibrary classes, Diagnostics diag)
+    private static void ValidateCards(CardLibrary cards, Diagnostics diag)
     {
         if (cards.All.Count == 0)
             diag.Error(CardLibrary.Path, 0, "no cards were loaded at all");
 
-        // every tag a class can actually see
-        var knownTags = new HashSet<string>(
-            classes.ClassNames.SelectMany(classes.CardTagsFor), StringComparer.OrdinalIgnoreCase);
-
         foreach (var card in cards.All)
         {
+            // a tag IS a class name now, so it must have a character folder
             foreach (var tag in card.Tags)
-                if (!knownTags.Contains(tag))
+                if (!AssetLoader.Exists($"Content/Cast/PlayerCharacters/{tag}/{tag}.txt"))
                     diag.Error(CardLibrary.Path, card.Line,
-                        $"'{card.Name}': tag '{tag}' matches no class in {ClassLibrary.Path}, " +
-                        "so nobody can ever play this card");
+                        $"'{card.Name}': tag '{tag}' has no folder at " +
+                        $"Content/Cast/PlayerCharacters/{tag}/, so nobody can ever play this card");
 
             if (card.Delivery == Delivery.Ranged)
             {
@@ -77,27 +74,23 @@ public static class ContentValidator
                 $"'{card.Name}': {field} '{file}' is not a .wav — only PCM WAV can be played");
     }
 
-    private static void ValidateClasses(ClassLibrary classes, Diagnostics diag)
+    /// <summary>
+    /// The party roster is whatever the cards name, so the check is that the
+    /// picker will have enough classes to fill three slots.
+    /// </summary>
+    private static void ValidateRoster(CardLibrary cards, Diagnostics diag)
     {
-        if (classes.ClassNames.Count == 0)
-            diag.Error(ClassLibrary.Path, 0, "no classes were loaded at all");
+        var playable = cards.PlayableClasses();
+        if (playable.Count == 0)
+            diag.Error(CardLibrary.Path, 0,
+                "no card names a class with a PlayerCharacters folder, so the party picker is empty");
+        else if (playable.Count < 3)
+            diag.Warn(CardLibrary.Path, 0,
+                $"only {playable.Count} class(es) can be picked ({string.Join(", ", playable)}); " +
+                "a party is 3, so slots will be filled with duplicates");
 
-        int playable = 0;
-        foreach (var name in classes.ClassNames)
-        {
-            string manifest = $"Content/Cast/PlayerCharacters/{name}/{name}.txt";
-            if (!AssetLoader.Exists(manifest))
-            {
-                diag.Warn(ClassLibrary.Path, 0,
-                    $"class '{name}' has no folder at {manifest}, so it can't be picked at New Game");
-                continue;
-            }
-            playable++;
+        foreach (var name in playable)
             CheckCastFolder(name, isPlayer: true, diag);
-        }
-        if (playable < 3)
-            diag.Error(ClassLibrary.Path, 0,
-                $"only {playable} playable class(es) have art folders, but a party needs 3");
     }
 
     private static void CheckCastFolder(string name, bool isPlayer, Diagnostics diag)

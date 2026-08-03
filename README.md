@@ -154,7 +154,10 @@ Config scaling — it's a fixed yardstick.
 ## Party and formation
 
 New Game leads to a party picker: choose 3 from the playable classes
-(Dirtbag, Gun-O-Mancer, Cyborg — duplicates allowed). Each side of a room has
+(duplicates allowed). The roster is derived from the cards — every distinct
+`Tags:` value that also has a `Content/Cast/PlayerCharacters/{Name}/` folder
+is offered, so adding a class means adding its folder and at least one card.
+`Classes.txt` is no longer read. Each side of a room has
 three rows: player Back/Mid/Front left-to-right, enemies mirrored. A row
 holds up to 3 characters, stacked. Drag a player sprite between rows with
 the mouse (or a finger, later). Rows are cosmetic for now; combat will use
@@ -164,8 +167,8 @@ them later.
 
 Turn order is rolled once per battle: each side shuffled, sides alternating,
 random side first, leftovers appended. On a player character's turn their
-class's cards appear (tag match against `Classes.txt` Card Tags); click a
-card, pick targets if needed, and it resolves. Enemies hit a random player
+cards appear — a character plays every card whose `Tags:` include their own
+name; click a card, pick targets if needed, and it resolves. Enemies hit a random player
 character with their manifest `Attack`. All enemies dead = victory; all
 player characters dead = death screen and reload. A character killed
 mid-mission stays dead for later rooms of that mission.
@@ -220,7 +223,7 @@ damage type). Defaults if omitted: players 25 HP, enemies 12 HP / 3 attack.
 ## Content checking
 
 Every content file is parsed through one diagnostics channel, and a validator
-cross-checks the results at startup: card tags against `Classes.txt`, mission
+cross-checks the results at startup: card tags against character folders, mission
 backgrounds and cast names against the folders on disk, every referenced sound
 and projectile image against whether the file exists, plus the string keys the
 code depends on.

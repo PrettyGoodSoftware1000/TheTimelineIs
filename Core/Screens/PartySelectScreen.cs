@@ -28,13 +28,8 @@ public class PartySelectScreen : IScreen
     public PartySelectScreen(GameContext ctx)
     {
         _ctx = ctx;
-        _classes = ctx.Classes.ClassNames.Where(HasPlayerFolder).ToList();
-        if (_classes.Count == 0) // Classes.txt missing or empty — don't strand the player
-            _classes = new List<string> { "Dirtbag", "Gun-O-Mancer", "Cyborg" };
+        _classes = ctx.Cards.PlayableClasses();
     }
-
-    private static bool HasPlayerFolder(string name) =>
-        AssetLoader.TryReadLines($"Content/Cast/PlayerCharacters/{name}/{name}.txt").Count > 0;
 
     private static string SpritePathFor(string name)
     {
