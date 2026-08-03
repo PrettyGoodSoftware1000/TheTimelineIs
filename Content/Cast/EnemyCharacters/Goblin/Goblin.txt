@@ -3,8 +3,8 @@
 # Drop in Goblin4.png and add a line here - nothing else needed.
 # Optional thumbnail per sprite: Goblin1.png -> Goblin1Thumb.png
 # Stats: HP is hit points; Attack is "damage type" for its auto-attack.
-HP: 12
-Attack: 3 Smash
+HP: 24
+Attack: 4 Smash
 Goblin1.png
 Goblin2.png
 Goblin3.png
