@@ -45,6 +45,9 @@ public class TimelineGame : Game
         var pixel = new Texture2D(GraphicsDevice, 1, 1);
         pixel.SetData(new[] { Color.White });
 
+        // everything the loaders complain about lands here
+        Diagnostics.Current = new Diagnostics();
+
         _ctx = new GameContext
         {
             Game = this,
@@ -59,9 +62,18 @@ public class TimelineGame : Game
             Cards = CardLibrary.Load(),
             Classes = ClassLibrary.Load(),
             Sounds = new SoundBank(),
+            LogStore = _platform.LogStore,
             DevWriter = _platform.DevWriter,
         };
-        _ctx.SwitchTo(new TitleScreen(_ctx));
+
+        ContentValidator.Run(_ctx.Cards, _ctx.Classes, _ctx.Strings);
+        _platform.LogStore.Write(Diagnostics.Current.RenderLog());
+
+        IScreen title = new TitleScreen(_ctx);
+        _ctx.SwitchTo(Diagnostics.Current.Any
+            ? new ErrorScreen(_ctx, Diagnostics.Current.Ordered(),
+                _platform.LogStore.DisplayPath, title)
+            : title);
     }
 
     protected override void Update(GameTime gameTime)

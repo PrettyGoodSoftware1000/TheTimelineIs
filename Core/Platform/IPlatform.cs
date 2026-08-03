@@ -12,6 +12,7 @@ public interface IPlatform
 {
     IInputSource CreateInput(Game game);
     ISaveStore SaveStore { get; }
+    ILogStore LogStore { get; }
 
     /// <summary>Non-null only when running with --devmap on desktop.</summary>
     IDevDestinationWriter? DevWriter { get; }

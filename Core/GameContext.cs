@@ -24,11 +24,24 @@ public class GameContext
     public required CardLibrary Cards;
     public required ClassLibrary Classes;
     public required SoundBank Sounds;
+    public required ILogStore LogStore;
     public IDevDestinationWriter? DevWriter;
 
     public IScreen Screen = null!;
 
     public void SwitchTo(IScreen screen) => Screen = screen;
+
+    /// <summary>
+    /// Raises a blocking popup over whatever is on screen and writes the log.
+    /// Used for problems found mid-play, not just at startup.
+    /// </summary>
+    public void ReportProblem(string source, string message)
+    {
+        Diagnostics.Current.Error(source, 0, message);
+        LogStore.Write(Diagnostics.Current.RenderLog());
+        if (Screen is not ErrorScreen)
+            SwitchTo(new ErrorScreen(this, Diagnostics.Current.Ordered(), LogStore.DisplayPath, Screen));
+    }
 
     /// <summary>
     /// Death and the Continue button share this: load the last save and go

@@ -73,8 +73,9 @@ public class CastManifest
             lines = AssetLoader.TryReadLines($"Content/Cast/EnemyCharacters/{name}/{name}.txt");
             if (lines.Count == 0)
             {
-                Console.WriteLine($"[cast] no manifest found for '{name}' — expected " +
-                    $"Content/Cast/PlayerCharacters/{name}/{name}.txt or Content/Cast/EnemyCharacters/{name}/{name}.txt");
+                Diagnostics.Current.Error($"Cast/{name}", 0, $"no manifest for '{name}' — expected " +
+                    $"Content/Cast/PlayerCharacters/{name}/{name}.txt or " +
+                    $"Content/Cast/EnemyCharacters/{name}/{name}.txt");
                 lines = new List<string> { $"{name}.png" };
             }
         }
@@ -101,7 +102,8 @@ public class CastManifest
                 }
                 else
                 {
-                    Console.WriteLine($"[cast] {name}: unknown manifest line ignored: {line}");
+                    Diagnostics.Current.Warn($"Cast/{name}", 0,
+                        $"unknown manifest line ignored: '{line}'");
                 }
             }
             else

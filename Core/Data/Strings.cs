@@ -32,7 +32,7 @@ public class Strings
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[strings] failed to load Content/Text/Strings.txt: {ex.Message}");
+            Diagnostics.Current.Error("Content/Text/Strings.txt", 0, $"could not be read: {ex.Message}");
         }
         return result;
     }

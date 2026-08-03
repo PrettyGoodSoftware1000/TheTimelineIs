@@ -30,6 +30,10 @@ public class Card
     public string CardText = "";
     public string DamageType = "";
 
+    /// <summary>Line in Cards.txt where this card starts, for error messages.</summary>
+    public int Line;
+    public string EffectLine = "";
+
     // --- machine-read: matched case-insensitively ---
     public List<string> Tags = new();
     public string TypeLine = "";
@@ -110,22 +114,24 @@ public class CardLibrary
 
     public static CardLibrary Load()
     {
+        var diag = Diagnostics.Current;
         var lib = new CardLibrary();
         Card? card = null;
-        bool sawBoundary = false;
+        bool inBlock = false;
+        int blockLine = 0;
 
-        foreach (var raw in AssetLoader.TryReadLines(Path))
+        foreach (var (lineNo, raw) in AssetLoader.ReadNumbered(Path, Path))
         {
             string line = TrailingNote.Replace(TextUtil.Clean(raw), "").Trim();
             if (line.Length == 0) continue;
 
             if (line == "[]")
             {
-                // a "[]" that closes a block with no Card Name means a malformed card
-                if (sawBoundary && card == null)
-                    Console.WriteLine("[cards] a [] block contained no 'Card Name:' line");
-                sawBoundary = !sawBoundary;
-                if (!sawBoundary) card = null;
+                if (inBlock && card == null)
+                    diag.Error(Path, blockLine, "this [] block has no 'Card Name:' line");
+                inBlock = !inBlock;
+                blockLine = lineNo;
+                if (!inBlock) card = null;
                 continue;
             }
 
@@ -133,30 +139,42 @@ public class CardLibrary
                 line.StartsWith(k, StringComparison.OrdinalIgnoreCase));
             if (key == null)
             {
-                Console.WriteLine($"[cards] unrecognized line ignored: {line}");
+                diag.Error(Path, lineNo,
+                    $"unrecognized line '{Trim(line)}' — expected one of: {string.Join(", ", Keys)}");
                 continue;
             }
             string value = line[key.Length..].TrimStart(' ', ':', '\t').Trim();
 
             if (key == "card name")
             {
-                card = new Card { Name = value };
+                if (value.Length == 0)
+                {
+                    diag.Error(Path, lineNo, "'Card Name:' has no name after it");
+                    continue;
+                }
+                if (lib.All.Any(c => c.Name.Equals(value, StringComparison.OrdinalIgnoreCase)))
+                    diag.Error(Path, lineNo, $"a second card is also named '{value}'");
+                card = new Card { Name = value, Line = lineNo };
                 lib.All.Add(card);
                 continue;
             }
             if (card == null)
             {
-                Console.WriteLine($"[cards] line before any 'Card Name:' ignored: {line}");
+                diag.Error(Path, lineNo, $"'{key}' appears before any 'Card Name:' line");
                 continue;
             }
-            Apply(card, key, value);
+            Apply(card, key, value, lineNo, diag);
         }
 
-        foreach (var c in lib.All) Validate(c);
+        if (inBlock)
+            diag.Error(Path, blockLine, "a [] block was opened but never closed");
+        foreach (var c in lib.All) Validate(c, diag);
         return lib;
     }
 
-    private static void Apply(Card card, string key, string value)
+    private static string Trim(string s) => s.Length <= 60 ? s : s[..57] + "...";
+
+    private static void Apply(Card card, string key, string value, int lineNo, Diagnostics diag)
     {
         switch (key)
         {
@@ -189,16 +207,27 @@ public class CardLibrary
 
             case "casting time":
                 // "Use Sound Time" (the default) leaves this null
-                card.CastingTime = value.Contains("sound", StringComparison.OrdinalIgnoreCase)
-                    ? null : ParseFloat(value);
+                if (value.Contains("sound", StringComparison.OrdinalIgnoreCase))
+                    card.CastingTime = null;
+                else if (ParseFloat(value) is float ct)
+                    card.CastingTime = ct;
+                else
+                    diag.Error(CardLibrary.Path, lineNo,
+                        $"'{card.Name}': Casting Time must be a number or 'Use Sound Time', got '{value}'");
                 break;
 
             case "speed":
-                card.Speed = ParseFloat(value) is float s && s > 0 ? s : card.Speed;
+                if (ParseFloat(value) is float sp && sp > 0)
+                    card.Speed = sp;
+                else
+                    diag.Error(CardLibrary.Path, lineNo,
+                        $"'{card.Name}': Speed needs a number greater than 0 (feet per second), got '{value}'");
                 break;
 
             case "melee time":
-                card.MeleeTime = ParseFloat(value) ?? 0f;
+                if (ParseFloat(value) is float mt) card.MeleeTime = mt;
+                else diag.Error(CardLibrary.Path, lineNo,
+                    $"'{card.Name}': Melee Time must be a number of seconds, got '{value}'");
                 break;
 
             case "hit sound":
@@ -206,7 +235,8 @@ public class CardLibrary
                 break;
 
             case "effect":
-                ApplyEffect(card, value);
+                card.EffectLine = value;
+                ApplyEffect(card, value, lineNo, diag);
                 break;
 
             case "card text":
@@ -219,8 +249,8 @@ public class CardLibrary
                 break;
 
             case "sounds":
-                Console.WriteLine($"[cards] '{card.Name}': the old 'Sounds:' line is obsolete — " +
-                    "use Casting Sound / Casting Time / Hit Sound. Ignored.");
+                diag.Warn(CardLibrary.Path, lineNo, $"'{card.Name}': the old 'Sounds:' line is " +
+                    "obsolete — use Casting Sound / Casting Time / Hit Sound. Ignored.");
                 break;
         }
     }
@@ -280,7 +310,7 @@ public class CardLibrary
         return events;
     }
 
-    private static void ApplyEffect(Card card, string effect)
+    private static void ApplyEffect(Card card, string effect, int lineNo, Diagnostics diag)
     {
         var nums = Ints.Matches(effect).Select(m => int.Parse(m.Value)).ToList();
         string type = card.TypeLine.ToLowerInvariant();
@@ -306,21 +336,29 @@ public class CardLibrary
         }
         else
         {
-            Console.WriteLine($"[cards] '{card.Name}' has unrecognized Type '{card.TypeLine}'; treating as single hit");
+            diag.Error(CardLibrary.Path, lineNo, $"'{card.Name}': unrecognized Type '{card.TypeLine}' — " +
+                "expected 'AoE damage', 'Single target, X hits.' or 'N targets, 1 hit.'; treated as a single hit");
             card.Kind = CardKind.SingleTargetHits;
             card.Damage = nums.Count > 0 ? nums[0] : 0;
         }
     }
 
-    private static void Validate(Card c)
+    private static void Validate(Card c, Diagnostics diag)
     {
         if (c.Damage <= 0)
-            Console.WriteLine($"[cards] '{c.Name}' has no parsable damage in its Effect line");
+            diag.Error(Path, c.Line, $"'{c.Name}': no damage number found in its Effect line");
         if (c.Tags.Count == 0)
-            Console.WriteLine($"[cards] '{c.Name}' has no Tags — no class can play it");
+            diag.Error(Path, c.Line, $"'{c.Name}': no Tags, so no class can ever play it");
+        if (c.CardText.Length == 0)
+            diag.Warn(Path, c.Line, $"'{c.Name}': no Card Text, so the card face is blank");
+        if (c.DamageType.Length == 0)
+            diag.Warn(Path, c.Line, $"'{c.Name}': no damage type in Bottom Right");
         if (c.Kind == CardKind.SingleTargetHits && c.HitEvents.Count > 1 && c.HitEvents.Count != c.Hits)
-            Console.WriteLine($"[cards] '{c.Name}': {c.Hits} hits in Effect but {c.HitEvents.Count} " +
-                "Hit Sound entries — damage is split across the sounds instead");
+            diag.Warn(Path, c.Line, $"'{c.Name}': Effect says {c.Hits} hits but there are " +
+                $"{c.HitEvents.Count} Hit Sound entries — damage is split across the sounds instead");
+        if (c.Delivery == Delivery.Instant && (c.HitEvents.Count > 1 || c.MeleeTime > 0))
+            diag.Warn(Path, c.Line, $"'{c.Name}': has timing set but no [melee] or [ranged] tag, " +
+                "so it resolves instantly");
     }
 
     /// <summary>Cards visible to a class, matched on shared tags.</summary>

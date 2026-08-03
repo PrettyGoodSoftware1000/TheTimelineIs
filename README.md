@@ -216,3 +216,23 @@ side-to-side once over a quarter second.
 Character manifests (`Dirtbag.txt`, `Goblin.txt`, ...) now hold stats along
 with sprite lists: `HP: 12`, and for enemies `Attack: 3 Smash` (damage and
 damage type). Defaults if omitted: players 25 HP, enemies 12 HP / 3 attack.
+
+## Content checking
+
+Every content file is parsed through one diagnostics channel, and a validator
+cross-checks the results at startup: card tags against `Classes.txt`, mission
+backgrounds and cast names against the folders on disk, every referenced sound
+and projectile image against whether the file exists, plus the string keys the
+code depends on.
+
+If anything is wrong, **the game opens on a popup listing the problems and
+waits for you to press Continue** — errors in red, warnings in amber, each with
+the file and line number. The complete list is always written to
+`ContentErrors.log` at the repo root (and beside the save file), so it can be
+kept open while editing.
+
+Errors mean something is broken (a card no class can play, a missing sound, a
+mission pointing at a background that isn't there). Warnings mean it will run
+but probably isn't what you meant (a card with no text, a speed so low a
+fighter takes 35 seconds to cross the stage). Problems found mid-play raise the
+same popup through `GameContext.ReportProblem`.

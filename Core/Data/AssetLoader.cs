@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -73,7 +74,7 @@ public class AssetLoader
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[assets] missing or unreadable: {path} ({ex.Message})");
+            Diagnostics.Current.Error(path, 0, $"image missing or unreadable ({ex.Message})");
             tex = MissingTexture();
             _knownMissing.Add(path);
             found = false;
@@ -93,26 +94,57 @@ public class AssetLoader
         return LoadTexture(paths[^1]);
     }
 
-    public static List<string> TryReadLines(string path)
+    public static List<string> TryReadLines(string path) =>
+        ReadNumbered(path, null).Select(l => l.Text).ToList();
+
+    /// <summary>
+    /// Content lines with their 1-based line numbers, so a complaint can point
+    /// at the exact line. Blank and '#' lines are skipped but still counted.
+    /// Passing a source name reports a missing file as an error.
+    /// </summary>
+    public static List<(int Line, string Text)> ReadNumbered(string path, string? reportAs)
     {
-        var lines = new List<string>();
+        var lines = new List<(int, string)>();
         try
         {
             using var stream = TitleContainer.OpenStream(path);
             using var reader = new StreamReader(stream);
             string? line;
+            int n = 0;
             while ((line = reader.ReadLine()) != null)
             {
+                n++;
                 string trimmed = line.Trim();
                 if (trimmed.Length > 0 && !trimmed.StartsWith('#'))
-                    lines.Add(trimmed);
+                    lines.Add((n, trimmed));
             }
+        }
+        catch (Exception ex)
+        {
+            if (reportAs != null)
+                Diagnostics.Current.Error(reportAs, 0, $"could not be read: {ex.Message}");
+        }
+        return lines;
+    }
+
+    private static readonly Dictionary<string, bool> ExistsCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Whether a content file is actually present, for the validator.</summary>
+    public static bool Exists(string path)
+    {
+        if (ExistsCache.TryGetValue(path, out bool known)) return known;
+        bool found;
+        try
+        {
+            using var stream = TitleContainer.OpenStream(path);
+            found = true;
         }
         catch
         {
-            // caller treats an empty list as "not found"
+            found = false;
         }
-        return lines;
+        ExistsCache[path] = found;
+        return found;
     }
 
     private static void PremultiplyAlpha(Texture2D tex)

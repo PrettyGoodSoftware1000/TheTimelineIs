@@ -44,3 +44,10 @@ battle_hit = {target} takes {dmg} {type} damage.
 battle_enemy_hit = {attacker} hits {target} for {dmg} {type}.
 battle_down = {name} goes down!
 battle_victory = Victory!
+
+# --- Content problem popup (shown at startup when a file has mistakes) ---
+error_title = Content problems found
+error_counts = {errors} error(s), {warnings} warning(s)
+error_continue = Continue
+error_more = ...and {count} more.
+error_log = Full list saved to {path}

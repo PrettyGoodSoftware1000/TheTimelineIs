@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework;
 namespace TheTimelineIs.Core.Data;
 
 public abstract record RoomEntry;
-public record DialogueEntry(string Speaker, string Text) : RoomEntry;
+public record DialogueEntry(string Speaker, string Text) : RoomEntry { public int Line; }
 public record BattleEntry : RoomEntry;
 
 public class Room
@@ -16,6 +16,9 @@ public class Room
     public string Background = "";
     public List<string> Cast = new();
     public List<RoomEntry> Entries = new();
+
+    // where those lines live in the file, for error messages
+    public int BackgroundLine, CastLine;
 }
 
 /// <summary>
@@ -37,15 +40,9 @@ public class MissionScript
         string path = $"Content/Missions/{missionName}/{missionName}.txt";
         try
         {
-            using var stream = TitleContainer.OpenStream(path);
-            using var reader = new StreamReader(stream);
             Room? room = null;
-            string? line;
-            while ((line = reader.ReadLine()) != null)
+            foreach (var (lineNo, trimmed) in AssetLoader.ReadNumbered(path, path))
             {
-                string trimmed = line.Trim();
-                if (trimmed.Length == 0) continue;
-
                 if (RoomHeader.IsMatch(trimmed))
                 {
                     room = new Room();
@@ -56,12 +53,14 @@ public class MissionScript
                 }
                 if (room == null)
                 {
-                    Console.WriteLine($"[mission {missionName}] line before first room header ignored: {trimmed}");
+                    Diagnostics.Current.Error(path, lineNo,
+                        $"line before the first 'Room N:' header: '{trimmed}'");
                     continue;
                 }
                 if (trimmed.StartsWith("Background:", StringComparison.OrdinalIgnoreCase))
                 {
                     room.Background = trimmed["Background:".Length..].Trim();
+                    room.BackgroundLine = lineNo;
                     continue;
                 }
                 if (trimmed.StartsWith("Cast:", StringComparison.OrdinalIgnoreCase))
@@ -69,6 +68,7 @@ public class MissionScript
                     room.Cast = trimmed["Cast:".Length..]
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .ToList();
+                    room.CastLine = lineNo;
                     continue;
                 }
                 if (trimmed.Equals("[Battle!]", StringComparison.OrdinalIgnoreCase))
@@ -80,17 +80,20 @@ public class MissionScript
                 if (colon > 0)
                 {
                     room.Entries.Add(new DialogueEntry(
-                        TextUtil.Clean(trimmed[..colon]), TextUtil.Clean(trimmed[(colon + 1)..])));
+                        TextUtil.Clean(trimmed[..colon]), TextUtil.Clean(trimmed[(colon + 1)..]))
+                    { Line = lineNo });
                 }
                 else
                 {
-                    Console.WriteLine($"[mission {missionName}] unrecognized line ignored: {trimmed}");
+                    Diagnostics.Current.Error(path, lineNo,
+                        $"unrecognized line '{trimmed}' — expected 'Room N:', 'Background:', " +
+                        "'Cast:', '[Battle!]' or 'Speaker: text'");
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[mission {missionName}] failed to load {path}: {ex.Message}");
+            Diagnostics.Current.Error(path, 0, $"could not be read: {ex.Message}");
         }
         return script;
     }

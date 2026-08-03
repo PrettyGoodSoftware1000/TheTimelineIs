@@ -7,6 +7,7 @@ namespace TheTimelineIs.Desktop;
 public class DesktopPlatform : IPlatform
 {
     public ISaveStore SaveStore { get; } = new DesktopSaveStore();
+    public ILogStore LogStore { get; } = new DesktopLogStore();
     public IDevDestinationWriter? DevWriter { get; }
 
     public DesktopPlatform(bool devMap)
