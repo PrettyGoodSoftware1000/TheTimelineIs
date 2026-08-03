@@ -8,12 +8,8 @@
 #                  "AoE damage"             - hits every enemy in the room
 #                  "Single target, X hits." - one chosen target, X hits
 #                  "Two targets, 1 hit."    - pick 2 targets, one hit each)
-# Sounds:       (Activation[file.wav], 0.0, Hit[file.wav]
-#                Activation plays when the card is clicked. The number is how
-#                long the walk or projectile takes to reach the target, in
-#                seconds. Hit plays when it lands, along with the target's
-#                recoil. WAV files live in Content/Sounds/. Any part may be
-#                left out; a missing file is logged once, then silent.)
+# Sounds:       
+
 # Effect:       (Machine-readable numbers. The player never sees this line.
 #                Keep the same wording pattern per Type so the parser
 #                finds the numbers.)
@@ -24,26 +20,43 @@
 # A trailing (note in parentheses) on any line is stripped by the parser.
 # =====================================================================
 
+[]
 Card Name: Fireball
 Tags: Gun-O-Mancer
-Type: [ranged] AoE damage
-Sounds: Activation[FireballCast.wav], 1.1, Hit[FireballBoom.wav]
+Type: [ranged] AoE damage, Single Projectile
+Casting Sound: [FireballCast.wav]
+Casting Time: Use Sound Time
+Travel Time: 1.1
+Hit Sound: [FireballBoom.wav]
 Effect: AoE 5 fire damage to enemies
 Card Text: Goes boom. Does 5 fire damage to everything.
 Bottom Right: 15 Fire
+[]
 
+[]
 Card Name: Shank
 Tags: Dirtbag
 Type: [melee] Single target, X hits.
-Sounds: Activation[ShankDraw.wav], 1.45, Hit[hitbasic.wav]
+Sounds: Activation[ShankDraw.wav]
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Travel Time: 2
+Melee Time: 0.5
+Hit Sound: [hitbasic.wav], Delay 0.2, [hitbasic.wav], Delay 0.2, [hitbasic.wav]
 Effect: Single target. 3 times x 4 damage.
 Card Text: Stab something for 4 Stabby damage 3 times.
 Bottom Right: 9 Stabby
+[]
 
+[]
 Card Name: Pew Pew
 Tags: Cyborg
-Type: [ranged] Two targets, 1 hit.
-Sounds: Activation[PewPewCharge.wav], 0.5, Hit[hitbasic.wav]
+Type: [ranged] Two targets, 1 hit. Multiple Projectiles
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Travel Time: 0.5
+Hit Sound: [hitbasic.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys for 5 damage.
 Bottom Right: 10 Energy
+[]
