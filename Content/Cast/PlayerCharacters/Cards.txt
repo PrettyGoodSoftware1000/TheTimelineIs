@@ -1,29 +1,58 @@
 # ============================ CARD FORMAT ============================
-# Card Name:    (Text shown at the top of the card.)
-# Tags:         (Which classes see this card in their hand and can play it.
-#                A class matches if it shares any tag - see Classes.txt.)
-# Type:         (Optional [melee] or [ranged] first, then which piece of game
-#                code runs. [melee] walks the attacker to the target and back;
-#                [ranged] throws a projectile. Reuse these exactly:
-#                  "AoE damage"             - hits every enemy in the room
-#                  "Single target, X hits." - one chosen target, X hits
-#                  "Two targets, 1 hit."    - pick 2 targets, one hit each)
-# Sounds:       
-
-# Effect:       (Machine-readable numbers. The player never sees this line.
-#                Keep the same wording pattern per Type so the parser
-#                finds the numbers.)
-# Card Text:    (Flavor text the player reads on the card.)
-# Bottom Right: (Damage TYPE for the corner label, e.g. "15 Fire" -> Fire.
-#                The number is ignored and recomputed live: total damage
-#                against the enemies currently in the room.)
+# Cards are separated by [] lines. Keys are NOT case sensitive and tolerate
+# loose punctuation ("Speed: 2", "Speed 2", "Speed 2:" all work). Only
+# Card Name, Card Text, and Bottom Right keep the capitalization you type,
+# because those are the parts the player reads.
+#
+# Card Name:      (Text shown at the top of the card.)
+# Tags:           (Which classes see this card and can play it. A class
+#                  matches if it shares any tag - see Classes.txt.)
+# Type:           ([melee] or [ranged], then the effect shape. Reuse exactly:
+#                    "AoE damage"             - hits every enemy in the room
+#                    "Single target, X hits." - one chosen target, X hits
+#                    "Two targets, 1 hit."    - pick 2 targets, one hit each
+#                  For [ranged], add one of:
+#                    "Single Projectile"   - one shot, flown at the enemy the
+#                                            player clicks (AoE still damages
+#                                            everyone; the click only aims it)
+#                    "Multiple Projectiles" - one shot per target (default))
+# Projectile Art: (File in Content/Images/Effects/. Art must point RIGHT;
+#                  it is rotated to match the shot's travel angle, so a shot
+#                  heading down-right appears rotated clockwise.)
+# Casting Sound:  ([File.wav] played the moment targeting completes.
+#                  [Blank] or [Blank.wav] means no sound and no delay.)
+# Casting Time:   ("Use Sound Time" waits exactly as long as the casting
+#                  sound runs; a number waits that many seconds. This is the
+#                  delay before a projectile launches or a walk begins.)
+# Speed:          (FEET PER SECOND for the projectile, or for the melee walk
+#                  out and back. The screen is 12 feet tall. Longer distances
+#                  therefore take longer. See the note at the bottom.)
+# Melee Time:     ([melee] only: pause on arrival before the first blow.)
+# Hit Sound:      ([a.wav] for a single blow, or a sequence:
+#                    [a.wav], Delay 0.2, [a.wav], Delay 0.2, [a.wav]
+#                  Each bracketed entry is one blow; "Delay N" is the gap
+#                  before the next. Health drops once per blow, timed to its
+#                  sound - not all at once. The Effect line's total damage is
+#                  split evenly across the blows.)
+# Effect:         (Machine-readable numbers. The player never sees this.
+#                  Keep the same wording pattern per Type.)
+# Card Text:      (Flavor text the player reads on the card.)
+# Bottom Right:   (Damage TYPE for the corner label, e.g. "15 Fire" -> Fire.
+#                  The number is ignored and recomputed live as total damage
+#                  against the enemies currently in the room.)
+#
 # A trailing (note in parentheses) on any line is stripped by the parser.
+#
+# SPEED NOTE: at 0.5 feet/second a fighter crossing the stage (roughly 4 to 17
+# feet depending on rows) takes 9 to 34 seconds. Values around 6-12 feel like
+# a game; low numbers are slow motion.
 # =====================================================================
 
 []
 Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
+Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]
 Casting Time: Use Sound Time
 Speed: 2
@@ -37,7 +66,6 @@ Bottom Right: 15 Fire
 Card Name: Shank
 Tags: Dirtbag
 Type: [melee] Single target, X hits.
-Sounds: Activation[ShankDraw.wav]
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 0.5
@@ -52,6 +80,7 @@ Bottom Right: 9 Stabby
 Card Name: Pew Pew
 Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
+Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 0.5

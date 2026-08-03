@@ -177,18 +177,31 @@ Card definitions; the format legend is commented at the top of the file.
 `Card Text:` is what the player reads; the bottom-right number is computed
 live as total damage against the current room.
 
-Two optional pieces drive presentation:
+Cards are separated by `[]` lines. **Keys are case-insensitive** and tolerate
+loose punctuation (`Speed: 2`, `Speed 2`, `Speed 2:`); only Card Name, Card
+Text, and Bottom Right keep their authored capitalization, since the player
+reads those. The full legend is commented at the top of the file.
 
-- **`Type: [melee] ...` or `Type: [ranged] ...`** — `[melee]` walks the
-  attacker to the target and back; `[ranged]` throws a projectile
-  (`Content/Images/Effects/Projectile.png`, a magenta ball placeholder —
-  replace it, or later give each card its own).
-- **`Sounds: Activation[cast.wav], 0.6, Hit[boom.wav]`** — Activation plays
-  when the card is clicked; the number is how many seconds the walk or
-  projectile takes; Hit plays on impact, together with the target's recoil.
-  WAVs live in `Content/Sounds/` (PCM `.wav` only — not MP3 or OGG). Any part
-  may be omitted; with no travel time the card resolves instantly. A missing
-  sound file is logged once and then ignored, so timing still works silently.
+Presentation fields:
+
+| Field | Meaning |
+|---|---|
+| `Type: [melee] …` / `[ranged] …` | Walk to the target and back, or throw a projectile |
+| `… Single Projectile` | One shot, aimed at the enemy the player clicks (AoE still damages everyone — the click only aims) |
+| `… Multiple Projectiles` | One shot per target (the default) |
+| `Projectile Art: X.png` | File in `Content/Images/Effects/`. **Art must point right**; it is rotated onto the travel vector |
+| `Casting Sound: [X.wav]` | Played when targeting completes. `[Blank]` = no sound, no delay |
+| `Casting Time: Use Sound Time` | Waits exactly as long as the casting sound runs; or give a number of seconds |
+| `Speed: 2` | **Feet per second** for the projectile or the melee walk — distance now determines duration |
+| `Melee Time: 0.5` | Pause on arrival before the first blow |
+| `Hit Sound: [a.wav], Delay 0.2, [a.wav]` | A sequence of blows. Health drops once per blow, timed to its sound; the Effect line's damage is split across them |
+
+WAVs live in `Content/Sounds/` (PCM `.wav` only — not MP3 or OGG). A missing
+file is logged once and then ignored, so timing still works silently.
+
+**Speed is in feet per second and the screen is 12 feet tall.** Front row to
+front row is about 4.4 feet; back row to back row is about 17. At `Speed: 0.5`
+that second case takes 35 seconds. Values around 6–12 feel like a game.
 
 ## Battle presentation
 
