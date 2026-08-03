@@ -135,9 +135,12 @@ dialogue from the top on reload. Dying reloads the last save.
 
 ## Config — `Content/Config.txt`
 
-Art scale tuning, e.g. `Global scale: 100%`. The most specific line wins
-outright (override, not multiply): `Dirtbag scale` beats `Cast scale`, which
-beats `Global scale`. Global covers the map and backgrounds too; UI and the
+Art scale tuning, e.g. `Global scale: 100%` (the `%` is optional). The most
+specific line wins outright (override, not multiply): `Dirtbag scale` beats
+`Cast scale`, which beats `Global scale`. **A value of 0 means ignore that
+line**, so `Dirtbag scale: 0` falls through to `Cast scale` exactly as if the
+line weren't there — a way to switch a line off without deleting it. The same
+rule applies to a card's `Speed: 0`, which falls back to the default. Global covers the map and backgrounds too; UI and the
 ruler never scale. Scaling happens at draw time, so future animation frames
 scale with their character automatically — author all frames of an animation
 on the same canvas size and they stay seamless.
@@ -199,7 +202,7 @@ Presentation fields:
 | `… Multiple Projectiles` | One shot per target (the default) |
 | `Projectile Art: X.png` | File in `Content/Images/Effects/`. **Art must point right**; it is rotated onto the travel vector |
 | `Casting Sound: [X.wav]` | Played when targeting completes. `[Blank]` = no sound, no delay |
-| `Casting Time: Use Sound Time` | Waits exactly as long as the casting sound runs; or give a number of seconds |
+| `Casting Time: Use Sound Time` or `Casting Time: 0.9` | Either wait exactly as long as the casting sound runs, or give a fixed number of seconds. Both work on any card; with no casting sound, "Use Sound Time" is 0 |
 | `Speed: 2` | **Feet per second** for the projectile or the melee walk — distance now determines duration |
 | `Melee Time: 0.5` | Pause on arrival before the first blow |
 | `Hit Sound: [a.wav], Delay 0.2, [a.wav]` | A sequence of blows. Health drops once per blow, timed to its sound; the Effect line's damage is split across them |

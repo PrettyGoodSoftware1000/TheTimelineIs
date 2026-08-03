@@ -48,9 +48,12 @@ public class Card
     public string ProjectileArt = "Projectile.png";
 
     public string? CastingSound;
-    /// <summary>Null means "Use Sound Time" — take the casting sound's own length.</summary>
+    /// <summary>
+    /// Seconds to wait before launching. Null means "Use Sound Time" — the
+    /// casting sound's own length, which is 0 when there is no sound.
+    /// </summary>
     public float? CastingTime;
-    /// <summary>Feet per second, for the projectile or the melee walk.</summary>
+    /// <summary>Feet per second, for the projectile or the melee walk. 0 in the file = use this default.</summary>
     public float Speed = 6f;
     /// <summary>Melee only: pause on arrival before the first blow lands.</summary>
     public float MeleeTime;
@@ -217,11 +220,17 @@ public class CardLibrary
                 break;
 
             case "speed":
-                if (ParseFloat(value) is float sp && sp > 0)
-                    card.Speed = sp;
+                // 0 means "ignore this line", same as everywhere else
+                if (ParseFloat(value) is float sp)
+                {
+                    if (sp > 0) card.Speed = sp;
+                }
                 else
+                {
                     diag.Error(CardLibrary.Path, lineNo,
-                        $"'{card.Name}': Speed needs a number greater than 0 (feet per second), got '{value}'");
+                        $"'{card.Name}': Speed must be a number of feet per second " +
+                        $"(or 0 to use the default), got '{value}'");
+                }
                 break;
 
             case "melee time":
