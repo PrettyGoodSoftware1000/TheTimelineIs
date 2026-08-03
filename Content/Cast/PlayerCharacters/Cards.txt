@@ -23,10 +23,10 @@
 []
 Card Name: Fireball
 Tags: Gun-O-Mancer
-Type: [ranged] AoE damage, Single Projectile
+Type: [ranged] AoE damage. Single Projectile
 Casting Sound: [FireballCast.wav]
 Casting Time: Use Sound Time
-Travel Time: 1.1
+Speed: 2
 Hit Sound: [FireballBoom.wav]
 Effect: AoE 5 fire damage to enemies
 Card Text: Goes boom. Does 5 fire damage to everything.
@@ -40,7 +40,7 @@ Type: [melee] Single target, X hits.
 Sounds: Activation[ShankDraw.wav]
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
-Travel Time: 2
+Speed: 0.5
 Melee Time: 0.5
 Hit Sound: [hitbasic.wav], Delay 0.2, [hitbasic.wav], Delay 0.2, [hitbasic.wav]
 Effect: Single target. 3 times x 4 damage.
@@ -54,7 +54,7 @@ Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
-Travel Time: 0.5
+Speed: 0.5
 Hit Sound: [hitbasic.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys for 5 damage.
