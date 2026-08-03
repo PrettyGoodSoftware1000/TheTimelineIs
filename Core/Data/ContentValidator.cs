@@ -119,6 +119,10 @@ public static class ContentValidator
 
     private static void ValidateMissions(Diagnostics diag)
     {
+        if (!AssetLoader.Exists(Render.Backdrop.GroundPath))
+            diag.Error(Render.Backdrop.GroundPath, 0,
+                "ground art is missing, so every room shows a blank strip under the background");
+
         var destinations = DestinationTable.Load();
         if (destinations.All.Count == 0)
             diag.Warn(DestinationTable.Path, 0, "no destinations, so the map has nothing to click");

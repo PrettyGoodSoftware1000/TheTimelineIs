@@ -458,17 +458,7 @@ public class BattleScreen : IScreen
 
     public void Draw(SpriteBatch batch)
     {
-        var screen = new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height);
-        if (_background == _ctx.Pixel)
-        {
-            batch.Draw(_background, screen, new Color(30, 16, 16));
-        }
-        else
-        {
-            var size = AssetLoader.DisplaySize(_background, AssetKind.Background)
-                * _ctx.Config.GlobalScale;
-            batch.Draw(_background, Ui.FitCentered(size, screen), new Color(255, 220, 220));
-        }
+        Backdrop.Draw(batch, _ctx, _background, new Color(255, 220, 220));
 
         var current = _turn >= 0 && _order[_turn].Alive ? _order[_turn] : null;
         Formation.DrawCast(batch, _ctx, _present, current, _targets, _dragging, _pointer);

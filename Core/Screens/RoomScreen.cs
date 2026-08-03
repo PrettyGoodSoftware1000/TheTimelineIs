@@ -110,17 +110,7 @@ public class RoomScreen : IScreen
 
     public void Draw(SpriteBatch batch)
     {
-        var screen = new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height);
-        if (_background == _ctx.Pixel)
-        {
-            batch.Draw(_background, screen, new Color(20, 30, 20));
-        }
-        else
-        {
-            var size = AssetLoader.DisplaySize(_background, AssetKind.Background)
-                * _ctx.Config.GlobalScale;
-            batch.Draw(_background, Ui.FitCentered(size, screen), Color.White);
-        }
+        Backdrop.Draw(batch, _ctx, _background, Color.White);
 
         Formation.DrawCast(batch, _ctx, _present, null, null, _dragging, _pointer);
 

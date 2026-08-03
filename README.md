@@ -61,6 +61,7 @@ The game is authored at **3840x2160** and letterboxes to any window or screen.
 |---|---|---|
 | World map | `Content/Images/Map/Map.png` | 7680x4320 (bigger than the view so it scrolls) |
 | Room backgrounds | `Content/Images/Backgrounds/*.png` | 3840x2160 |
+| Ground | `Content/Images/Grounds/Ground1.png` | 3840x720 |
 | Character sprites | `Content/Cast/.../{Name}/{Name}N.png` | 1200x1800, transparent background |
 | Dialogue thumbnails | same folder, `{Name}NThumb.png` | 512x512 (optional) |
 
@@ -153,6 +154,17 @@ bottom. One foot = 180 virtual px = 1/12 of the screen height at any window
 size, so the screen is 12 feet tall and (at 16:9) 21.3 feet wide. Whole-foot
 ticks are yellow and labeled; half-foot ticks are teal. The ruler ignores all
 Config scaling — it's a fixed yardstick.
+
+## Backdrop
+
+A room's background is drawn **4 feet (720 px) higher than the screen**, and
+`Content/Images/Grounds/Ground1.png` fills the 3840x720 strip that leaves bare
+along the bottom — the band the characters stand on. Both the room and battle
+screens go through `Backdrop.Draw`, so they can't drift apart, and the ground
+stretches to close the gap even if the background is scaled or off-ratio.
+
+The ground is currently the same for every room. Making it per-room is a
+`Ground:` line in the mission file, mirroring `Background:`.
 
 ## Party and formation
 
