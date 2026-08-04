@@ -1,0 +1,11 @@
+# One block per enemy kind. Enemies move toward the nearest player character
+# and use their basic attack. Range is "Melee" (the next square over) or a
+# number of tiles. Sprites default to {Name}.png; list variants to mix looks.
+
+Enemy: Goblin
+HP: 30
+Movement: 3
+Basic Attack Damage: 5
+Sounds: hitbasic.wav
+Range: Melee
+Sprites: Goblin1.png, Goblin2.png, Goblin3.png

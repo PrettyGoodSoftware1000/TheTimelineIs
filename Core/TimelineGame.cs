@@ -61,19 +61,20 @@ public class TimelineGame : Game
             Config = GameConfig.Load(),
             Cards = CardLibrary.Load(),
             Classes = ClassLibrary.Load(),
+            Enemies = EnemyLibrary.Load(),
             Sounds = new SoundBank(),
             LogStore = _platform.LogStore,
             DevWriter = _platform.DevWriter,
         };
 
-        ContentValidator.Run(_ctx.Cards, _ctx.Classes, _ctx.Strings);
+        ContentValidator.Run(_ctx.Cards, _ctx.Classes, _ctx.Enemies, _ctx.Strings);
         _platform.LogStore.Write(Diagnostics.Current.RenderLog());
 
-        IScreen title = new TitleScreen(_ctx);
+        IScreen home = _platform.CreateEditorScreen(_ctx) ?? new TitleScreen(_ctx);
         _ctx.SwitchTo(Diagnostics.Current.Any
             ? new ErrorScreen(_ctx, Diagnostics.Current.Ordered(),
-                _platform.LogStore.DisplayPath, title)
-            : title);
+                _platform.LogStore.DisplayPath, home)
+            : home);
     }
 
     protected override void Update(GameTime gameTime)

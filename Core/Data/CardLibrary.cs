@@ -57,6 +57,8 @@ public class Card
     public float Speed = 6f;
     /// <summary>Melee only: pause on arrival before the first blow lands.</summary>
     public float MeleeTime;
+    /// <summary>Attack reach in tiles (isometric mode): melee 1, ranged default 5. Diagonals cost 2.</summary>
+    public int Range;
     public List<HitEvent> HitEvents = new();
 
     /// <summary>Total damage per target, split across the hit sequence.</summary>
@@ -104,7 +106,7 @@ public class CardLibrary
     {
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
-        "effect", "speed", "tags", "type", "sounds",
+        "effect", "speed", "range", "tags", "type", "sounds",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
@@ -233,6 +235,12 @@ public class CardLibrary
                 }
                 break;
 
+            case "range":
+                if (int.TryParse(value, out int rng) && rng > 0) card.Range = rng;
+                else diag.Error(CardLibrary.Path, lineNo,
+                    $"'{card.Name}': Range must be a positive number of tiles, got '{value}'");
+                break;
+
             case "melee time":
                 if (ParseFloat(value) is float mt) card.MeleeTime = mt;
                 else diag.Error(CardLibrary.Path, lineNo,
@@ -354,6 +362,9 @@ public class CardLibrary
 
     private static void Validate(Card c, Diagnostics diag)
     {
+        if (c.Range <= 0)
+            c.Range = c.Delivery == Delivery.Melee ? 1 : 5;   // melee reaches 1 tile; ranged defaults to 5
+
         if (c.Damage <= 0)
             diag.Error(Path, c.Line, $"'{c.Name}': no damage number found in its Effect line");
         if (c.Tags.Count == 0)

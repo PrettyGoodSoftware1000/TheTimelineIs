@@ -32,6 +32,16 @@ public class CharacterInstance
     /// <summary>Counts down while the sprite is recoiling from a hit.</summary>
     public float ShakeTimer;
 
+    // --- isometric grid state ---
+    public int GX, GY;
+    /// <summary>Movement points per turn (from Classes.txt / Enemies.txt).</summary>
+    public int MoveMax = 5;
+    /// <summary>Points left this turn.</summary>
+    public int MovePoints;
+    /// <summary>Enemy basic attack reach in tiles; players attack via cards.</summary>
+    public int RangeTiles = 1;
+    public string? AttackSound;
+
     public string Folder => IsPlayer
         ? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";
@@ -43,78 +53,41 @@ public class CharacterInstance
 }
 
 /// <summary>
-/// Character folders each carry a manifest ({Name}.txt listing sprite files)
-/// because a mobile app bundle can't enumerate directories — the manifest is
-/// how the game knows Goblin has three images.
+/// Compatibility view over Classes.txt and Enemies.txt for the older
+/// side-view screens: the per-character {Name}.txt manifests are gone, so
+/// this now just adapts the two libraries into the shape those screens read.
 /// </summary>
 public class CastManifest
 {
     public string Name = "";
     public bool IsPlayer;
     public List<string> Variants = new();
-    public int Hp = -1;              // "HP: 25" in the manifest; -1 = use default
-    public int AttackDmg = -1;       // "Attack: 3 Smash" — damage and type
+    public int Hp = -1;
+    public int AttackDmg = -1;
     public string AttackType = "Hit";
-
-    private static readonly Dictionary<string, CastManifest> Cache = new(StringComparer.OrdinalIgnoreCase);
 
     public static CastManifest Get(string name)
     {
-        if (Cache.TryGetValue(name, out var cached)) return cached;
-
-        var manifest = new CastManifest { Name = name };
-        var lines = AssetLoader.TryReadLines($"Content/Cast/PlayerCharacters/{name}/{name}.txt");
-        if (lines.Count > 0)
-        {
-            manifest.IsPlayer = true;
-        }
-        else
-        {
-            lines = AssetLoader.TryReadLines($"Content/Cast/EnemyCharacters/{name}/{name}.txt");
-            if (lines.Count == 0)
+        if (ClassLibrary.Current.Get(name) is PlayerClass cls)
+            return new CastManifest
             {
-                Diagnostics.Current.Error($"Cast/{name}", 0, $"no manifest for '{name}' — expected " +
-                    $"Content/Cast/PlayerCharacters/{name}/{name}.txt or " +
-                    $"Content/Cast/EnemyCharacters/{name}/{name}.txt");
-                lines = new List<string> { $"{name}.png" };
-            }
-        }
-        // manifest lines are either "Key: value" stats or bare sprite file names
-        foreach (var line in lines)
-        {
-            int colon = line.IndexOf(':');
-            if (colon > 0)
+                Name = cls.Name,
+                IsPlayer = true,
+                Variants = cls.SpriteFiles.ToList(),
+                Hp = cls.Hp,
+            };
+        if (EnemyLibrary.Current.Get(name) is EnemyDef enemy)
+            return new CastManifest
             {
-                string key = line[..colon].Trim();
-                string value = line[(colon + 1)..].Trim();
-                if (key.Equals("HP", StringComparison.OrdinalIgnoreCase) &&
-                    int.TryParse(value, out int hp))
-                {
-                    manifest.Hp = hp;
-                }
-                else if (key.Equals("Attack", StringComparison.OrdinalIgnoreCase))
-                {
-                    var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length > 0 && int.TryParse(parts[0], out int dmg))
-                        manifest.AttackDmg = dmg;
-                    if (parts.Length > 1)
-                        manifest.AttackType = parts[1];
-                }
-                else
-                {
-                    Diagnostics.Current.Warn($"Cast/{name}", 0,
-                        $"unknown manifest line ignored: '{line}'");
-                }
-            }
-            else
-            {
-                manifest.Variants.Add(line);
-            }
-        }
-        if (manifest.Variants.Count == 0)
-            manifest.Variants.Add($"{name}.png");
-        Cache[name] = manifest;
-        return manifest;
+                Name = enemy.Name,
+                IsPlayer = false,
+                Variants = enemy.SpriteFiles.ToList(),
+                Hp = enemy.Hp,
+                AttackDmg = enemy.AttackDamage,
+            };
+        Diagnostics.Current.Error($"Cast/{name}", 0,
+            $"'{name}' is in neither {ClassLibrary.Path} nor {EnemyLibrary.Path}");
+        return new CastManifest { Name = name, Variants = { $"{name}.png" } };
     }
 }
 

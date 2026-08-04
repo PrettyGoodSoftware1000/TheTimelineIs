@@ -41,4 +41,10 @@ public struct InputState
 
     /// <summary>F12: toggle the debug ruler overlay.</summary>
     public bool ToggleRuler;
+
+    /// <summary>Mouse wheel notches this frame (positive = up). Editor uses it for height.</summary>
+    public int ScrollDelta;
+
+    /// <summary>Secondary click (right button) this frame — the editor's delete.</summary>
+    public Point? AltTap;
 }

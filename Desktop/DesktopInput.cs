@@ -69,6 +69,10 @@ public class DesktopInput : IInputSource
         if (mouse.LeftButton == ButtonState.Released && _prevMouse.LeftButton == ButtonState.Pressed)
             state.Released = state.PointerPos;
 
+        state.ScrollDelta = (mouse.ScrollWheelValue - _prevMouse.ScrollWheelValue) / 120;
+        if (mouse.RightButton == ButtonState.Pressed && _prevMouse.RightButton == ButtonState.Released)
+            state.AltTap = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
+
         state.Submit = Pressed(keys, Keys.Enter);
         state.Confirm = state.Submit || Pressed(keys, Keys.Space);
         state.Cancel = Pressed(keys, Keys.Escape);

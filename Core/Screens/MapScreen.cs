@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheTimelineIs.Core.Data;
+using TheTimelineIs.Core.Iso;
 using TheTimelineIs.Core.Input;
 using TheTimelineIs.Core.Render;
 
@@ -157,7 +158,7 @@ public class MapScreen : IScreen
             if (dx * dx + dy * dy <= TapRadius * TapRadius)
             {
                 _ctx.State.StartMission(dest.Mission);
-                _ctx.SwitchTo(new RoomScreen(_ctx, MissionScript.Load(dest.Mission)));
+                _ctx.SwitchTo(new IsoLevelScreen(_ctx, dest.Mission));
                 return;
             }
         }

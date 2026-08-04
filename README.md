@@ -39,6 +39,36 @@ dotnet run --project Desktop -- --devmap
   pipeline rebuild needed when art or text changes). The one exception is the
   font, which MonoGame must bake at build time via `Content/Content.mgcb`.
 
+## THIS BRANCH: isometric test mode
+
+This branch replaces missions and side-view rooms with an **isometric
+tactics test**: Title -> party select -> world map -> the destination opens
+`Content/Levels/TestLevel.txt` over a black void.
+
+- **Blocks**: square-top tiles with textured sides and adjustable height in
+  feet. Palette in `Content/Images/Blocks/` — `{Type}Top.png` is a 360x180
+  diamond, `{Type}Side.png` a 360x90 strip stacked once per foot; `Blocks.txt`
+  lists the types.
+- **Movement**: orthogonal 1, diagonal 2, +1 per foot climbed, 4 ft max step
+  up, drops free. The active character's reachable tiles show as a 20% blue
+  overlay. Exploration is free-roam and per-character; combat turns spend
+  Movement (from `Classes.txt`) plus one card.
+- **Sight**: walking within 15 tiles of an enemy in a revealed room springs
+  combat — the other two characters get a free positioning move first (Done
+  starts the fight). Doors open when clicked from beside them, reveal the room
+  behind, and enemies see through them.
+- **Cards**: melee cards reach 1 tile; ranged cards default to `Range: 5`
+  (override per card). Card timing/sounds work as on main.
+- **Classes.txt** now holds all class stats (`Class:`/`HP:`/`Movement:`,
+  optional `Sprites:` and `Card Tags:`) — the per-character `{Name}.txt`
+  manifests are gone. **Enemies.txt** does the same for enemies
+  (`Enemy:`/`HP:`/`Movement:`/`Basic Attack Damage:`/`Sounds:`/`Range:`).
+- **Editor**: `dotnet run --project Desktop -- --editor`. 1-3/B block types,
+  D decorations, O doors, E enemies, P player starts, R room label,
+  scroll or +/- for height, click place, right-click delete, S saves to
+  `Content/Levels/TestLevel.txt` in the repo, T play-tests immediately.
+- Levels complete when every enemy is dead; a wiped party reloads.
+
 ## Naming convention
 
 Folders and files use initial caps with no underscores; multi-word names run

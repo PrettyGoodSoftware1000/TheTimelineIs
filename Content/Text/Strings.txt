@@ -51,3 +51,17 @@ error_counts = {errors} error(s), {warnings} warning(s)
 error_continue = Continue
 error_more = ...and {count} more.
 error_log = Full list saved to {path}
+
+# --- Isometric mode ---
+iso_enter = Click a character, then a tile, to move. Stay sharp.
+iso_explore_hint = Exploring - click a character to select, a tile to walk, a door to open it.
+iso_spotted = Spotted! Your crew gets a free move. Press Done to fight.
+iso_done = Done
+iso_end_turn = End Turn
+iso_move_left = Movement left: {points}
+iso_out_of_range = Out of range.
+iso_card_spent = One card per turn.
+iso_door_open = The door creaks open...
+iso_clear = Clear... for now.
+iso_victory = Area cleared!
+iso_card_range = Range {range}

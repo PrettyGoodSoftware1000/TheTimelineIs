@@ -1,5 +1,0 @@
-# Sprite variants for Dirtbag. One file name per line.
-# Optional thumbnail per sprite: Dirtbag.png -> DirtbagThumb.png
-# Stats use "Key: value" lines. HP is hit points at full health.
-HP: 15
-Dirtbag.png

@@ -1,3 +1,16 @@
-﻿Class: Dirtbag
+# One block per playable class. Stats live here now — the old per-character
+# {Name}.txt files are gone. Sprites default to {Name}.png in the class's
+# folder; add "Sprites: A.png, B.png" for variants.
+# "Card Tags:" is optional; without it a class plays cards tagged with its name.
+
+Class: Dirtbag
+HP: 15
+Movement: 8
+
 Class: Gun-O-Mancer
+HP: 10
+Movement: 4
+
 Class: Cyborg
+HP: 20
+Movement: 5

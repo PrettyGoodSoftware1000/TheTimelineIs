@@ -31,10 +31,11 @@ public class PartySelectScreen : IScreen
         _classes = ctx.Classes.PlayableClasses();
     }
 
-    private static string SpritePathFor(string name)
+    private string SpritePathFor(string name)
     {
-        var manifest = CastManifest.Get(name);
-        return $"Content/Cast/PlayerCharacters/{name}/{manifest.Variants[0]}";
+        var cls = _ctx.Classes.Get(name);
+        string file = cls?.SpriteFiles[0] ?? $"{name}.png";
+        return $"Content/Cast/PlayerCharacters/{name}/{file}";
     }
 
     public void Update(InputState input, float dt)

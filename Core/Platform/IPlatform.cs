@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using TheTimelineIs.Core.Input;
+using TheTimelineIs.Core.Screens;
 
 namespace TheTimelineIs.Core.Platform;
 
@@ -16,4 +17,7 @@ public interface IPlatform
 
     /// <summary>Non-null only when running with --devmap on desktop.</summary>
     IDevDestinationWriter? DevWriter { get; }
+
+    /// <summary>The level editor, when launched with --editor (desktop only); null otherwise.</summary>
+    IScreen? CreateEditorScreen(GameContext ctx);
 }
