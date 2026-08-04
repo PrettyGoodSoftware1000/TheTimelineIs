@@ -171,6 +171,21 @@ public static class ContentValidator
                 if (level.BlockAt(start) == null)
                     diag.Error(path, 0, $"PlayerStart at {start.X},{start.Y} has no block under it");
 
+            // trigger squares must name a dialogue block that exists and has lines
+            var dialogue = DialogueLibrary.Load(dest.Mission);
+            foreach (var trigger in level.Triggers)
+            {
+                if (level.BlockAt(new Microsoft.Xna.Framework.Point(trigger.X, trigger.Y)) == null)
+                    diag.Error(path, 0, $"trigger at {trigger.X},{trigger.Y} has no block under it");
+                if (!dialogue.Has(trigger.Dialogue))
+                    diag.Error(path, 0,
+                        $"trigger at {trigger.X},{trigger.Y} calls dialogue '{trigger.Dialogue}', " +
+                        $"which is not in {DialogueLibrary.PathFor(dest.Mission)}");
+                else if (dialogue.Get(trigger.Dialogue)!.Count == 0)
+                    diag.Error(DialogueLibrary.PathFor(dest.Mission), 0,
+                        $"dialogue '{trigger.Dialogue}' has no lines");
+            }
+
             if (!AssetLoader.Exists("Content/Images/Decorations/Door.png") && level.Doors.Count > 0)
                 diag.Error(path, 0, "level has doors but Content/Images/Decorations/Door.png is missing");
         }
@@ -193,6 +208,7 @@ public static class ContentValidator
             "iso_enter", "iso_explore_hint", "iso_spotted", "iso_done", "iso_clear",
             "iso_end_turn", "iso_move_left", "iso_out_of_range", "iso_card_spent",
             "iso_door_open", "iso_victory", "iso_card_range",
+            "iso_move_spent", "iso_pick_target", "iso_confirm_strike", "iso_dialogue_next",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

@@ -50,21 +50,31 @@ tactics test**: Title -> party select -> world map -> the destination opens
   diamond, `{Type}Side.png` a 360x90 strip stacked once per foot; `Blocks.txt`
   lists the types.
 - **Movement**: orthogonal 1, diagonal 2, +1 per foot climbed, 4 ft max step
-  up, drops free. The active character's reachable tiles show as a 20% blue
-  overlay. Exploration is free-roam and per-character; combat turns spend
-  Movement (from `Classes.txt`) plus one card.
+  up, drops free. Reachable tiles show as blue fill with blue grid lines.
+  Exploration is free-roam and per-character; a combat turn is movement
+  **then** a card — playing a card ends that turn's movement.
 - **Sight**: walking within 15 tiles of an enemy in a revealed room springs
   combat — the other two characters get a free positioning move first (Done
   starts the fight). Doors open when clicked from beside them, reveal the room
   behind, and enemies see through them.
 - **Cards**: melee cards reach 1 tile; ranged cards default to `Range: 5`
-  (override per card). Card timing/sounds work as on main.
+  (override per card). Hovering or selecting a card paints its reach in red
+  beyond the blue movement area. A **melee** card arms on the first click of a
+  target and shows a yellow approach square beside it — whichever neighbour
+  the mouse is nearest, so hovering west stages the strike from the west — and
+  a second click walks there and attacks. A **ranged** card fires on one
+  click, walking only as far as it must. Right-click cancels the armed card.
+  Health bars sit above each head with the current HP in the middle.
+- **Dialogue**: trigger squares painted in the editor (G tool) play a named
+  block from `Content/Levels/{Level}Dialogue.txt` the first time anyone steps
+  on them. Same `Speaker: text` format as the old mission scripts.
 - **Classes.txt** now holds all class stats (`Class:`/`HP:`/`Movement:`,
   optional `Sprites:` and `Card Tags:`) — the per-character `{Name}.txt`
   manifests are gone. **Enemies.txt** does the same for enemies
   (`Enemy:`/`HP:`/`Movement:`/`Basic Attack Damage:`/`Sounds:`/`Range:`).
 - **Editor**: `dotnet run --project Desktop -- --editor`. 1-3/B block types,
-  D decorations, O doors, E enemies, P player starts, R room label,
+  D decorations, O doors, E enemies, P player starts, G dialogue triggers,
+  R room label, N trigger's dialogue name,
   scroll or +/- for height, click place, right-click delete, S saves to
   `Content/Levels/TestLevel.txt` in the repo, T play-tests immediately.
 - Levels complete when every enemy is dead; a wiped party reloads.

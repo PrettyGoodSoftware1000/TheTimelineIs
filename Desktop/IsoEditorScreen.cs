@@ -18,14 +18,15 @@ namespace TheTimelineIs.Desktop;
 /// Desktop-only; writes Content/Levels/TestLevel.txt in the source tree.
 ///
 ///   1/2/3 .. block palette   B next block type    left click  place
-///   D deco  O door  E enemy  P player start       right click delete
+///   D deco  O door  E enemy  P start  G trigger    right click delete
 ///   scroll wheel or +/-      placement height (feet)
 ///   R then typing            set current room label (Enter to accept)
+///   N then typing            set the dialogue name new triggers call
 ///   WASD/arrows              pan     S save     F5 play-test the level
 /// </summary>
 public class IsoEditorScreen : IScreen
 {
-    private enum Tool { Block, Decoration, Door, Enemy, PlayerStart }
+    private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger }
 
     private readonly GameContext _ctx;
     private readonly LevelData _level;
@@ -35,7 +36,8 @@ public class IsoEditorScreen : IScreen
     private int _blockIndex, _decoIndex, _enemyIndex;
     private int _height;
     private string _room = "Main";
-    private bool _typingRoom;
+    private string _trigger = "Intro";      // dialogue block a placed trigger calls
+    private bool _typingRoom, _typingTrigger;
     private string _roomBuffer = "";
     private string _pendingDoorRoom = "";   // set on the first door click, consumed on... simpler: doors join _room and typed target
     private Vector2 _camera;
@@ -71,16 +73,16 @@ public class IsoEditorScreen : IScreen
         _camera += input.PanDelta;
         if (_statusTimer > 0) _statusTimer -= dt;
 
-        if (_typingRoom)
+        if (_typingRoom || _typingTrigger)
         {
             _roomBuffer += input.TypedChars;
             if (input.Backspace && _roomBuffer.Length > 0) _roomBuffer = _roomBuffer[..^1];
-            if (input.Cancel) _typingRoom = false;
+            if (input.Cancel) { _typingRoom = _typingTrigger = false; }
             if (input.Submit && _roomBuffer.Trim().Length > 0)
             {
-                _room = _roomBuffer.Trim();
-                _typingRoom = false;
-                Status($"room = {_room}");
+                if (_typingRoom) { _room = _roomBuffer.Trim(); Status($"room = {_room}"); }
+                else { _trigger = _roomBuffer.Trim(); Status($"trigger dialogue = {_trigger}"); }
+                _typingRoom = _typingTrigger = false;
             }
             return;
         }
@@ -109,7 +111,9 @@ public class IsoEditorScreen : IScreen
                         _enemyIndex = (_enemyIndex + 1) % _ctx.Enemies.EnemyNames.Count;
                     break;
                 case 'p': _tool = Tool.PlayerStart; break;
+                case 'g': _tool = Tool.Trigger; break;
                 case 'r': _typingRoom = true; _roomBuffer = _room; break;
+                case 'n': _typingTrigger = true; _roomBuffer = _trigger; break;
                 case '+' or '=': _height = Math.Min(_height + 1, 12); break;
                 case '-': _height = Math.Max(_height - 1, 0); break;
                 case 's': Save(); break;
@@ -160,6 +164,11 @@ public class IsoEditorScreen : IScreen
                 _level.Enemies.Add(new LevelEnemy
                     { X = tile.X, Y = tile.Y, Name = _ctx.Enemies.EnemyNames[_enemyIndex] });
                 break;
+            case Tool.Trigger when _level.BlockAt(tile) != null:
+                _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
+                _level.Triggers.Add(new LevelTrigger { X = tile.X, Y = tile.Y, Dialogue = _trigger });
+                Status($"trigger -> {_trigger}");
+                break;
             case Tool.PlayerStart when _level.BlockAt(tile) != null:
                 _level.PlayerStarts.Remove(tile);
                 _level.PlayerStarts.Add(tile);
@@ -173,6 +182,7 @@ public class IsoEditorScreen : IScreen
         if (_level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y) > 0) return;
         if (_level.Doors.RemoveAll(d => d.X == tile.X && d.Y == tile.Y) > 0) return;
         if (_level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y) > 0) return;
+        if (_level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.PlayerStarts.Remove(tile)) return;
         _level.Blocks.Remove(tile);
     }
@@ -225,6 +235,13 @@ public class IsoEditorScreen : IScreen
                     Billboard(batch, $"{def.Folder}/{def.SpriteFiles[0]}", tile, b.Height, origin, Color.White * 0.9f);
             if (_level.PlayerStarts.Contains(tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.LimeGreen * 0.35f);
+            if (_level.TriggerAt(tile) is LevelTrigger trig)
+            {
+                DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Violet * 0.4f);
+                var tc = IsoMath.ToScreen(b.X, b.Y, b.Height, origin);
+                batch.DrawString(_ctx.Font, trig.Dialogue, new Vector2(tc.X - 70, tc.Y - 40),
+                    Color.Violet, 0f, Vector2.Zero, 0.26f, SpriteEffects.None, 0f);
+            }
         }
 
         // hovered cell + placement height preview
@@ -274,18 +291,20 @@ public class IsoEditorScreen : IScreen
             Tool.Decoration => $"DECO {deco}",
             Tool.Door => $"DOOR -> room {_room}",
             Tool.Enemy => $"ENEMY {enemy}",
+            Tool.Trigger => $"TRIGGER -> {_trigger}",
             _ => "PLAYER START",
         };
         string line1 = $"EDITOR   tool: {tool}   height: {_height} ft   room: {_room}";
-        string line2 = "1-3/B blocks  D deco  O door  E enemy  P start  R room  scroll/+- height  " +
-                       "click place  right-click delete  S save  T test";
+        string line2 = "1-3/B blocks  D deco  O door  E enemy  P start  G trigger  R room  N dialogue  " +
+                       "scroll/+- height  click place  right-click delete  S save  T test";
         batch.DrawString(_ctx.Font, line1, new Vector2(60, 40), Color.Yellow,
             0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
         batch.DrawString(_ctx.Font, line2, new Vector2(60, 120), Color.White * 0.75f,
             0f, Vector2.Zero, 0.3f, SpriteEffects.None, 0f);
-        if (_typingRoom)
-            batch.DrawString(_ctx.Font, $"room name: {_roomBuffer}_", new Vector2(60, 200),
-                Color.Cyan, 0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
+        if (_typingRoom || _typingTrigger)
+            batch.DrawString(_ctx.Font,
+                (_typingRoom ? "room name: " : "dialogue name: ") + _roomBuffer + "_",
+                new Vector2(60, 200), Color.Cyan, 0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
         if (_statusTimer > 0)
             batch.DrawString(_ctx.Font, _status, new Vector2(60, 280), Color.LightGreen,
                 0f, Vector2.Zero, 0.34f, SpriteEffects.None, 0f);

@@ -35,6 +35,14 @@ public class LevelEnemy
     public string Name = "";
 }
 
+/// <summary>A painted square that plays a dialogue block the first time anyone steps on it.</summary>
+public class LevelTrigger
+{
+    public int X, Y;
+    public string Dialogue = "";
+    public bool Fired;          // runtime only; never saved
+}
+
 /// <summary>
 /// One isometric level: Content/Levels/{Name}.txt, one entity per line.
 ///
@@ -43,6 +51,7 @@ public class LevelEnemy
 ///   Door: x, y, roomA, roomB
 ///   Enemy: x, y, name
 ///   PlayerStart: x, y
+///   Trigger: x, y, dialogueName
 ///
 /// Rooms are just labels on blocks; a door joins two of them and hides RoomB
 /// (and everything standing in it) until opened. The editor writes this file.
@@ -54,6 +63,7 @@ public class LevelData
     public List<LevelDecoration> Decorations { get; } = new();
     public List<LevelDoor> Doors { get; } = new();
     public List<LevelEnemy> Enemies { get; } = new();
+    public List<LevelTrigger> Triggers { get; } = new();
     public List<Point> PlayerStarts { get; } = new();
 
     public static string PathFor(string name) => $"Content/Levels/{name}.txt";
@@ -62,6 +72,8 @@ public class LevelData
     public LevelDoor? DoorAt(Point p) => Doors.FirstOrDefault(d => d.X == p.X && d.Y == p.Y);
     public LevelDecoration? DecorationAt(Point p) =>
         Decorations.FirstOrDefault(d => d.X == p.X && d.Y == p.Y);
+    public LevelTrigger? TriggerAt(Point p) =>
+        Triggers.FirstOrDefault(t => t.X == p.X && t.Y == p.Y);
 
     public IEnumerable<string> RoomNames =>
         Blocks.Values.Select(b => b.Room).Distinct(StringComparer.OrdinalIgnoreCase);
@@ -108,6 +120,9 @@ public class LevelData
                 case "enemy" when Num(0, out int ex) && Num(1, out int ey) && parts.Length >= 3:
                     level.Enemies.Add(new LevelEnemy { X = ex, Y = ey, Name = parts[2] });
                     break;
+                case "trigger" when Num(0, out int tx) && Num(1, out int ty) && parts.Length >= 3:
+                    level.Triggers.Add(new LevelTrigger { X = tx, Y = ty, Dialogue = parts[2] });
+                    break;
                 case "playerstart" when Num(0, out int px) && Num(1, out int py):
                     level.PlayerStarts.Add(new Point(px, py));
                     break;
@@ -133,6 +148,8 @@ public class LevelData
             sb.AppendLine($"Door: {d.X}, {d.Y}, {d.RoomA}, {d.RoomB}");
         foreach (var e in Enemies)
             sb.AppendLine($"Enemy: {e.X}, {e.Y}, {e.Name}");
+        foreach (var t in Triggers.OrderBy(t => t.Y).ThenBy(t => t.X))
+            sb.AppendLine($"Trigger: {t.X}, {t.Y}, {t.Dialogue}");
         foreach (var p in PlayerStarts)
             sb.AppendLine($"PlayerStart: {p.X}, {p.Y}");
         return sb.ToString();

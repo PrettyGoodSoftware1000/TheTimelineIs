@@ -65,3 +65,7 @@ iso_door_open = The door creaks open...
 iso_clear = Clear... for now.
 iso_victory = Area cleared!
 iso_card_range = Range {range}
+iso_move_spent = Card played - no movement left this turn.
+iso_pick_target = Pick a target.
+iso_confirm_strike = Move the mouse to aim, click the target again to strike.
+iso_dialogue_next = click to continue

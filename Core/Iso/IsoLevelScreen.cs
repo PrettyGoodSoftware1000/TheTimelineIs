@@ -15,13 +15,16 @@ namespace TheTimelineIs.Core.Iso;
 /// The isometric test level over a black void. The party explores freely and
 /// individually; walking within 15 tiles of a revealed enemy springs combat —
 /// the other two characters first get a free positioning move, then turn
-/// order rolls (sides shuffled, alternating). On a turn a character spends
-/// Movement points (orthogonal 1, diagonal 2, +1 per foot climbed, max 4 ft
-/// up) shown as a 20%-blue overlay, and may play one card; melee reaches 1
-/// tile, ranged cards their Range. Enemies chase the nearest player and use
-/// their basic attack. Doors open when clicked from beside them and reveal
-/// the room behind; enemies see through open doors. Clearing every enemy
-/// completes the level.
+/// order rolls (sides shuffled, alternating).
+///
+/// A turn is movement THEN a card: reachable tiles show as blue fill with blue
+/// grid lines, and playing a card ends movement for that turn. Hovering or
+/// selecting a card paints its reach in red beyond the blue. A melee card
+/// picks an approach square beside the target — the one nearest the mouse,
+/// shown in yellow — and a second click on the target walks there and strikes.
+/// A ranged card moves only as far as it must and fires. Right-click cancels.
+///
+/// Stepping on a trigger square plays its dialogue block once.
 /// </summary>
 public class IsoLevelScreen : IScreen
 {
@@ -30,10 +33,11 @@ public class IsoLevelScreen : IScreen
 
     private const int AggroTiles = 15;
     private const float WalkTilesPerSec = 5f;
-    private const int DoorReach = 2;             // orth or diagonal neighbor
+    private const int DoorReach = 2;
 
     private readonly GameContext _ctx;
     private readonly LevelData _level;
+    private readonly DialogueLibrary _dialogue;
     private readonly List<CharacterInstance> _party = new();
     private readonly List<CharacterInstance> _enemies = new();
     private readonly HashSet<string> _revealed = new(StringComparer.OrdinalIgnoreCase);
@@ -43,12 +47,18 @@ public class IsoLevelScreen : IScreen
 
     private Mode _mode = Mode.Explore;
     private int _turn = -1;
-    private CharacterInstance? _selected;        // explore / free-move selection
+    private CharacterInstance? _selected;
     private readonly HashSet<CharacterInstance> _freeMovers = new();
     private bool _playedCard;
     private List<Card> _hand = new();
     private Card? _selectedCard;
-    private readonly List<CharacterInstance> _targets = new();
+    private CharacterInstance? _pendingTarget;   // melee: first click arms, second commits
+    private Point? _approach;                    // yellow square we'd move to
+
+    // overlays, recomputed only when the mover, position, or card changes
+    private Dictionary<Point, int> _moveSet = new();
+    private HashSet<Point> _rangeSet = new();
+    private object? _overlayKey;
 
     private Vector2 _camera;
     private Vector2 _baseOrigin;
@@ -57,7 +67,7 @@ public class IsoLevelScreen : IScreen
     private string _toast = "";
     private float _toastTimer;
 
-    // walking animation
+    // walking
     private CharacterInstance? _walker;
     private List<Point> _walkPath = new();
     private Point _walkFrom;
@@ -75,9 +85,14 @@ public class IsoLevelScreen : IScreen
     private Vector2 _projFrom, _projTo;
     private float _projRotation;
 
+    // dialogue playback
+    private List<DialogueLine>? _lines;
+    private int _lineIndex;
+
     private static readonly Rectangle EndTurnRect = new(3280, 60, 500, 160);
     private static readonly Rectangle DoneRect = new(3280, 60, 500, 160);
     private static readonly Rectangle WinRect = new(1620, 1250, 600, 180);
+    private static readonly Rectangle DialogueBox = new(60, 1560, 3720, 420);
     private const int CardW = 400, CardH = 560, CardGap = 26;
     private static readonly int CardRestY = VirtualViewport.Height - CardH / 2;
     private const float HoverScale = 1.3f;
@@ -86,6 +101,7 @@ public class IsoLevelScreen : IScreen
     {
         _ctx = ctx;
         _level = LevelData.Load(levelName);
+        _dialogue = DialogueLibrary.Load(levelName);
         SpawnParty();
         SpawnEnemies();
         foreach (var start in _level.PlayerStarts.Take(_party.Count))
@@ -94,7 +110,6 @@ public class IsoLevelScreen : IScreen
         if (_revealed.Count == 0 && _level.Blocks.Count > 0)
             _revealed.Add(_level.Blocks.Values.First().Room);
 
-        // center the camera on the party
         if (_party.Count > 0)
         {
             var focus = IsoMath.ToScreen(_party[0].GX, _party[0].GY, HeightAt(Tile(_party[0])), Vector2.Zero);
@@ -132,7 +147,7 @@ public class IsoLevelScreen : IScreen
         foreach (var spawn in _level.Enemies)
         {
             var def = _ctx.Enemies.Get(spawn.Name);
-            if (def == null) continue;   // the validator already complained
+            if (def == null) continue;
             _enemies.Add(new CharacterInstance
             {
                 Name = def.Name,
@@ -150,7 +165,6 @@ public class IsoLevelScreen : IScreen
         }
     }
 
-    /// <summary>Least-used sprite variant first, like the side-view game.</summary>
     private static string PickSprite(IReadOnlyList<string>? variants, string name,
         List<CharacterInstance> existing)
     {
@@ -174,10 +188,19 @@ public class IsoLevelScreen : IScreen
         Everyone.Where(c => c.Alive && c != except).Select(Tile).ToHashSet();
 
     private CharacterInstance? Current => _turn >= 0 && _turn < _order.Count ? _order[_turn] : null;
+    private bool DialogueActive => _lines != null;
 
     private void Toast(string text) { _toast = text; _toastTimer = 3f; }
 
-    /// <summary>Where a character's feet are on screen right now (walking included).</summary>
+    /// <summary>Who the current mode lets the player move.</summary>
+    private CharacterInstance? ActiveMover => _mode switch
+    {
+        Mode.Explore => _selected,
+        Mode.FreeMove => _selected != null && _freeMovers.Contains(_selected) ? _selected : null,
+        Mode.PlayerTurn or Mode.PlayerTarget => Current,
+        _ => null,
+    };
+
     private Vector2 FootOf(CharacterInstance c)
     {
         var at = IsoMath.ToScreen(c.GX, c.GY, HeightAt(Tile(c)), Origin);
@@ -201,23 +224,42 @@ public class IsoLevelScreen : IScreen
         if (_toastTimer > 0) _toastTimer -= dt;
         Formation.UpdateShakes(_party.Concat(_enemies).ToList(), dt);
 
+        if (DialogueActive)
+        {
+            if (_tap.HasValue || input.Confirm) AdvanceDialogue();
+            _tap = null;
+            return;
+        }
+
+        // right-click always drops the armed card
+        if (input.AltTap.HasValue) CancelCard();
+
         if (_walker != null) { UpdateWalk(dt); return; }
+
+        RefreshOverlays();
 
         switch (_mode)
         {
-            case Mode.Acting:
-                UpdateAction(dt);
-                break;
-            case Mode.EnemyTurn:
-                EnemyAct();
-                break;
+            case Mode.Acting: UpdateAction(dt); break;
+            case Mode.EnemyTurn: EnemyAct(); break;
             case Mode.Explore:
             case Mode.FreeMove:
             case Mode.PlayerTurn:
             case Mode.PlayerTarget:
+                UpdateApproach();
                 HandleClicks();
                 break;
         }
+    }
+
+    private void CancelCard()
+    {
+        if (_selectedCard == null && _pendingTarget == null) return;
+        _selectedCard = null;
+        _pendingTarget = null;
+        _approach = null;
+        _overlayKey = null;
+        if (_mode == Mode.PlayerTarget) _mode = Mode.PlayerTurn;
     }
 
     private void UpdateWalk(float dt)
@@ -232,10 +274,12 @@ public class IsoLevelScreen : IScreen
             _walkFrom = arrived;
             _walker.GX = arrived.X;
             _walker.GY = arrived.Y;
+            _overlayKey = null;
 
+            if (_walker.IsPlayer && FireTrigger(arrived)) { _walkPath.Clear(); break; }
             if (_mode == Mode.Explore && _walker.IsPlayer && CheckAggro(_walker))
             {
-                _walkPath.Clear();   // spotted: stop where they stand
+                _walkPath.Clear();
                 break;
             }
         }
@@ -248,7 +292,35 @@ public class IsoLevelScreen : IScreen
         }
     }
 
-    /// <summary>True when this character is now within sight of a revealed enemy.</summary>
+    /// <summary>Stepping on a trigger square plays its dialogue, once.</summary>
+    private bool FireTrigger(Point tile)
+    {
+        if (_level.TriggerAt(tile) is not LevelTrigger trigger || trigger.Fired) return false;
+        trigger.Fired = true;
+        var lines = _dialogue.Get(trigger.Dialogue);
+        if (lines == null || lines.Count == 0)
+        {
+            _ctx.ReportProblem(DialogueLibrary.PathFor(_level.Name),
+                $"trigger at {tile.X},{tile.Y} calls dialogue '{trigger.Dialogue}', which has no lines");
+            return false;
+        }
+        _lines = lines;
+        _lineIndex = 0;
+        return true;
+    }
+
+    private void AdvanceDialogue()
+    {
+        _lineIndex++;
+        if (_lines != null && _lineIndex < _lines.Count) return;
+        _lines = null;
+        _lineIndex = 0;
+        // walking into a fight and into a conversation on the same step is possible
+        if (_mode == Mode.Explore)
+            foreach (var p in LivingParty)
+                if (CheckAggro(p)) break;
+    }
+
     private bool CheckAggro(CharacterInstance mover)
     {
         var seen = VisibleEnemies.Where(e =>
@@ -258,7 +330,6 @@ public class IsoLevelScreen : IScreen
         foreach (var e in seen) _aggroed.Add(e);
         if (_mode is Mode.Explore)
         {
-            // the others get a free positioning move before turn order rolls
             _freeMovers.Clear();
             foreach (var p in LivingParty.Where(p => p != mover))
             {
@@ -267,6 +338,7 @@ public class IsoLevelScreen : IScreen
             }
             _mode = Mode.FreeMove;
             _selected = _freeMovers.FirstOrDefault();
+            _overlayKey = null;
             Toast(_ctx.Strings.Get("iso_spotted"));
         }
         return true;
@@ -277,8 +349,9 @@ public class IsoLevelScreen : IScreen
         _order.Clear();
         var players = LivingParty.OrderBy(_ => Rng.Next()).ToList();
         var foes = _aggroed.Where(e => e.Alive).OrderBy(_ => Rng.Next()).ToList();
-        var first = Rng.Next(2) == 0 ? players : foes.Cast<CharacterInstance>().ToList();
-        var second = ReferenceEquals(first, players) ? foes : players;
+        bool playersFirst = Rng.Next(2) == 0;
+        var first = playersFirst ? players : foes;
+        var second = playersFirst ? foes : players;
         for (int i = 0; i < Math.Max(first.Count, second.Count); i++)
         {
             if (i < first.Count) _order.Add(first[i]);
@@ -290,20 +363,20 @@ public class IsoLevelScreen : IScreen
 
     private void NextTurn()
     {
+        CancelCard();
         if (LivingParty.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
         if (!_aggroed.Any(e => e.Alive))
         {
-            // combat over; the level itself completes when every enemy is gone
             _aggroed.Clear();
             _order.Clear();
             _turn = -1;
+            _overlayKey = null;
             if (_enemies.All(e => !e.Alive)) { _mode = Mode.Victory; return; }
             _mode = Mode.Explore;
             Toast(_ctx.Strings.Get("iso_clear"));
             return;
         }
 
-        // late arrivals (revealed mid-fight) join the end of the order
         foreach (var e in _aggroed.Where(e => e.Alive && !_order.Contains(e)))
             _order.Add(e);
 
@@ -314,12 +387,11 @@ public class IsoLevelScreen : IScreen
         }
         var current = Current!;
         current.MovePoints = current.MoveMax;
+        _overlayKey = null;
         if (current.IsPlayer)
         {
             _playedCard = false;
             _hand = _ctx.Cards.HandFor(_ctx.Classes.CardTagsFor(current.Name));
-            _selectedCard = null;
-            _targets.Clear();
             _mode = Mode.PlayerTurn;
         }
         else
@@ -328,42 +400,115 @@ public class IsoLevelScreen : IScreen
         }
     }
 
+    // ---------------- overlays ----------------
+
+    /// <summary>Blue = where the mover can walk; red = where the armed card could reach from there.</summary>
+    private void RefreshOverlays()
+    {
+        var mover = ActiveMover;
+        var card = _selectedCard ?? HoveredCard();
+        var key = (mover, mover == null ? default : Tile(mover), mover?.MovePoints ?? 0, card, _revealed.Count);
+        if (Equals(_overlayKey, key)) return;
+        _overlayKey = key;
+
+        _moveSet = new Dictionary<Point, int>();
+        _rangeSet = new HashSet<Point>();
+        if (mover == null) return;
+
+        int budget = _mode == Mode.Explore ? 9999 : mover.MovePoints;
+        _moveSet = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed, OccupiedExcept(mover)).Cost;
+        if (card == null || _mode == Mode.Explore) return;
+
+        // every tile the card could strike from anywhere the mover can stand
+        var stands = _moveSet.Keys.Append(Tile(mover)).ToList();
+        foreach (var block in _level.Blocks.Values)
+        {
+            if (!_revealed.Contains(block.Room)) continue;
+            var tile = new Point(block.X, block.Y);
+            if (_moveSet.ContainsKey(tile)) continue;      // blue already covers it
+            if (stands.Any(s => IsoMath.GridDistance(s, tile) <= card.Range))
+                _rangeSet.Add(tile);
+        }
+    }
+
+    private Card? HoveredCard()
+    {
+        if (_mode is not (Mode.PlayerTurn or Mode.PlayerTarget)) return null;
+        var rects = HandRects();
+        for (int i = 0; i < _hand.Count; i++)
+            if (rects[i].Contains(_pointer)) return _hand[i];
+        return null;
+    }
+
+    /// <summary>
+    /// The square we'd attack from. Melee picks whichever legal neighbour of
+    /// the target the mouse is nearest, so hovering west of a goblin stages the
+    /// strike from its west side; ranged just takes the cheapest tile in range.
+    /// </summary>
+    private void UpdateApproach()
+    {
+        _approach = null;
+        if (_selectedCard == null || _pendingTarget == null || Current == null) return;
+        _approach = ApproachSquare(Current, _pendingTarget, _selectedCard);
+    }
+
+    private Point? ApproachSquare(CharacterInstance me, CharacterInstance target, Card card)
+    {
+        var here = Tile(me);
+        var there = Tile(target);
+        if (IsoMath.GridDistance(here, there) <= card.Range) return here;   // already in reach
+
+        var options = _moveSet.Keys
+            .Where(t => IsoMath.GridDistance(t, there) <= card.Range)
+            .ToList();
+        if (options.Count == 0) return null;
+
+        if (card.Delivery != Delivery.Melee)
+            return options.OrderBy(t => _moveSet[t]).First();               // ranged: move the least
+
+        // melee: the neighbour lying in the direction of the cursor
+        var center = IsoMath.ToScreen(there.X, there.Y, HeightAt(there), Origin);
+        var want = _pointer.ToVector2() - center;
+        if (want.LengthSquared() < 1f) return options.OrderBy(t => _moveSet[t]).First();
+        want.Normalize();
+
+        return options.OrderByDescending(t =>
+        {
+            var dir = IsoMath.ToScreen(t.X, t.Y, HeightAt(t), Origin) - center;
+            if (dir.LengthSquared() < 1f) return -1f;
+            dir.Normalize();
+            return Vector2.Dot(dir, want);
+        }).First();
+    }
+
     // ---------------- input ----------------
 
     private void HandleClicks()
     {
         if (_tap is not Point press) return;
         _tap = null;
-        var screen = press.ToVector2();
 
-        // buttons are handled in Draw (they need to render anyway); cards first
         if (_mode is Mode.PlayerTurn or Mode.PlayerTarget && HandleCardClick(press)) return;
         if (HitButton(press)) return;
 
-        // click a character?
         foreach (var c in Everyone.Reverse())
         {
-            if (!c.Alive) continue;
-            if (!SpriteRect(c).Contains(press)) continue;
-
+            if (!c.Alive || !SpriteRect(c).Contains(press)) continue;
             if (c.IsPlayer)
             {
-                if (_mode == Mode.Explore) { _selected = c; return; }
-                if (_mode == Mode.FreeMove && _freeMovers.Contains(c)) { _selected = c; return; }
+                if (_mode == Mode.Explore) { _selected = c; _overlayKey = null; }
+                else if (_mode == Mode.FreeMove && _freeMovers.Contains(c)) { _selected = c; _overlayKey = null; }
             }
             else if (_mode == Mode.PlayerTarget && _selectedCard != null)
             {
                 TryTarget(c);
-                return;
             }
             return;
         }
 
-        // click a door?
-        if (FindTileAt(screen) is Point tile)
+        if (FindTileAt(press.ToVector2()) is Point tile)
         {
-            if (_level.DoorAt(tile) is LevelDoor door && !door.Open &&
-                _mode is Mode.Explore &&
+            if (_level.DoorAt(tile) is LevelDoor door && !door.Open && _mode is Mode.Explore &&
                 LivingParty.Any(p => IsoMath.GridDistance(Tile(p), tile) <= DoorReach))
             {
                 OpenDoor(door);
@@ -378,32 +523,38 @@ public class IsoLevelScreen : IScreen
         door.Open = true;
         _revealed.Add(door.RoomA);
         _revealed.Add(door.RoomB);
+        _overlayKey = null;
         Toast(_ctx.Strings.Get("iso_door_open"));
-        // enemies see through open doors — the opener is the trigger
-        var nearest = LivingParty.OrderBy(p => IsoMath.GridDistance(Tile(p), new Point(door.X, door.Y))).First();
+        var nearest = LivingParty.OrderBy(p =>
+            IsoMath.GridDistance(Tile(p), new Point(door.X, door.Y))).First();
         CheckAggro(nearest);
     }
 
     private void HandleTileClick(Point tile)
     {
-        var mover = _mode switch
-        {
-            Mode.Explore => _selected,
-            Mode.FreeMove => _selected != null && _freeMovers.Contains(_selected) ? _selected : null,
-            Mode.PlayerTurn => Current,
-            _ => null,
-        };
+        var mover = ActiveMover;
         if (mover == null || !mover.Alive) return;
-
-        int budget = _mode == Mode.Explore ? 9999 : mover.MovePoints;
-        var (cost, parent) = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed, OccupiedExcept(mover));
-        if (!cost.TryGetValue(tile, out int spent)) return;
+        if (_mode is Mode.PlayerTurn or Mode.PlayerTarget && _playedCard)
+        {
+            Toast(_ctx.Strings.Get("iso_move_spent"));
+            return;
+        }
+        if (!_moveSet.TryGetValue(tile, out int spent)) return;
 
         if (_mode != Mode.Explore) mover.MovePoints -= spent;
+        BeginWalk(mover, tile, null);
+    }
+
+    private void BeginWalk(CharacterInstance mover, Point goal, Action? after)
+    {
+        int budget = _mode == Mode.Explore ? 9999 : mover.MoveMax;
+        var (_, parent) = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed, OccupiedExcept(mover));
         _walker = mover;
         _walkFrom = Tile(mover);
-        _walkPath = Pathfinder.PathTo(parent, _walkFrom, tile);
+        _walkPath = Pathfinder.PathTo(parent, _walkFrom, goal);
         _walkT = 0f;
+        _afterWalk = after;
+        _overlayKey = null;
     }
 
     private bool HandleCardClick(Point press)
@@ -414,39 +565,49 @@ public class IsoLevelScreen : IScreen
             {
                 if (_playedCard) { Toast(_ctx.Strings.Get("iso_card_spent")); return true; }
                 _selectedCard = _hand[i];
-                _targets.Clear();
+                _pendingTarget = null;
+                _approach = null;
                 _mode = Mode.PlayerTarget;
+                _overlayKey = null;
                 return true;
             }
         return false;
     }
 
+    /// <summary>
+    /// Melee arms on the first click and commits on the second, so the yellow
+    /// approach square can be steered with the mouse in between; ranged fires
+    /// straight away, walking only as far as it needs to.
+    /// </summary>
     private void TryTarget(CharacterInstance enemy)
     {
         var card = _selectedCard!;
         var me = Current!;
-        if (IsoMath.GridDistance(Tile(me), Tile(enemy)) > card.Range)
+
+        if (card.Delivery == Delivery.Melee && _pendingTarget != enemy)
+        {
+            _pendingTarget = enemy;
+            _approach = ApproachSquare(me, enemy, card);
+            if (_approach == null) Toast(_ctx.Strings.Get("iso_out_of_range"));
+            return;
+        }
+
+        _pendingTarget = enemy;
+        var square = ApproachSquare(me, enemy, card);
+        if (square == null)
         {
             Toast(_ctx.Strings.Get("iso_out_of_range"));
             return;
         }
-        if (_targets.Contains(enemy)) return;
-        _targets.Add(enemy);
 
-        int needed = card.Kind switch
+        if (square.Value == Tile(me))
         {
-            CardKind.MultiTarget => Math.Min(card.Targets, EnemiesInRange(card).Count),
-            _ => 1,
-        };
-        if (_targets.Count >= needed)
-            PlayCard();
-    }
-
-    private List<CharacterInstance> EnemiesInRange(Card card)
-    {
-        var me = Current!;
-        return VisibleEnemies.Where(e =>
-            IsoMath.GridDistance(Tile(me), Tile(e)) <= card.Range).ToList();
+            PlayCard(enemy);
+            return;
+        }
+        me.MovePoints -= _moveSet.TryGetValue(square.Value, out int c) ? c : 0;
+        var target = enemy;
+        BeginWalk(me, square.Value, () => PlayCard(target));
     }
 
     private bool HitButton(Point press)
@@ -458,7 +619,6 @@ public class IsoLevelScreen : IScreen
                 StartCombat();
                 return true;
             case Mode.PlayerTurn or Mode.PlayerTarget when EndTurnRect.Contains(press):
-                _mode = Mode.PlayerTurn;
                 NextTurn();
                 return true;
         }
@@ -467,16 +627,21 @@ public class IsoLevelScreen : IScreen
 
     // ---------------- card + enemy actions ----------------
 
-    private void PlayCard()
+    private void PlayCard(CharacterInstance aimed)
     {
-        var card = _selectedCard!;
+        var card = _selectedCard;
+        if (card == null) return;
         _actor = Current;
         _actingCard = card;
-        // AoE damages every visible enemy in range; the click only aimed the shot
-        _victims = card.Kind == CardKind.AoEDamage ? EnemiesInRange(card) : _targets.ToList();
+        _victims = card.Kind == CardKind.AoEDamage
+            ? VisibleEnemies.Where(e => IsoMath.GridDistance(Tile(_actor!), Tile(e)) <= card.Range).ToList()
+            : new List<CharacterInstance> { aimed };
         _selectedCard = null;
-        _targets.Clear();
+        _pendingTarget = null;
+        _approach = null;
         _playedCard = true;
+        _actor!.MovePoints = 0;      // a card ends this turn's movement
+        _overlayKey = null;
 
         _ctx.Sounds.Play(card.CastingSound);
         _mode = Mode.Acting;
@@ -489,8 +654,7 @@ public class IsoLevelScreen : IScreen
         _actT = 0f;
         _actDur = Math.Max(0f, duration);
         if (act == Act.Hits)
-            _hitTimer = _actingCard != null && _actingCard.HitEvents.Count > 0
-                ? _actingCard.HitEvents[0].Delay : 0f;
+            _hitTimer = _actingCard is { HitEvents.Count: > 0 } c ? c.HitEvents[0].Delay : 0f;
     }
 
     private void UpdateAction(float dt)
@@ -502,22 +666,19 @@ public class IsoLevelScreen : IScreen
 
         switch (_act)
         {
-            case Act.Casting when _actingCard is { Delivery: Delivery.Ranged }:
+            case Act.Casting when _actingCard is { Delivery: Delivery.Ranged } ranged:
                 var aim = _victims.FirstOrDefault();
                 if (aim == null) { FinishAction(); return; }
                 _projFrom = FootOf(_actor!) - new Vector2(0, 160);
                 _projTo = FootOf(aim) - new Vector2(0, 160);
                 _projRotation = (float)Math.Atan2(_projTo.Y - _projFrom.Y, _projTo.X - _projFrom.X);
-                float tiles = IsoMath.GridDistance(Tile(_actor!), Tile(aim));
-                EnterAct(Act.Projectile, tiles / Math.Max(1f, _actingCard.Speed));
+                EnterAct(Act.Projectile,
+                    IsoMath.GridDistance(Tile(_actor!), Tile(aim)) / Math.Max(1f, ranged.Speed));
                 break;
-            case Act.Casting when _actingCard is { Delivery: Delivery.Melee } meleeCard:
-                EnterAct(Act.MeleeWait, meleeCard.MeleeTime);
+            case Act.Casting when _actingCard is { Delivery: Delivery.Melee } melee:
+                EnterAct(Act.MeleeWait, melee.MeleeTime);
                 break;
             case Act.Casting:
-                _hitIndex = 0;
-                EnterAct(Act.Hits, 0f);
-                break;
             case Act.Projectile:
             case Act.MeleeWait:
                 _hitIndex = 0;
@@ -557,10 +718,10 @@ public class IsoLevelScreen : IScreen
         _actingCard = null;
         _actor = null;
         _victims.Clear();
-        // the turn continues: leftover movement may still be spent
-        _mode = Mode.PlayerTurn;
+        _overlayKey = null;
         if (LivingParty.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
-        if (!_aggroed.Any(e => e.Alive)) NextTurn();
+        // movement is spent, so the turn is over the moment the card resolves
+        NextTurn();
     }
 
     private void ApplyHit(CharacterInstance target, int dmg, string type, StringBuilder report)
@@ -611,10 +772,7 @@ public class IsoLevelScreen : IScreen
             _mode = Mode.Acting;
             EnterAct(Act.EnemyWindup, 0.35f);
         }
-        else
-        {
-            NextTurn();
-        }
+        else NextTurn();
     }
 
     private void ResolveEnemyHit()
@@ -624,13 +782,12 @@ public class IsoLevelScreen : IScreen
         if (target != null && target.Alive)
         {
             _ctx.Sounds.Play(me.AttackSound);
-            var report = new StringBuilder();
-            target.Hp -= me.AttackDmg;
-            target.ShakeTimer = Formation.ShakeDuration;
-            report.Append(_ctx.Strings.Format("battle_enemy_hit",
+            var report = new StringBuilder(_ctx.Strings.Format("battle_enemy_hit",
                 ("attacker", me.Name), ("target", target.Name),
                 ("dmg", me.AttackDmg.ToString()), ("type", me.AttackType)));
-            if (target.Hp <= 0 && target.Alive)
+            target.Hp -= me.AttackDmg;
+            target.ShakeTimer = Formation.ShakeDuration;
+            if (target.Hp <= 0)
             {
                 target.Hp = 0;
                 target.Alive = false;
@@ -647,7 +804,6 @@ public class IsoLevelScreen : IScreen
 
     private Point? FindTileAt(Vector2 screen)
     {
-        // front-most first, so a raised block wins over the tile behind it
         foreach (var b in _level.Blocks.Values
                      .Where(b => _revealed.Contains(b.Room))
                      .OrderByDescending(b => b.X + b.Y))
@@ -668,29 +824,14 @@ public class IsoLevelScreen : IScreen
 
     public void Draw(SpriteBatch batch)
     {
-        // the void: solid black
         Ui.FillRect(batch, _ctx.Pixel,
             new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height), Color.Black);
 
-        // movement overlay set for the active mover
-        Dictionary<Point, int>? overlay = null;
-        var active = _mode switch
-        {
-            Mode.FreeMove when _selected != null && _freeMovers.Contains(_selected) => _selected,
-            Mode.PlayerTurn or Mode.PlayerTarget => Current,
-            _ => null,
-        };
-        if (active != null && _walker == null)
-            overlay = Pathfinder.Reachable(_level, Tile(active), active.MovePoints,
-                _revealed, OccupiedExcept(active)).Cost;
-
-        // painter's pass: blocks back-to-front, occupants right after their tile
         var byTile = new Dictionary<Point, List<CharacterInstance>>();
         foreach (var c in Everyone.Where(c => c.Alive))
         {
             var key = c == _walker && _walkPath.Count > 0 ? _walkPath[0] : Tile(c);
-            if (!byTile.TryGetValue(key, out var list))
-                byTile[key] = list = new List<CharacterInstance>();
+            if (!byTile.TryGetValue(key, out var list)) byTile[key] = list = new List<CharacterInstance>();
             list.Add(c);
         }
 
@@ -701,22 +842,29 @@ public class IsoLevelScreen : IScreen
             DrawBlock(batch, block);
             var tile = new Point(block.X, block.Y);
 
-            if (overlay != null && overlay.ContainsKey(tile))
-                DrawDiamond(batch, tile, block.Height, Color.Blue * 0.2f);
-            if (_mode == Mode.PlayerTarget && _selectedCard != null)
+            if (_rangeSet.Contains(tile))
             {
-                var victim = byTile.TryGetValue(tile, out var here)
-                    ? here.FirstOrDefault(c => !c.IsPlayer) : null;
-                if (victim != null &&
-                    IsoMath.GridDistance(Tile(Current!), tile) <= _selectedCard.Range)
-                    DrawDiamond(batch, tile, block.Height, Color.OrangeRed * 0.25f);
+                Fill(batch, tile, block.Height, new Color(255, 60, 60) * 0.18f);
+                Edge(batch, tile, block.Height, new Color(255, 70, 70) * 0.75f);
             }
+            if (_moveSet.ContainsKey(tile))
+            {
+                Fill(batch, tile, block.Height, Color.Blue * 0.2f);
+                Edge(batch, tile, block.Height, new Color(90, 150, 255) * 0.9f);
+            }
+            if (_approach == tile)
+            {
+                Fill(batch, tile, block.Height, Color.Yellow * 0.35f);
+                Edge(batch, tile, block.Height, Color.Yellow);
+            }
+            if (_level.TriggerAt(tile) is { Fired: false })
+                Edge(batch, tile, block.Height, Color.Violet * 0.8f);
 
             if (_level.DoorAt(tile) is LevelDoor door)
-                DrawBillboard(batch, "Content/Images/Decorations/Door.png", tile, block.Height,
+                Billboard(batch, "Content/Images/Decorations/Door.png", tile, block.Height,
                     door.Open ? Color.White * 0.35f : Color.White);
             if (_level.DecorationAt(tile) is LevelDecoration deco)
-                DrawBillboard(batch, BlockCatalog.DecorationPath(deco.File), tile, block.Height, Color.White);
+                Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, block.Height, Color.White);
 
             if (byTile.TryGetValue(tile, out var standing))
                 foreach (var c in standing)
@@ -725,6 +873,7 @@ public class IsoLevelScreen : IScreen
 
         DrawProjectile(batch);
         DrawHud(batch);
+        if (DialogueActive) DrawDialogue(batch);
         _tap = null;
     }
 
@@ -735,7 +884,6 @@ public class IsoLevelScreen : IScreen
         for (int f = 0; f < block.Height; f++)
             batch.Draw(side, new Rectangle((int)(top.X - IsoMath.TileW / 2f),
                 (int)(top.Y + f * IsoMath.FootPx), IsoMath.TileW, IsoMath.FootPx), Color.White);
-        // ground-level tiles still get one thin lip so edges read against the void
         if (block.Height == 0)
             batch.Draw(side, new Rectangle((int)(top.X - IsoMath.TileW / 2f),
                 (int)top.Y, IsoMath.TileW, IsoMath.FootPx / 2), Color.White * 0.8f);
@@ -744,15 +892,23 @@ public class IsoLevelScreen : IScreen
                 IsoMath.TileW, IsoMath.TileH), Color.White);
     }
 
-    private void DrawDiamond(SpriteBatch batch, Point tile, int height, Color color)
+    private Rectangle DiamondRect(Point tile, int height)
     {
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
-        batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayTop.png"),
-            new Rectangle((int)(c.X - IsoMath.TileW / 2f), (int)(c.Y - IsoMath.TileH / 2f),
-                IsoMath.TileW, IsoMath.TileH), color);
+        return new Rectangle((int)(c.X - IsoMath.TileW / 2f), (int)(c.Y - IsoMath.TileH / 2f),
+            IsoMath.TileW, IsoMath.TileH);
     }
 
-    private void DrawBillboard(SpriteBatch batch, string path, Point tile, int height, Color tint)
+    private void Fill(SpriteBatch batch, Point tile, int height, Color color) =>
+        batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayTop.png"),
+            DiamondRect(tile, height), color);
+
+    /// <summary>Grid lines: the diamond's outline, so the highlight reads as a mesh.</summary>
+    private void Edge(SpriteBatch batch, Point tile, int height, Color color) =>
+        batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayEdge.png"),
+            DiamondRect(tile, height), color);
+
+    private void Billboard(SpriteBatch batch, string path, Point tile, int height, Color tint)
     {
         var tex = _ctx.Assets.LoadTexture(path);
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
@@ -768,15 +924,19 @@ public class IsoLevelScreen : IScreen
 
         if (c == _selected && _mode is Mode.Explore or Mode.FreeMove)
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Bottom + 6, rect.Width, 8), Color.White);
-        if (c == Current && _mode is Mode.PlayerTurn or Mode.PlayerTarget or Mode.Acting or Mode.EnemyTurn)
+        if (c == Current && _mode is not (Mode.Explore or Mode.FreeMove))
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Bottom + 6, rect.Width, 8), Color.Gold);
 
-        int barW = Math.Min(170, rect.Width);
-        var back = new Rectangle(rect.X + (rect.Width - barW) / 2, rect.Bottom + 20, barW, 13);
-        Ui.FillRect(batch, _ctx.Pixel, back, Color.Black * 0.65f);
+        // health bar above the head, with the number in the middle of it
+        int barW = Math.Min(190, Math.Max(140, rect.Width));
+        int barH = 34;
+        var back = new Rectangle(rect.X + (rect.Width - barW) / 2, rect.Y - barH - 14, barW, barH);
+        Ui.FillRect(batch, _ctx.Pixel, back, Color.Black * 0.72f);
         int fill = (int)(barW * Math.Clamp(c.Hp / (float)c.MaxHp, 0f, 1f));
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, fill, back.Height),
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, fill, barH),
             c.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, barW, 3), Color.Black * 0.5f);
+        Ui.DrawTextCentered(batch, _ctx.Font, c.Hp.ToString(), back, Color.White, 0.26f);
     }
 
     private void DrawProjectile(SpriteBatch batch)
@@ -801,9 +961,34 @@ public class IsoLevelScreen : IScreen
         return rects;
     }
 
+    private void DrawDialogue(SpriteBatch batch)
+    {
+        var line = _lines![Math.Min(_lineIndex, _lines.Count - 1)];
+        Ui.FillRect(batch, _ctx.Pixel, DialogueBox, new Color(0, 0, 0, 225));
+
+        var speaker = Everyone.FirstOrDefault(c =>
+            c.Name.Equals(line.Speaker, StringComparison.OrdinalIgnoreCase));
+        var thumbRect = new Rectangle(DialogueBox.X + 36, DialogueBox.Y + 34, 350, 350);
+        if (speaker != null)
+        {
+            var thumb = _ctx.Assets.LoadFirstAvailable(speaker.ThumbPath, speaker.SpritePath);
+            batch.Draw(thumb, Ui.FitCentered(AssetLoader.DisplaySize(thumb, AssetKind.Thumb), thumbRect),
+                Color.White);
+        }
+        batch.DrawString(_ctx.Font, line.Speaker,
+            new Vector2(DialogueBox.X + 430, DialogueBox.Y + 36), Color.Gold,
+            0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
+        batch.DrawString(_ctx.Font, Ui.Wrap(_ctx.Font, line.Text, DialogueBox.Width - 520, 0.46f),
+            new Vector2(DialogueBox.X + 430, DialogueBox.Y + 140), Color.White,
+            0f, Vector2.Zero, 0.46f, SpriteEffects.None, 0f);
+        Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("iso_dialogue_next"),
+            new Rectangle(DialogueBox.X, DialogueBox.Bottom - 70, DialogueBox.Width - 40, 50),
+            Color.White * 0.55f, 0.3f);
+    }
+
     private void DrawHud(SpriteBatch batch)
     {
-        if (_toastTimer > 0)
+        if (_toastTimer > 0 && !DialogueActive)
             batch.DrawString(_ctx.Font, _toast, new Vector2(80, 260), Color.White,
                 0f, Vector2.Zero, 0.42f, SpriteEffects.None, 0f);
 
@@ -824,13 +1009,18 @@ public class IsoLevelScreen : IScreen
                 DrawTurnStrip(batch);
                 if (Current is CharacterInstance me)
                     Ui.DrawTextCentered(batch, _ctx.Font,
-                        _ctx.Strings.Format("iso_move_left", ("points", me.MovePoints.ToString())),
-                        new Rectangle(0, 230, VirtualViewport.Width, 80), Color.LightBlue, 0.36f);
+                        _playedCard
+                            ? _ctx.Strings.Get("iso_move_spent")
+                            : _ctx.Strings.Format("iso_move_left", ("points", me.MovePoints.ToString())),
+                        new Rectangle(0, 230, VirtualViewport.Width, 80),
+                        _playedCard ? Color.Gray : Color.LightBlue, 0.36f);
                 if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, EndTurnRect, _ctx.Strings.Get("iso_end_turn"), _tap))
                     NextTurn();
                 if (_mode == Mode.PlayerTarget)
-                    Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("battle_pick_target"),
-                        new Rectangle(0, 1300, VirtualViewport.Width, 100), Color.OrangeRed, 0.5f);
+                    Ui.DrawTextCentered(batch, _ctx.Font,
+                        _ctx.Strings.Get(_pendingTarget != null && _selectedCard?.Delivery == Delivery.Melee
+                            ? "iso_confirm_strike" : "iso_pick_target"),
+                        new Rectangle(0, 1330, VirtualViewport.Width, 100), Color.OrangeRed, 0.44f);
                 DrawHand(batch);
                 break;
             case Mode.EnemyTurn:
@@ -843,7 +1033,7 @@ public class IsoLevelScreen : IScreen
                 if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, WinRect, _ctx.Strings.Get("battle_win"), _tap))
                 {
                     _ctx.State.CompletedMissions.Add(_level.Name);
-                    _ctx.State.EndMission(completed: false); // level name already recorded
+                    _ctx.State.EndMission(completed: false);
                     _ctx.SwitchTo(new MapScreen(_ctx));
                 }
                 break;
@@ -854,7 +1044,7 @@ public class IsoLevelScreen : IScreen
     {
         if (_order.Count == 0) return;
         var strip = string.Join("  >  ", _order.Select((inst, i) =>
-            (i == _turn ? "[" + inst.Name + "]" : inst.Alive ? inst.Name : "-")));
+            i == _turn ? "[" + inst.Name + "]" : inst.Alive ? inst.Name : "-"));
         Ui.DrawTextCentered(batch, _ctx.Font, strip,
             new Rectangle(0, 40, VirtualViewport.Width, 90), Color.White * 0.85f, 0.34f);
         if (Current != null)
@@ -884,28 +1074,32 @@ public class IsoLevelScreen : IScreen
     private void DrawCard(SpriteBatch batch, Card card, Rectangle rect, bool hovered)
     {
         float s = hovered ? HoverScale : 1f;
-        Ui.FillRect(batch, _ctx.Pixel, rect, new Color(24, 24, 40, 250));
-        var border = card == _selectedCard ? Color.Gold : hovered ? Color.White : Color.White * 0.5f;
+        Ui.FillRect(batch, _ctx.Pixel, rect,
+            _playedCard ? new Color(20, 20, 26, 250) : new Color(24, 24, 40, 250));
+        var border = card == _selectedCard ? Color.Gold
+            : _playedCard ? Color.White * 0.25f
+            : hovered ? Color.White : Color.White * 0.5f;
         int bw = (int)(6 * s);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Y, rect.Width, bw), border);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Bottom - bw, rect.Width, bw), border);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Y, bw, rect.Height), border);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.Right - bw, rect.Y, bw, rect.Height), border);
 
+        var ink = _playedCard ? Color.White * 0.4f : Color.White;
         Ui.DrawTextCentered(batch, _ctx.Font, card.Name,
-            new Rectangle(rect.X, rect.Y + (int)(18 * s), rect.Width, (int)(80 * s)), Color.White, 0.4f * s);
-        string body = Ui.Wrap(_ctx.Font, card.CardText, rect.Width - 56 * s, 0.3f * s);
-        batch.DrawString(_ctx.Font, body, new Vector2(rect.X + 28 * s, rect.Y + 120 * s),
-            Color.White * 0.9f, 0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
+            new Rectangle(rect.X, rect.Y + (int)(18 * s), rect.Width, (int)(80 * s)), ink, 0.4f * s);
+        batch.DrawString(_ctx.Font, Ui.Wrap(_ctx.Font, card.CardText, rect.Width - 56 * s, 0.3f * s),
+            new Vector2(rect.X + 28 * s, rect.Y + 120 * s), ink * 0.9f,
+            0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
 
-        int living = VisibleEnemies.Count;
-        string total = $"{card.TotalDamage(living)} {card.DamageType}";
+        string total = $"{card.TotalDamage(VisibleEnemies.Count)} {card.DamageType}";
         var size = _ctx.Font.MeasureString(total) * (0.36f * s);
         batch.DrawString(_ctx.Font, total,
             new Vector2(rect.Right - 24 * s - size.X, rect.Bottom - 28 * s - size.Y),
-            Color.Gold, 0f, Vector2.Zero, 0.36f * s, SpriteEffects.None, 0f);
-        string range = _ctx.Strings.Format("iso_card_range", ("range", card.Range.ToString()));
-        batch.DrawString(_ctx.Font, range, new Vector2(rect.X + 24 * s, rect.Bottom - 28 * s - size.Y),
-            Color.LightBlue, 0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
+            _playedCard ? Color.Gold * 0.4f : Color.Gold, 0f, Vector2.Zero, 0.36f * s, SpriteEffects.None, 0f);
+        batch.DrawString(_ctx.Font, _ctx.Strings.Format("iso_card_range", ("range", card.Range.ToString())),
+            new Vector2(rect.X + 24 * s, rect.Bottom - 28 * s - size.Y),
+            _playedCard ? Color.LightBlue * 0.4f : Color.LightBlue,
+            0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
     }
 }
