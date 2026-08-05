@@ -43,10 +43,16 @@ public class CharacterInstance
     public string? AttackSound;
 
     // --- status effects ---
-    /// <summary>Each stack burns for Effects.BurnDamagePerStack at this character's turn start.</summary>
-    public int BurningStacks;
-    /// <summary>Turns of burning left; a fresh application refreshes it.</summary>
-    public int BurningTurns;
+    /// <summary>
+    /// One entry per stack of Burning, holding that stack's own remaining
+    /// turns. Stacks are independent: a stack applied later expires later,
+    /// and adding one never extends the ones already burning.
+    /// </summary>
+    public List<int> Burns = new();
+
+    /// <summary>Live stacks; each deals Effects.BurnDamagePerStack at this character's turn start.</summary>
+    public int BurningStacks => Burns.Count;
+
     /// <summary>Soaks damage before health does, and shows grey on the bar.</summary>
     public int Armor;
 
@@ -57,7 +63,12 @@ public class CharacterInstance
     /// <summary>Optional: Goblin1.png -> Goblin1Thumb.png. Falls back to the full sprite.</summary>
     public string ThumbPath => $"{Folder}/{System.IO.Path.GetFileNameWithoutExtension(SpriteFile)}Thumb.png";
 
-    public CharacterInstance Clone() => (CharacterInstance)MemberwiseClone();
+    public CharacterInstance Clone()
+    {
+        var copy = (CharacterInstance)MemberwiseClone();
+        copy.Burns = new List<int>(Burns);   // don't share the stack list with the original
+        return copy;
+    }
 }
 
 /// <summary>

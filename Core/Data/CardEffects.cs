@@ -24,7 +24,10 @@ public static class Effects
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
     public const int BurnDamagePerStack = 5;
 
-    /// <summary>How many of the victim's turns a fresh application of Burning lasts.</summary>
+    /// <summary>
+    /// How many of the victim's turns one stack of Burning lasts. Each stack
+    /// runs its own clock, so stacking never extends the ones already alight.
+    /// </summary>
     public const int BurnTurns = 2;
 
     public static bool IsKnown(string name) =>

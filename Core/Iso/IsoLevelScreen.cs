@@ -926,8 +926,9 @@ public class IsoLevelScreen : IScreen
             {
                 if (effect.Is(Data.Effects.Burning))
                 {
-                    c.BurningStacks += effect.Amount;
-                    c.BurningTurns = Data.Effects.BurnTurns;   // a fresh stack refreshes the timer
+                    // each stack starts its own 2-turn life; existing ones are untouched
+                    for (int i = 0; i < effect.Amount; i++)
+                        c.Burns.Add(Data.Effects.BurnTurns);
                     report.AppendLine(_ctx.Strings.Format("iso_burning",
                         ("name", c.Name), ("stacks", c.BurningStacks.ToString())));
                 }
@@ -941,15 +942,25 @@ public class IsoLevelScreen : IScreen
         }
     }
 
-    /// <summary>Burning bites at the victim's own turn start. Returns false if it killed them.</summary>
+    /// <summary>
+    /// Burning bites at the victim's own turn start: every live stack deals its
+    /// damage, then each stack ages independently and the spent ones go out.
+    /// Returns false if the fire killed them.
+    /// </summary>
     private bool BurnAtTurnStart(CharacterInstance c)
     {
-        if (c.BurningStacks <= 0) return true;
+        if (c.Burns.Count == 0) return true;
         var report = new StringBuilder();
-        ApplyHit(c, c.BurningStacks * Data.Effects.BurnDamagePerStack, "Fire", report);
-        c.BurningTurns--;
-        if (c.BurningTurns <= 0) { c.BurningStacks = 0; report.AppendLine(
-            _ctx.Strings.Format("iso_burn_out", ("name", c.Name))); }
+        ApplyHit(c, c.Burns.Count * Data.Effects.BurnDamagePerStack, "Fire", report);
+
+        int before = c.Burns.Count;
+        for (int i = 0; i < c.Burns.Count; i++) c.Burns[i]--;
+        c.Burns.RemoveAll(turns => turns <= 0);
+        if (c.Burns.Count < before)
+            report.AppendLine(_ctx.Strings.Format("iso_burn_out",
+                ("name", c.Name), ("gone", (before - c.Burns.Count).ToString()),
+                ("left", c.Burns.Count.ToString())));
+
         Toast(report.ToString().TrimEnd());
         return c.Alive;
     }

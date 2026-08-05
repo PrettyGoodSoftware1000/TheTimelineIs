@@ -70,8 +70,10 @@ tactics test**: Title -> party select -> world map -> the destination opens
 - **Effects** (`Effects: Burning 1, Armor 5`) are shared behaviour any card
   can carry:
   - `Burning N` — N stacks; each stack burns the victim for 5 at the **start
-    of their turn**, for 2 turns. Stacks add up and a fresh one refreshes the
-    timer. Burning shows as flames on the health bar.
+    of their turn**, for 2 of their turns. **Stacks are independent**: one
+    applied later expires later, and adding a stack never extends the ones
+    already alight. Lighting a second stack a turn after the first gives
+    5, 10, 5, then nothing. Burning shows as flames on the health bar.
   - `Armor N` — soaks damage before health does, shown as a metallic grey
     extension of the bar (10 health + 5 armour makes the grey a third of it).
     6 damage against 5 armour strips the armour and takes 1 off health.
