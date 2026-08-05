@@ -19,7 +19,7 @@ public static class ContentValidator
     {
         var diag = Diagnostics.Current;
         ValidateCards(cards, classes, diag);
-        ValidateRoster(classes, diag);
+        ValidateRoster(classes, cards, diag);
         ValidateEnemies(enemies, diag);
         ValidateLevels(enemies, diag);
         ValidateStrings(strings, diag);
@@ -65,6 +65,18 @@ public static class ContentValidator
                         $"'{card.Name}': carries Armor and damage, so it aims at enemies " +
                         "and will armour whatever it hits");
             }
+            // a form-gated card must name a form some class that can play it actually has
+            var owners = classes.ClassNames
+                .Where(n => classes.CardTagsFor(n).Intersect(card.Tags, StringComparer.OrdinalIgnoreCase).Any())
+                .Select(n => classes.Get(n)!).ToList();
+            if (card.Form.Length > 0 && owners.Count > 0 && owners.All(o => o.FindForm(card.Form) == null))
+                diag.Error(CardLibrary.Path, card.Line,
+                    $"'{card.Name}': needs form '{card.Form}', which no class holding its tags declares");
+            if (card.BecomesForm is string becomes && owners.Count > 0 &&
+                owners.All(o => o.FindForm(becomes) == null))
+                diag.Error(CardLibrary.Path, card.Line,
+                    $"'{card.Name}': changes into form '{becomes}', which no class holding its tags declares");
+
             if (card.Delivery == Delivery.Cone && card.Kind != CardKind.AoEDamage)
                 diag.Warn(CardLibrary.Path, card.Line,
                     $"'{card.Name}': a [cone] card should be 'AoE damage' — the cone is its area");
@@ -82,7 +94,7 @@ public static class ContentValidator
                 $"'{owner}': {field} '{file}' is not a .wav — only PCM WAV can be played");
     }
 
-    private static void ValidateRoster(ClassLibrary classes, Diagnostics diag)
+    private static void ValidateRoster(ClassLibrary classes, CardLibrary cards, Diagnostics diag)
     {
         if (classes.ClassNames.Count == 0)
             diag.Error(ClassLibrary.Path, 0, "no classes declared, so the party picker is empty");
@@ -90,6 +102,13 @@ public static class ContentValidator
         foreach (var name in classes.ClassNames)
         {
             var cls = classes.Get(name)!;
+            // every form needs a card that can leave it, or the shape is a trap
+            foreach (var form in cls.Forms)
+                if (!cards.All.Any(c => c.BecomesForm != null &&
+                        c.Tags.Intersect(classes.CardTagsFor(name), StringComparer.OrdinalIgnoreCase).Any() &&
+                        (c.Form.Length == 0 || c.Form.Equals(form.Name, StringComparison.OrdinalIgnoreCase))))
+                    diag.Warn(ClassLibrary.Path, cls.Line,
+                        $"class '{name}': form '{form.Name}' has no card that changes out of it");
             foreach (var sprite in cls.SpriteFiles)
                 if (!AssetLoader.Exists($"{cls.Folder}/{sprite}"))
                     diag.Error(ClassLibrary.Path, cls.Line,
@@ -225,6 +244,7 @@ public static class ContentValidator
             "iso_move_spent", "iso_pick_target", "iso_confirm_strike", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
+            "iso_cursed", "iso_form",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

@@ -4,7 +4,10 @@ using System.Linq;
 
 namespace TheTimelineIs.Core.Data;
 
-/// <summary>One playable class: stats and sprites in a single Classes.txt block.</summary>
+/// <summary>A shape a class can wear: its own name and its own art.</summary>
+public record ClassForm(string Name, string Sprite);
+
+/// <summary>One playable class: stats, sprites and forms in a Classes.txt block.</summary>
 public class PlayerClass
 {
     public string Name = "";
@@ -12,11 +15,26 @@ public class PlayerClass
     public int Movement = 5;
     public List<string> Sprites = new();   // defaults to {Name}.png
     public List<string> CardTags = new();  // defaults to the class's own name
+    /// <summary>Declared with "Form: Name, Art.png". The first one is where the class starts.</summary>
+    public List<ClassForm> Forms = new();
     public int Line;
 
     public string Folder => $"Content/Cast/PlayerCharacters/{Name}";
+
+    /// <summary>Sprites the class can wear: its forms' art, or its plain sprite list.</summary>
     public IReadOnlyList<string> SpriteFiles =>
-        Sprites.Count > 0 ? Sprites : new List<string> { $"{Name}.png" };
+        Forms.Count > 0 ? Forms.Select(f => f.Sprite).ToList()
+        : Sprites.Count > 0 ? Sprites
+        : new List<string> { $"{Name}.png" };
+
+    public string StartingForm => Forms.Count > 0 ? Forms[0].Name : "";
+
+    public ClassForm? FindForm(string name) =>
+        Forms.FirstOrDefault(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Art for a form, falling back to the class's first sprite.</summary>
+    public string SpriteForForm(string form) =>
+        FindForm(form)?.Sprite ?? SpriteFiles[0];
 }
 
 /// <summary>
@@ -28,6 +46,9 @@ public class PlayerClass
 ///   Movement: 8
 ///   Sprites: Dirtbag.png            (optional; defaults to {Name}.png)
 ///   Card Tags: Dirtbag, 'Mancer     (optional; defaults to the class name)
+///   Form: Werewolf, Wolf.png        (optional, repeatable; the first is the
+///                                    starting form. Cards with a matching
+///                                    "Form:" line only appear in that form.)
 /// </summary>
 public class ClassLibrary
 {
@@ -92,6 +113,17 @@ public class ClassLibrary
                     break;
                 case "sprites":
                     current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                    break;
+                case "form":
+                    // "Form: Werewolf, WerewitchWerewolf.png"
+                    var bits = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (bits.Length < 2)
+                        diag.Error(Path, lineNo,
+                            $"'{current.Name}': Form needs a name and an image, e.g. 'Form: Witch, Witch.png'");
+                    else if (current.Forms.Exists(f => f.Name.Equals(bits[0], StringComparison.OrdinalIgnoreCase)))
+                        diag.Warn(Path, lineNo, $"'{current.Name}': form '{bits[0]}' is declared twice");
+                    else
+                        current.Forms.Add(new ClassForm(bits[0], bits[1]));
                     break;
                 case "card tags":
                     current.CardTags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();

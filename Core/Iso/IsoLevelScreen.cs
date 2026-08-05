@@ -144,7 +144,10 @@ public class IsoLevelScreen : IScreen
                 Name = names[i],
                 OccurrenceIndex = _party.Count(p => p.Name.Equals(names[i], StringComparison.OrdinalIgnoreCase)),
                 IsPlayer = true,
-                SpriteFile = PickSprite(cls?.SpriteFiles, names[i], _party),
+                SpriteFile = cls is { Forms.Count: > 0 }
+                    ? cls.SpriteForForm(cls.StartingForm)
+                    : PickSprite(cls?.SpriteFiles, names[i], _party),
+                Form = cls?.StartingForm ?? "",
                 MaxHp = cls?.Hp ?? 20,
                 Hp = cls?.Hp ?? 20,
                 MoveMax = cls?.Movement ?? 5,
@@ -407,7 +410,7 @@ public class IsoLevelScreen : IScreen
         if (current.IsPlayer)
         {
             _playedCard = false;
-            _hand = _ctx.Cards.HandFor(_ctx.Classes.CardTagsFor(current.Name));
+            _hand = _ctx.Cards.HandFor(_ctx.Classes.CardTagsFor(current.Name), current.Form);
             _mode = Mode.PlayerTurn;
         }
         else
@@ -432,8 +435,10 @@ public class IsoLevelScreen : IScreen
         _rangeSet = new HashSet<Point>();
         if (mover == null) return;
 
-        int budget = _mode == Mode.Explore ? 9999 : mover.MovePoints;
-        _moveSet = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed, OccupiedExcept(mover)).Cost;
+        // a Leap card reaches further and vaults terrain while closing in
+        int budget = _mode == Mode.Explore ? 9999 : mover.MovePoints + (card?.LeapBonus ?? 0);
+        _moveSet = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed,
+            OccupiedExcept(mover), card?.IgnoresHeight ?? false).Cost;
         if (card == null || _mode == Mode.Explore) return;
 
         // every tile the card could strike from anywhere the mover can stand
@@ -619,10 +624,11 @@ public class IsoLevelScreen : IScreen
         BeginWalk(mover, tile, null);
     }
 
-    private void BeginWalk(CharacterInstance mover, Point goal, Action? after)
+    private void BeginWalk(CharacterInstance mover, Point goal, Action? after, Card? via = null)
     {
-        int budget = _mode == Mode.Explore ? 9999 : mover.MoveMax;
-        var (_, parent) = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed, OccupiedExcept(mover));
+        int budget = _mode == Mode.Explore ? 9999 : mover.MoveMax + (via?.LeapBonus ?? 0);
+        var (_, parent) = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed,
+            OccupiedExcept(mover), via?.IgnoresHeight ?? false);
         _walker = mover;
         _walkFrom = Tile(mover);
         _walkPath = Pathfinder.PathTo(parent, _walkFrom, goal);
@@ -640,9 +646,17 @@ public class IsoLevelScreen : IScreen
                 if (_playedCard) { Toast(_ctx.Strings.Get("iso_card_spent")); return true; }
                 _selectedCard = _hand[i];
                 _targets.Clear();
+                _armedTile = null;
                 _approach = null;
-                _mode = Mode.PlayerTarget;
                 _overlayKey = null;
+                // a pure self-cast (changing shape) has nothing to aim at
+                if (_selectedCard.Damage <= 0 &&
+                    _selectedCard.Effects.All(e => Data.Effects.IsSelfCast(e.Name)))
+                {
+                    PlayCard(new List<CharacterInstance>(), Tile(Current!));
+                    return true;
+                }
+                _mode = Mode.PlayerTarget;
                 return true;
             }
         return false;
@@ -747,7 +761,7 @@ public class IsoLevelScreen : IScreen
             return;
         }
         me.MovePoints -= _moveSet.TryGetValue(square.Value, out int c) ? c : 0;
-        BeginWalk(me, square.Value, () => PlayCard(shots, aimTile));
+        BeginWalk(me, square.Value, () => PlayCard(shots, aimTile), card);
     }
 
     private bool HitButton(Point press)
@@ -844,7 +858,9 @@ public class IsoLevelScreen : IScreen
         var report = new StringBuilder();
         var struck = _victims.Where(v => v.Alive).ToList();
         foreach (var v in struck)
-            ApplyHit(v, dmg, card.DamageType, report);
+            // a curse makes every melee blow land harder on its victim
+            ApplyHit(v, dmg + (card.Delivery == Delivery.Melee ? v.CurseBonus : 0),
+                card.DamageType, report);
 
         _hitIndex++;
         bool lastBlow = _hitIndex >= card.HitEvents.Count;
@@ -911,15 +927,21 @@ public class IsoLevelScreen : IScreen
     {
         foreach (var effect in card.Effects)
         {
-            if (effect.Is(Data.Effects.Nimble))
+            if (Data.Effects.IsSelfCast(effect.Name))
             {
-                // Nimble hands movement back to the caster, not to the victims
-                if (_actor != null)
+                if (_actor == null) continue;
+                if (effect.Is(Data.Effects.Nimble))
                 {
+                    // Nimble hands movement back to the caster, not to the victims
                     _actor.MovePoints += effect.Amount;
                     report.AppendLine(_ctx.Strings.Format("iso_nimble",
                         ("name", _actor.Name), ("points", effect.Amount.ToString())));
                 }
+                else if (effect.Is(Data.Effects.Form))
+                {
+                    ChangeForm(_actor, effect.Text, report);
+                }
+                // Leap already did its work when the approach was planned
                 continue;
             }
             foreach (var c in hit.Where(c => c.Alive))
@@ -938,10 +960,33 @@ public class IsoLevelScreen : IScreen
                     report.AppendLine(_ctx.Strings.Format("iso_armored",
                         ("name", c.Name), ("armor", c.Armor.ToString())));
                 }
+                else if (effect.Is(Data.Effects.Curse))
+                {
+                    // like burning, each curse keeps its own clock
+                    c.Curses.Add((effect.Amount, Data.Effects.CurseTurns));
+                    report.AppendLine(_ctx.Strings.Format("iso_cursed",
+                        ("name", c.Name), ("bonus", c.CurseBonus.ToString())));
+                }
             }
         }
     }
 
+    /// <summary>Swaps a shapeshifter's shape, and with it the cards in its hand.</summary>
+    private void ChangeForm(CharacterInstance who, string form, StringBuilder report)
+    {
+        var cls = _ctx.Classes.Get(who.Name);
+        if (cls?.FindForm(form) is not ClassForm target)
+        {
+            _ctx.ReportProblem(ClassLibrary.Path,
+                $"'{who.Name}' has no form called '{form}', so the card could not change shape");
+            return;
+        }
+        who.Form = target.Name;
+        who.SpriteFile = target.Sprite;
+        if (who == Current)
+            _hand = _ctx.Cards.HandFor(_ctx.Classes.CardTagsFor(who.Name), who.Form);
+        report.AppendLine(_ctx.Strings.Format("iso_form", ("name", who.Name), ("form", target.Name)));
+    }
     /// <summary>
     /// Burning bites at the victim's own turn start: every live stack deals its
     /// damage, then each stack ages independently and the spent ones go out.
@@ -949,6 +994,13 @@ public class IsoLevelScreen : IScreen
     /// </summary>
     private bool BurnAtTurnStart(CharacterInstance c)
     {
+        // curses tick down on their victim's turn too, independently of each other
+        if (c.Curses.Count > 0)
+        {
+            for (int i = 0; i < c.Curses.Count; i++)
+                c.Curses[i] = (c.Curses[i].Amount, c.Curses[i].Turns - 1);
+            c.Curses.RemoveAll(x => x.Turns <= 0);
+        }
         if (c.Burns.Count == 0) return true;
         var report = new StringBuilder();
         ApplyHit(c, c.Burns.Count * Data.Effects.BurnDamagePerStack, "Fire", report);
@@ -1180,6 +1232,10 @@ public class IsoLevelScreen : IScreen
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, barW, 3), Color.Black * 0.5f);
         Ui.DrawTextCentered(batch, _ctx.Font,
             c.Armor > 0 ? $"{c.Hp}+{c.Armor}" : c.Hp.ToString(), back, Color.White, 0.26f);
+
+        if (c.CurseBonus > 0)
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(back.X, back.Bottom + 3, barW, 6), new Color(150, 60, 200));
 
         // burning: one flame per stack, sitting on the bar
         if (c.BurningStacks > 0)

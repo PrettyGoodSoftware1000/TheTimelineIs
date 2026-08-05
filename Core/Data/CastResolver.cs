@@ -56,6 +56,15 @@ public class CharacterInstance
     /// <summary>Soaks damage before health does, and shows grey on the bar.</summary>
     public int Armor;
 
+    /// <summary>One entry per curse: extra melee damage taken, and its own remaining turns.</summary>
+    public List<(int Amount, int Turns)> Curses = new();
+
+    /// <summary>Extra damage this character takes from melee cards right now.</summary>
+    public int CurseBonus => Curses.Sum(c => c.Amount);
+
+    /// <summary>Which shape a shapeshifter currently wears; blank for everyone else.</summary>
+    public string Form = "";
+
     public string Folder => IsPlayer
         ? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";
@@ -66,7 +75,8 @@ public class CharacterInstance
     public CharacterInstance Clone()
     {
         var copy = (CharacterInstance)MemberwiseClone();
-        copy.Burns = new List<int>(Burns);   // don't share the stack list with the original
+        copy.Burns = new List<int>(Burns);   // don't share the stack lists with the original
+        copy.Curses = new List<(int, int)>(Curses);
         return copy;
     }
 }

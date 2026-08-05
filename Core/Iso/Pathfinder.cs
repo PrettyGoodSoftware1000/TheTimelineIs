@@ -38,7 +38,8 @@ public static class Pathfinder
     /// </summary>
     public static (Dictionary<Point, int> Cost, Dictionary<Point, Point> Parent) Reachable(
         LevelData level, Point from, int budget,
-        IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied)
+        IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied,
+        bool ignoreHeight = false)
     {
         var cost = new Dictionary<Point, int> { [from] = 0 };
         var parent = new Dictionary<Point, Point>();
@@ -55,7 +56,8 @@ public static class Pathfinder
                 var next = new Point(here.X + dx, here.Y + dy);
                 if (!Standable(level, next, revealedRooms) || occupied.Contains(next)) continue;
 
-                int rise = (level.BlockAt(next)?.Height ?? 0) - hereHeight;
+                // a Leap goes over terrain: no climb cost, no height limit
+                int rise = ignoreHeight ? 0 : (level.BlockAt(next)?.Height ?? 0) - hereHeight;
                 if (rise > MaxStepUpFeet) continue;
                 int total = c + stepCost + Math.Max(0, rise);   // climbing costs 1 per foot; drops are free
                 if (total > budget) continue;

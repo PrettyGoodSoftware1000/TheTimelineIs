@@ -32,7 +32,16 @@
 #                    Armor N   - adds N armour, which soaks damage before
 #                                health does and shows grey on the bar.
 #                    Nimble N  - the CASTER may move N more spaces after
-#                                playing this card.)
+#                                playing this card.
+#                    Leap N    - the approach move for THIS card reaches N
+#                                further and ignores height entirely.
+#                    Curse N   - the victim takes N extra damage from melee
+#                                cards, for 10 of their turns. Curses stack
+#                                and each keeps its own clock.
+#                    Form X    - the caster changes into their form X, which
+#                                swaps their art and their available cards.)
+# Form:           (Optional. The card only appears while its owner wears this
+#                  form - see the class's "Form:" lines in Classes.txt.)
 # Explosion Range:(AoE cards only: blast radius in tiles around the impact
 #                  point. Separate from Range, which is only how far the card
 #                  reaches. Shown as a purple area while aiming.)
@@ -148,4 +157,71 @@ Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 5 damage.
 Card Text: Throw a knife for 5 Stabby damage.
 Bottom Right: 5 Stabby
+[]
+
+[]
+Card Name: Claw 'Em
+Tags: Werewitch
+Form: Werewolf
+Type: [melee] Single target, X hits.
+Effects: Leap 5
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 12
+Melee Time: 0.3
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 8 damage.
+Card Text: Leap 5 further, over anything in the way, and rake for 8.
+Bottom Right: 8 Stabby
+[]
+
+[]
+Card Name: Witch Form
+Tags: Werewitch
+Form: Werewolf
+Type: [ranged] Single target, X hits.
+Effects: Form Witch
+Range: 1
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Stand up on two legs. The claws go away; the curses come out.
+Bottom Right: 0 Change
+[]
+
+[]
+Card Name: Wolf Form
+Tags: Werewitch
+Form: Witch
+Type: [ranged] Single target, X hits.
+Effects: Form Werewolf, Nimble 5
+Range: 1
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Drop back onto four legs and keep running - 5 more spaces.
+Bottom Right: 0 Change
+[]
+
+[]
+Card Name: Curse
+Tags: Werewitch
+Form: Witch
+Type: [ranged] Single target, X hits.
+Effects: Curse 3
+Range: 6
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Mark one of them. Melee hits them for 3 more, for 10 turns.
+Bottom Right: 0 Cursed
 []

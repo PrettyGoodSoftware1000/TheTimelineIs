@@ -69,8 +69,14 @@ public class Card
     public int ExplosionRange;
     public List<HitEvent> HitEvents = new();
 
-    /// <summary>Effects this card applies to whatever it hits, e.g. Burning 1, Armor 5.</summary>
+    /// <summary>Effects this card applies, e.g. Burning 1, Armor 5, Form Witch.</summary>
     public List<CardEffect> Effects = new();
+
+    /// <summary>
+    /// Only playable while its owner is in this form; blank means any form.
+    /// Forms are declared per class in Classes.txt.
+    /// </summary>
+    public string Form = "";
 
     /// <summary>Cone and blast cards paint an area, so they can be aimed at bare ground.</summary>
     public bool TargetsGround => Kind == CardKind.AoEDamage || Delivery == Delivery.Cone;
@@ -81,6 +87,15 @@ public class Card
     private static bool Effects_IsFriendly(CardEffect e) => Data.Effects.IsFriendly(e.Name);
 
     public CardEffect? EffectNamed(string name) => Effects.Find(e => e.Is(name));
+
+    /// <summary>Extra approach range this card grants while closing in (Leap).</summary>
+    public int LeapBonus => EffectNamed(Data.Effects.Leap)?.Amount ?? 0;
+
+    /// <summary>Leaping ignores how far up or down the ground goes.</summary>
+    public bool IgnoresHeight => LeapBonus > 0;
+
+    /// <summary>The form this card changes its caster into, if any.</summary>
+    public string? BecomesForm => EffectNamed(Data.Effects.Form)?.Text is { Length: > 0 } f ? f : null;
 
     /// <summary>Total damage per target, split across the hit sequence.</summary>
     public int DamagePerTarget => Kind == CardKind.SingleTargetHits ? Damage * Hits : Damage;
@@ -127,7 +142,7 @@ public class CardLibrary
     {
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
-        "explosion range", "effects", "effect", "speed", "range", "tags", "type", "sounds",
+        "explosion range", "effects", "effect", "speed", "range", "form", "tags", "type", "sounds",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
@@ -270,6 +285,10 @@ public class CardLibrary
                 ApplyEffects(card, value, lineNo, diag);
                 break;
 
+            case "form":
+                card.Form = value;
+                break;
+
             case "explosion range":
                 if (int.TryParse(value, out int blast) && blast > 0) card.ExplosionRange = blast;
                 else diag.Error(CardLibrary.Path, lineNo,
@@ -368,22 +387,30 @@ public class CardLibrary
         card.Effects = new List<CardEffect>();
         foreach (var raw in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            var m = Regex.Match(raw, @"^([A-Za-z'\- ]+?)\s*\[?\s*(\d+)?\s*\]?$");
-            if (!m.Success)
-            {
-                diag.Error(CardLibrary.Path, lineNo, $"'{card.Name}': unreadable effect '{raw}'");
-                continue;
-            }
-            string name = m.Groups[1].Value.Trim();
-            int amount = m.Groups[2].Success ? int.Parse(m.Groups[2].Value) : 1;
-            if (!Data.Effects.IsKnown(name))
+            string entry = raw.Replace("[", " ").Replace("]", " ").Trim();
+            // the effect name leads; whatever follows is a number, or a word for Form
+            string? name = Data.Effects.Known.FirstOrDefault(k =>
+                entry.StartsWith(k, StringComparison.OrdinalIgnoreCase));
+            if (name == null)
             {
                 diag.Error(CardLibrary.Path, lineNo,
-                    $"'{card.Name}': unknown effect '{name}' — known effects are " +
+                    $"'{card.Name}': unknown effect '{raw}' — known effects are " +
                     string.Join(", ", Data.Effects.Known));
                 continue;
             }
-            card.Effects.Add(new CardEffect(name, amount));
+            string rest = entry[name.Length..].Trim();
+            if (Data.Effects.TakesText(name))
+            {
+                if (rest.Length == 0)
+                    diag.Error(CardLibrary.Path, lineNo, $"'{card.Name}': '{name}' needs a name after it");
+                else
+                    card.Effects.Add(new CardEffect(name, 1, rest));
+                continue;
+            }
+            if (rest.Length == 0) card.Effects.Add(new CardEffect(name, 1));
+            else if (int.TryParse(rest, out int amount)) card.Effects.Add(new CardEffect(name, amount));
+            else diag.Error(CardLibrary.Path, lineNo,
+                $"'{card.Name}': effect '{name}' wants a number, got '{rest}'");
         }
     }
 
@@ -451,4 +478,14 @@ public class CardLibrary
     /// <summary>Cards a class can play: any tag the class carries appears in the card's Tags.</summary>
     public List<Card> HandFor(IReadOnlyList<string> classTags) =>
         All.Where(c => c.Tags.Intersect(classTags, StringComparer.OrdinalIgnoreCase).Any()).ToList();
+
+    /// <summary>
+    /// The same, narrowed to a character's current form: a card with a Form
+    /// line only shows while its owner wears that form, so the Werewitch's
+    /// claws and curses never sit in the hand together.
+    /// </summary>
+    public List<Card> HandFor(IReadOnlyList<string> classTags, string form) =>
+        HandFor(classTags)
+            .Where(c => c.Form.Length == 0 || c.Form.Equals(form, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 }

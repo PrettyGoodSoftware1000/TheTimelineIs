@@ -14,3 +14,13 @@ Movement: 4
 Class: Cyborg
 HP: 20
 Movement: 5
+
+# A shapeshifter. "Form:" lines give each shape its own art; the first one is
+# where she starts. Cards carrying a matching "Form:" line only appear while
+# she wears that shape, so the wolf's claws and the witch's curses never share
+# a hand.
+Class: Werewitch
+HP: 18
+Movement: 6
+Form: Werewolf, WerewitchWerewolf.png
+Form: Witch, WerewitchWitch.png

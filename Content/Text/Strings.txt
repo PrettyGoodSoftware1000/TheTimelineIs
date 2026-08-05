@@ -77,3 +77,5 @@ iso_burning = {name} is burning ({stacks} stacks).
 iso_burn_out = {gone} stack(s) of fire burn out on {name} ({left} left).
 iso_armored = {name} now has {armor} armour.
 iso_nimble = {name} can still move {points}.
+iso_cursed = {name} is cursed (+{bonus} from melee).
+iso_form = {name} shifts into {form} form.

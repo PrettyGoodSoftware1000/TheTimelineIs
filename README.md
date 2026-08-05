@@ -78,7 +78,18 @@ tactics test**: Title -> party select -> world map -> the destination opens
     extension of the bar (10 health + 5 armour makes the grey a third of it).
     6 damage against 5 armour strips the armour and takes 1 off health.
   - `Nimble N` — the **caster** may move N more spaces after playing the card,
-    instead of the turn ending.
+    instead of the turn ending. Movement always hits 0 when a card is played;
+    Nimble hands some back afterwards, so it's a retreat, not a longer reach.
+  - `Leap N` — the approach move for *that card* reaches N further and ignores
+    height entirely, climbs and drops alike.
+  - `Curse N` — the victim takes N extra damage from **melee** cards for 10 of
+    their turns. Curses stack and each keeps its own clock.
+  - `Form X` — the caster changes into their form X, swapping art and hand.
+- **Forms**: a class may declare `Form: Name, Art.png` lines in `Classes.txt`
+  (first one is where it starts). A card with a matching `Form:` line only
+  appears while its owner wears that shape, so the Werewitch's claws and
+  curses never share a hand. The validator warns about a form with no card
+  that changes out of it.
 - **Cone cards** (`Type: [cone] AoE damage`) spray a wedge from the caster
   toward the aim point, widening with distance and capped by `Range`.
 - **Area cards can be aimed at bare ground**, not just at enemies — click a
