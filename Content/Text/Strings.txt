@@ -69,3 +69,4 @@ iso_move_spent = Card played - no movement left this turn.
 iso_pick_target = Pick a target.
 iso_confirm_strike = Move the mouse to aim, click the target again to strike.
 iso_dialogue_next = click to continue
+iso_pick_more = Pick {count} more target(s).

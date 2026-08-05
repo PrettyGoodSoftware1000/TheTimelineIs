@@ -58,13 +58,20 @@ tactics test**: Title -> party select -> world map -> the destination opens
   starts the fight). Doors open when clicked from beside them, reveal the room
   behind, and enemies see through them.
 - **Cards**: melee cards reach 1 tile; ranged cards default to `Range: 5`
-  (override per card). Hovering or selecting a card paints its reach in red
-  beyond the blue movement area. A **melee** card arms on the first click of a
-  target and shows a yellow approach square beside it — whichever neighbour
-  the mouse is nearest, so hovering west stages the strike from the west — and
-  a second click walks there and attacks. A **ranged** card fires on one
-  click, walking only as far as it must. Right-click cancels the armed card.
-  Health bars sit above each head with the current HP in the middle.
+  (override per card). Hovering or selecting a card paints how far it reaches
+  in red beyond the blue movement area.
+- **Targeting** always takes two clicks. The first click on an enemy arms it
+  and lights every legal approach square in yellow — for melee, the north,
+  east, south and west neighbours the character can afford — with the one the
+  cursor points at picked out brighter. A second click on an armed target
+  walks there and attacks. A card wanting several targets (`Two targets,
+  1 hit.`) collects one per click and fires once it has them all.
+  Right-click cancels.
+- **Blast cards** take `Explosion Range: N`, a radius in tiles around the
+  impact point, kept separate from `Range` (how far it can be thrown). The
+  blast paints purple, following the cursor until a target is locked in, and
+  damages whatever the purple covers — not everything in throwing range.
+- Health bars sit above each head with the current HP in the middle.
 - **Dialogue**: trigger squares painted in the editor (G tool) play a named
   block from `Content/Levels/{Level}Dialogue.txt` the first time anyone steps
   on them. Same `Speaker: text` format as the old mission scripts.

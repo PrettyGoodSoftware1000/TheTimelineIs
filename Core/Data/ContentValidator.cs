@@ -209,6 +209,7 @@ public static class ContentValidator
             "iso_end_turn", "iso_move_left", "iso_out_of_range", "iso_card_spent",
             "iso_door_open", "iso_victory", "iso_card_range",
             "iso_move_spent", "iso_pick_target", "iso_confirm_strike", "iso_dialogue_next",
+            "iso_pick_more",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

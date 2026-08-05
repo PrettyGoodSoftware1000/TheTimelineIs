@@ -24,6 +24,9 @@
 # Casting Time:   ("Use Sound Time" waits exactly as long as the casting
 #                  sound runs; a number waits that many seconds. This is the
 #                  delay before a projectile launches or a walk begins.)
+# Explosion Range:(AoE cards only: blast radius in tiles around the impact
+#                  point. Separate from Range, which is only how far the card
+#                  reaches. Shown as a purple area while aiming.)
 # Speed:          (FEET PER SECOND for the projectile, or for the melee walk
 #                  out and back. The screen is 12 feet tall. Longer distances
 #                  therefore take longer. See the note at the bottom.)
@@ -52,6 +55,7 @@
 Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
+Explosion Range: 3
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.2

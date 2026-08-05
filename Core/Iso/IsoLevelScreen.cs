@@ -19,10 +19,17 @@ namespace TheTimelineIs.Core.Iso;
 ///
 /// A turn is movement THEN a card: reachable tiles show as blue fill with blue
 /// grid lines, and playing a card ends movement for that turn. Hovering or
-/// selecting a card paints its reach in red beyond the blue. A melee card
-/// picks an approach square beside the target — the one nearest the mouse,
-/// shown in yellow — and a second click on the target walks there and strikes.
-/// A ranged card moves only as far as it must and fires. Right-click cancels.
+/// selecting a card paints how far it reaches in red beyond the blue.
+///
+/// Targeting always takes two clicks. The first click on an enemy arms it and
+/// lights every legal approach square in yellow — for melee that is the north,
+/// east, south and west neighbours it can afford — with the one the cursor
+/// points at picked out brighter; a second click on an armed target walks
+/// there and strikes. A card wanting several targets collects one per click
+/// and fires once it has them all. A blast card also paints its explosion
+/// radius in purple, following the cursor until a target is locked in, and
+/// damages whatever that purple covers rather than everything in throwing
+/// range. Right-click cancels.
 ///
 /// Stepping on a trigger square plays its dialogue block once.
 /// </summary>
@@ -52,8 +59,11 @@ public class IsoLevelScreen : IScreen
     private bool _playedCard;
     private List<Card> _hand = new();
     private Card? _selectedCard;
-    private CharacterInstance? _pendingTarget;   // melee: first click arms, second commits
-    private Point? _approach;                    // yellow square we'd move to
+    private readonly List<CharacterInstance> _targets = new();  // armed targets, in click order
+    private Point? _approach;                    // the yellow square we'd actually use
+    private List<Point> _approachOptions = new();// every legal approach square, also yellow
+    private Point? _blastCenter;                 // AoE aim point
+    private HashSet<Point> _blastSet = new();    // purple: tiles the blast would cover
 
     // overlays, recomputed only when the mover, position, or card changes
     private Dictionary<Point, int> _moveSet = new();
@@ -254,10 +264,13 @@ public class IsoLevelScreen : IScreen
 
     private void CancelCard()
     {
-        if (_selectedCard == null && _pendingTarget == null) return;
+        if (_selectedCard == null && _targets.Count == 0) return;
         _selectedCard = null;
-        _pendingTarget = null;
+        _targets.Clear();
         _approach = null;
+        _approachOptions.Clear();
+        _blastCenter = null;
+        _blastSet.Clear();
         _overlayKey = null;
         if (_mode == Mode.PlayerTarget) _mode = Mode.PlayerTurn;
     }
@@ -407,7 +420,8 @@ public class IsoLevelScreen : IScreen
     {
         var mover = ActiveMover;
         var card = _selectedCard ?? HoveredCard();
-        var key = (mover, mover == null ? default : Tile(mover), mover?.MovePoints ?? 0, card, _revealed.Count);
+        var key = (mover, mover == null ? default : Tile(mover), mover?.MovePoints ?? 0,
+            card, _revealed.Count, _targets.Count);
         if (Equals(_overlayKey, key)) return;
         _overlayKey = key;
 
@@ -441,35 +455,71 @@ public class IsoLevelScreen : IScreen
     }
 
     /// <summary>
-    /// The square we'd attack from. Melee picks whichever legal neighbour of
-    /// the target the mouse is nearest, so hovering west of a goblin stages the
-    /// strike from its west side; ranged just takes the cheapest tile in range.
+    /// Recomputes the yellow approach squares and, for a blast card, the purple
+    /// area it would cover. Every legal approach square is shown; the one the
+    /// cursor points at is the one that will be used, so a melee attacker can
+    /// be staged north, east, south or west of its target.
     /// </summary>
     private void UpdateApproach()
     {
         _approach = null;
-        if (_selectedCard == null || _pendingTarget == null || Current == null) return;
-        _approach = ApproachSquare(Current, _pendingTarget, _selectedCard);
+        _approachOptions = new List<Point>();
+        _blastCenter = null;
+        _blastSet = new HashSet<Point>();
+        if (_selectedCard == null || Current == null) return;
+        var card = _selectedCard;
+
+        if (_targets.Count > 0)
+        {
+            _approachOptions = ApproachOptions(Current, _targets, card);
+            _approach = PickApproach(_approachOptions, Tile(_targets[0]), card);
+        }
+
+        if (card.ExplosionRange > 0)
+        {
+            // purple follows the cursor until a target is locked in
+            var center = _targets.Count > 0 ? Tile(_targets[0]) : FindTileAt(_pointer.ToVector2());
+            if (center is Point c && ReachableAim(Current, c, card))
+            {
+                _blastCenter = c;
+                foreach (var block in _level.Blocks.Values)
+                {
+                    if (!_revealed.Contains(block.Room)) continue;
+                    var tile = new Point(block.X, block.Y);
+                    if (IsoMath.GridDistance(tile, c) <= card.ExplosionRange)
+                        _blastSet.Add(tile);
+                }
+            }
+        }
     }
 
-    private Point? ApproachSquare(CharacterInstance me, CharacterInstance target, Card card)
+    /// <summary>Could the card be thrown at this tile from anywhere the caster can stand?</summary>
+    private bool ReachableAim(CharacterInstance me, Point aim, Card card) =>
+        _moveSet.Keys.Append(Tile(me)).Any(s => IsoMath.GridDistance(s, aim) <= card.Range);
+
+    /// <summary>Squares the caster could act from with every chosen target in range.</summary>
+    private List<Point> ApproachOptions(CharacterInstance me, List<CharacterInstance> targets, Card card)
     {
         var here = Tile(me);
-        var there = Tile(target);
-        if (IsoMath.GridDistance(here, there) <= card.Range) return here;   // already in reach
+        bool InRange(Point from) => targets.All(t => IsoMath.GridDistance(from, Tile(t)) <= card.Range);
+        if (InRange(here)) return new List<Point> { here };
+        return _moveSet.Keys.Where(InRange).ToList();
+    }
 
-        var options = _moveSet.Keys
-            .Where(t => IsoMath.GridDistance(t, there) <= card.Range)
-            .ToList();
+    /// <summary>
+    /// Melee takes the option the cursor points at, relative to the target;
+    /// ranged just moves as little as it can.
+    /// </summary>
+    private Point? PickApproach(List<Point> options, Point focus, Card card)
+    {
         if (options.Count == 0) return null;
-
+        int Cost(Point t) => _moveSet.TryGetValue(t, out int c) ? c : 0;
         if (card.Delivery != Delivery.Melee)
-            return options.OrderBy(t => _moveSet[t]).First();               // ranged: move the least
+            return options.OrderBy(Cost).First();
 
-        // melee: the neighbour lying in the direction of the cursor
-        var center = IsoMath.ToScreen(there.X, there.Y, HeightAt(there), Origin);
+        var center = IsoMath.ToScreen(focus.X, focus.Y, HeightAt(focus), Origin);
         var want = _pointer.ToVector2() - center;
-        if (want.LengthSquared() < 1f) return options.OrderBy(t => _moveSet[t]).First();
+        if (want.LengthSquared() < 1f) return options.OrderBy(Cost).First();
         want.Normalize();
 
         return options.OrderByDescending(t =>
@@ -478,7 +528,7 @@ public class IsoLevelScreen : IScreen
             if (dir.LengthSquared() < 1f) return -1f;
             dir.Normalize();
             return Vector2.Dot(dir, want);
-        }).First();
+        }).ThenBy(Cost).First();
     }
 
     // ---------------- input ----------------
@@ -565,7 +615,7 @@ public class IsoLevelScreen : IScreen
             {
                 if (_playedCard) { Toast(_ctx.Strings.Get("iso_card_spent")); return true; }
                 _selectedCard = _hand[i];
-                _pendingTarget = null;
+                _targets.Clear();
                 _approach = null;
                 _mode = Mode.PlayerTarget;
                 _overlayKey = null;
@@ -575,39 +625,63 @@ public class IsoLevelScreen : IScreen
     }
 
     /// <summary>
-    /// Melee arms on the first click and commits on the second, so the yellow
-    /// approach square can be steered with the mouse in between; ranged fires
-    /// straight away, walking only as far as it needs to.
+    /// Two clicks, always. The first click on an enemy arms it — showing the
+    /// yellow approach squares and, for a blast card, the purple area — and a
+    /// second click on an armed target commits. A card wanting several targets
+    /// collects one per click and fires once it has them all.
     /// </summary>
     private void TryTarget(CharacterInstance enemy)
     {
         var card = _selectedCard!;
         var me = Current!;
+        int wanted = TargetsWanted(card);
 
-        if (card.Delivery == Delivery.Melee && _pendingTarget != enemy)
+        if (_targets.Contains(enemy))
         {
-            _pendingTarget = enemy;
-            _approach = ApproachSquare(me, enemy, card);
-            if (_approach == null) Toast(_ctx.Strings.Get("iso_out_of_range"));
+            // clicking an armed target again is the confirm
+            if (_targets.Count >= wanted) Commit(me, card);
+            else Toast(_ctx.Strings.Format("iso_pick_more",
+                ("count", (wanted - _targets.Count).ToString())));
             return;
         }
 
-        _pendingTarget = enemy;
-        var square = ApproachSquare(me, enemy, card);
-        if (square == null)
+        if (_targets.Count >= wanted)
         {
+            // all slots full and this is somebody new: re-aim at them instead
+            _targets.Clear();
+        }
+        _targets.Add(enemy);
+
+        var options = ApproachOptions(me, _targets, card);
+        if (options.Count == 0)
+        {
+            _targets.Remove(enemy);
             Toast(_ctx.Strings.Get("iso_out_of_range"));
             return;
         }
+        if (_targets.Count < wanted)
+            Toast(_ctx.Strings.Format("iso_pick_more", ("count", (wanted - _targets.Count).ToString())));
+    }
 
+    /// <summary>How many enemies this card needs clicked before it can fire.</summary>
+    private int TargetsWanted(Card card) => card.Kind == CardKind.MultiTarget
+        ? Math.Max(1, Math.Min(card.Targets, VisibleEnemies.Count))
+        : 1;
+
+    private void Commit(CharacterInstance me, Card card)
+    {
+        var square = PickApproach(ApproachOptions(me, _targets, card), Tile(_targets[0]), card);
+        if (square == null) { Toast(_ctx.Strings.Get("iso_out_of_range")); return; }
+
+        var aimTile = Tile(_targets[0]);
+        var shots = _targets.ToList();
         if (square.Value == Tile(me))
         {
-            PlayCard(enemy);
+            PlayCard(shots, aimTile);
             return;
         }
         me.MovePoints -= _moveSet.TryGetValue(square.Value, out int c) ? c : 0;
-        var target = enemy;
-        BeginWalk(me, square.Value, () => PlayCard(target));
+        BeginWalk(me, square.Value, () => PlayCard(shots, aimTile));
     }
 
     private bool HitButton(Point press)
@@ -627,18 +701,24 @@ public class IsoLevelScreen : IScreen
 
     // ---------------- card + enemy actions ----------------
 
-    private void PlayCard(CharacterInstance aimed)
+    private void PlayCard(List<CharacterInstance> aimed, Point blastCenter)
     {
         var card = _selectedCard;
         if (card == null) return;
         _actor = Current;
         _actingCard = card;
+        // a blast hits everything inside its own radius of the impact point;
+        // Range only governed how far it could be thrown
         _victims = card.Kind == CardKind.AoEDamage
-            ? VisibleEnemies.Where(e => IsoMath.GridDistance(Tile(_actor!), Tile(e)) <= card.Range).ToList()
-            : new List<CharacterInstance> { aimed };
+            ? VisibleEnemies.Where(e =>
+                IsoMath.GridDistance(Tile(e), blastCenter) <= card.ExplosionRange).ToList()
+            : aimed;
         _selectedCard = null;
-        _pendingTarget = null;
+        _targets.Clear();
         _approach = null;
+        _approachOptions.Clear();
+        _blastCenter = null;
+        _blastSet.Clear();
         _playedCard = true;
         _actor!.MovePoints = 0;      // a card ends this turn's movement
         _overlayKey = null;
@@ -852,10 +932,16 @@ public class IsoLevelScreen : IScreen
                 Fill(batch, tile, block.Height, Color.Blue * 0.2f);
                 Edge(batch, tile, block.Height, new Color(90, 150, 255) * 0.9f);
             }
-            if (_approach == tile)
+            if (_blastSet.Contains(tile))
             {
-                Fill(batch, tile, block.Height, Color.Yellow * 0.35f);
-                Edge(batch, tile, block.Height, Color.Yellow);
+                Fill(batch, tile, block.Height, new Color(170, 70, 255) * 0.3f);
+                Edge(batch, tile, block.Height, new Color(190, 100, 255) * 0.9f);
+            }
+            if (_approachOptions.Contains(tile))
+            {
+                bool chosen = _approach == tile;
+                Fill(batch, tile, block.Height, Color.Yellow * (chosen ? 0.4f : 0.15f));
+                Edge(batch, tile, block.Height, Color.Yellow * (chosen ? 1f : 0.45f));
             }
             if (_level.TriggerAt(tile) is { Fired: false })
                 Edge(batch, tile, block.Height, Color.Violet * 0.8f);
@@ -926,6 +1012,9 @@ public class IsoLevelScreen : IScreen
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Bottom + 6, rect.Width, 8), Color.White);
         if (c == Current && _mode is not (Mode.Explore or Mode.FreeMove))
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Bottom + 6, rect.Width, 8), Color.Gold);
+        if (_targets.Contains(c))
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(rect.X, rect.Y - 74, rect.Width, 12), Color.OrangeRed);
 
         // health bar above the head, with the number in the middle of it
         int barW = Math.Min(190, Math.Max(140, rect.Width));
@@ -1017,10 +1106,17 @@ public class IsoLevelScreen : IScreen
                 if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, EndTurnRect, _ctx.Strings.Get("iso_end_turn"), _tap))
                     NextTurn();
                 if (_mode == Mode.PlayerTarget)
-                    Ui.DrawTextCentered(batch, _ctx.Font,
-                        _ctx.Strings.Get(_pendingTarget != null && _selectedCard?.Delivery == Delivery.Melee
-                            ? "iso_confirm_strike" : "iso_pick_target"),
+                {
+                    int wanted = _selectedCard == null ? 1 : TargetsWanted(_selectedCard);
+                    string prompt =
+                        _targets.Count == 0 ? _ctx.Strings.Get("iso_pick_target")
+                        : _targets.Count < wanted
+                            ? _ctx.Strings.Format("iso_pick_more",
+                                ("count", (wanted - _targets.Count).ToString()))
+                            : _ctx.Strings.Get("iso_confirm_strike");
+                    Ui.DrawTextCentered(batch, _ctx.Font, prompt,
                         new Rectangle(0, 1330, VirtualViewport.Width, 100), Color.OrangeRed, 0.44f);
+                }
                 DrawHand(batch);
                 break;
             case Mode.EnemyTurn:
@@ -1092,7 +1188,10 @@ public class IsoLevelScreen : IScreen
             new Vector2(rect.X + 28 * s, rect.Y + 120 * s), ink * 0.9f,
             0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
 
-        string total = $"{card.TotalDamage(VisibleEnemies.Count)} {card.DamageType}";
+        int hitCount = card.Kind == CardKind.AoEDamage && _blastCenter is Point bc
+            ? VisibleEnemies.Count(e => IsoMath.GridDistance(Tile(e), bc) <= card.ExplosionRange)
+            : VisibleEnemies.Count;
+        string total = $"{card.TotalDamage(hitCount)} {card.DamageType}";
         var size = _ctx.Font.MeasureString(total) * (0.36f * s);
         batch.DrawString(_ctx.Font, total,
             new Vector2(rect.Right - 24 * s - size.X, rect.Bottom - 28 * s - size.Y),
