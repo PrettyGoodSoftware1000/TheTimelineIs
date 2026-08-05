@@ -13,8 +13,11 @@ public enum CardKind
     MultiTarget,      // "Two targets, 1 hit.": pick N targets, one hit each
 }
 
-/// <summary>How the card reaches its target: [melee] walks, [ranged] throws.</summary>
-public enum Delivery { Instant, Melee, Ranged }
+/// <summary>
+/// How the card reaches its target: [melee] walks in, [ranged] throws a
+/// projectile, [cone] sprays a widening wedge from the caster.
+/// </summary>
+public enum Delivery { Instant, Melee, Ranged, Cone }
 
 /// <summary>One blow in a card's hit sequence: wait Delay, play Sound, deal damage.</summary>
 public class HitEvent
@@ -66,6 +69,19 @@ public class Card
     public int ExplosionRange;
     public List<HitEvent> HitEvents = new();
 
+    /// <summary>Effects this card applies to whatever it hits, e.g. Burning 1, Armor 5.</summary>
+    public List<CardEffect> Effects = new();
+
+    /// <summary>Cone and blast cards paint an area, so they can be aimed at bare ground.</summary>
+    public bool TargetsGround => Kind == CardKind.AoEDamage || Delivery == Delivery.Cone;
+
+    /// <summary>A card that only helps (Armor, no damage) is aimed at the party instead.</summary>
+    public bool TargetsAllies => Damage <= 0 && Effects.Exists(e => Effects_IsFriendly(e));
+
+    private static bool Effects_IsFriendly(CardEffect e) => Data.Effects.IsFriendly(e.Name);
+
+    public CardEffect? EffectNamed(string name) => Effects.Find(e => e.Is(name));
+
     /// <summary>Total damage per target, split across the hit sequence.</summary>
     public int DamagePerTarget => Kind == CardKind.SingleTargetHits ? Damage * Hits : Damage;
 
@@ -111,13 +127,13 @@ public class CardLibrary
     {
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
-        "explosion range", "effect", "speed", "range", "tags", "type", "sounds",
+        "explosion range", "effects", "effect", "speed", "range", "tags", "type", "sounds",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
     private static readonly Regex Ints = new(@"\d+");
     private static readonly Regex Decimal = new(@"\d+(?:\.\d+)?");
-    private static readonly Regex DeliveryTag = new(@"\[\s*(melee|ranged)\s*\]", RegexOptions.IgnoreCase);
+    private static readonly Regex DeliveryTag = new(@"\[\s*(melee|ranged|cone)\s*\]", RegexOptions.IgnoreCase);
     private static readonly Regex Bracketed = new(@"\[([^\]]*)\]");
     private static readonly Regex HitToken =
         new(@"\[(?<snd>[^\]]*)\]|delay\s*(?<d>\d+(?:\.\d+)?)", RegexOptions.IgnoreCase);
@@ -197,8 +213,12 @@ public class CardLibrary
                 var delivery = DeliveryTag.Match(value);
                 if (delivery.Success)
                 {
-                    card.Delivery = delivery.Groups[1].Value.Equals("melee", StringComparison.OrdinalIgnoreCase)
-                        ? Delivery.Melee : Delivery.Ranged;
+                    card.Delivery = delivery.Groups[1].Value.ToLowerInvariant() switch
+                    {
+                        "melee" => Delivery.Melee,
+                        "cone" => Delivery.Cone,
+                        _ => Delivery.Ranged,
+                    };
                     value = DeliveryTag.Replace(value, "").Trim();
                 }
                 // "Single Projectile" draws one shot at the player's pick;
@@ -244,6 +264,10 @@ public class CardLibrary
                 if (int.TryParse(value, out int rng) && rng > 0) card.Range = rng;
                 else diag.Error(CardLibrary.Path, lineNo,
                     $"'{card.Name}': Range must be a positive number of tiles, got '{value}'");
+                break;
+
+            case "effects":
+                ApplyEffects(card, value, lineNo, diag);
                 break;
 
             case "explosion range":
@@ -338,6 +362,31 @@ public class CardLibrary
         return events;
     }
 
+    /// <summary>"Burning 1, Armor 5" — each entry is a name and an optional amount (default 1).</summary>
+    private static void ApplyEffects(Card card, string value, int lineNo, Diagnostics diag)
+    {
+        card.Effects = new List<CardEffect>();
+        foreach (var raw in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var m = Regex.Match(raw, @"^([A-Za-z'\- ]+?)\s*\[?\s*(\d+)?\s*\]?$");
+            if (!m.Success)
+            {
+                diag.Error(CardLibrary.Path, lineNo, $"'{card.Name}': unreadable effect '{raw}'");
+                continue;
+            }
+            string name = m.Groups[1].Value.Trim();
+            int amount = m.Groups[2].Success ? int.Parse(m.Groups[2].Value) : 1;
+            if (!Data.Effects.IsKnown(name))
+            {
+                diag.Error(CardLibrary.Path, lineNo,
+                    $"'{card.Name}': unknown effect '{name}' — known effects are " +
+                    string.Join(", ", Data.Effects.Known));
+                continue;
+            }
+            card.Effects.Add(new CardEffect(name, amount));
+        }
+    }
+
     private static void ApplyEffect(Card card, string effect, int lineNo, Diagnostics diag)
     {
         var nums = Ints.Matches(effect).Select(m => int.Parse(m.Value)).ToList();
@@ -375,15 +424,16 @@ public class CardLibrary
     {
         if (c.Range <= 0)
             c.Range = c.Delivery == Delivery.Melee ? 1 : 5;   // melee reaches 1 tile; ranged defaults to 5
-        if (c.Kind == CardKind.AoEDamage && c.ExplosionRange <= 0)
+        if (c.Kind == CardKind.AoEDamage && c.Delivery != Delivery.Cone && c.ExplosionRange <= 0)
         {
             c.ExplosionRange = 1;
             diag.Warn(Path, c.Line, $"'{c.Name}': AoE card has no 'Explosion Range:' line; " +
                 "using 1 tile. Range is only how far it can be thrown.");
         }
 
-        if (c.Damage <= 0)
-            diag.Error(Path, c.Line, $"'{c.Name}': no damage number found in its Effect line");
+        if (c.Damage <= 0 && c.Effects.Count == 0)
+            diag.Error(Path, c.Line,
+                $"'{c.Name}': no damage number in its Effect line, and no Effects to apply either");
         if (c.Tags.Count == 0)
             diag.Error(Path, c.Line, $"'{c.Name}': no Tags, so no class can ever play it");
         if (c.CardText.Length == 0)

@@ -62,8 +62,9 @@ public class IsoLevelScreen : IScreen
     private readonly List<CharacterInstance> _targets = new();  // armed targets, in click order
     private Point? _approach;                    // the yellow square we'd actually use
     private List<Point> _approachOptions = new();// every legal approach square, also yellow
-    private Point? _blastCenter;                 // AoE aim point
-    private HashSet<Point> _blastSet = new();    // purple: tiles the blast would cover
+    private Point? _blastCenter;                 // blast or cone aim point
+    private Point? _armedTile;                   // ground card: the tile locked in by the first click
+    private HashSet<Point> _blastSet = new();    // purple: tiles the area would cover
 
     // overlays, recomputed only when the mover, position, or card changes
     private Dictionary<Point, int> _moveSet = new();
@@ -264,12 +265,13 @@ public class IsoLevelScreen : IScreen
 
     private void CancelCard()
     {
-        if (_selectedCard == null && _targets.Count == 0) return;
+        if (_selectedCard == null && _targets.Count == 0 && _armedTile == null) return;
         _selectedCard = null;
         _targets.Clear();
         _approach = null;
         _approachOptions.Clear();
         _blastCenter = null;
+        _armedTile = null;
         _blastSet.Clear();
         _overlayKey = null;
         if (_mode == Mode.PlayerTarget) _mode = Mode.PlayerTurn;
@@ -401,6 +403,7 @@ public class IsoLevelScreen : IScreen
         var current = Current!;
         current.MovePoints = current.MoveMax;
         _overlayKey = null;
+        if (!BurnAtTurnStart(current)) { NextTurn(); return; }
         if (current.IsPlayer)
         {
             _playedCard = false;
@@ -475,22 +478,33 @@ public class IsoLevelScreen : IScreen
             _approach = PickApproach(_approachOptions, Tile(_targets[0]), card);
         }
 
-        if (card.ExplosionRange > 0)
+        if (card.TargetsGround)
         {
-            // purple follows the cursor until a target is locked in
-            var center = _targets.Count > 0 ? Tile(_targets[0]) : FindTileAt(_pointer.ToVector2());
+            // purple follows the cursor until a tile is locked in
+            var center = _armedTile
+                ?? (_targets.Count > 0 ? Tile(_targets[0]) : FindTileAt(_pointer.ToVector2()));
             if (center is Point c && ReachableAim(Current, c, card))
             {
                 _blastCenter = c;
-                foreach (var block in _level.Blocks.Values)
-                {
-                    if (!_revealed.Contains(block.Room)) continue;
-                    var tile = new Point(block.X, block.Y);
-                    if (IsoMath.GridDistance(tile, c) <= card.ExplosionRange)
-                        _blastSet.Add(tile);
-                }
+                _blastSet = AreaOf(card, Tile(Current), c);
             }
         }
+    }
+
+    /// <summary>The tiles a card's area covers: a cone from the caster, or a blast radius.</summary>
+    private HashSet<Point> AreaOf(Card card, Point from, Point aim)
+    {
+        var set = new HashSet<Point>();
+        foreach (var block in _level.Blocks.Values)
+        {
+            if (!_revealed.Contains(block.Room)) continue;
+            var tile = new Point(block.X, block.Y);
+            bool hit = card.Delivery == Delivery.Cone
+                ? IsoMath.InCone(from, aim, tile, card.Range)
+                : IsoMath.GridDistance(tile, aim) <= card.ExplosionRange;
+            if (hit) set.Add(tile);
+        }
+        return set;
     }
 
     /// <summary>Could the card be thrown at this tile from anywhere the caster can stand?</summary>
@@ -501,6 +515,7 @@ public class IsoLevelScreen : IScreen
     private List<Point> ApproachOptions(CharacterInstance me, List<CharacterInstance> targets, Card card)
     {
         var here = Tile(me);
+        if (card.Delivery == Delivery.Cone) return new List<Point> { here };
         bool InRange(Point from) => targets.All(t => IsoMath.GridDistance(from, Tile(t)) <= card.Range);
         if (InRange(here)) return new List<Point> { here };
         return _moveSet.Keys.Where(InRange).ToList();
@@ -544,14 +559,17 @@ public class IsoLevelScreen : IScreen
         foreach (var c in Everyone.Reverse())
         {
             if (!c.Alive || !SpriteRect(c).Contains(press)) continue;
+            if (_mode == Mode.PlayerTarget && _selectedCard is Card aiming)
+            {
+                if (aiming.TargetsGround) TryTargetGround(Tile(c));
+                else if (c.IsPlayer == aiming.TargetsAllies) TryTarget(c);
+                else Toast(_ctx.Strings.Get(aiming.TargetsAllies ? "iso_needs_ally" : "iso_needs_enemy"));
+                return;
+            }
             if (c.IsPlayer)
             {
                 if (_mode == Mode.Explore) { _selected = c; _overlayKey = null; }
                 else if (_mode == Mode.FreeMove && _freeMovers.Contains(c)) { _selected = c; _overlayKey = null; }
-            }
-            else if (_mode == Mode.PlayerTarget && _selectedCard != null)
-            {
-                TryTarget(c);
             }
             return;
         }
@@ -562,6 +580,12 @@ public class IsoLevelScreen : IScreen
                 LivingParty.Any(p => IsoMath.GridDistance(Tile(p), tile) <= DoorReach))
             {
                 OpenDoor(door);
+                return;
+            }
+            // an area card can be aimed at bare ground, no enemy required
+            if (_mode == Mode.PlayerTarget && _selectedCard is { TargetsGround: true })
+            {
+                TryTargetGround(tile);
                 return;
             }
             HandleTileClick(tile);
@@ -663,9 +687,51 @@ public class IsoLevelScreen : IScreen
             Toast(_ctx.Strings.Format("iso_pick_more", ("count", (wanted - _targets.Count).ToString())));
     }
 
+    /// <summary>
+    /// Ground aiming, for blasts and cones: the first click locks the tile in,
+    /// a second click on the same tile fires. Anything the purple covers is hit.
+    /// </summary>
+    private void TryTargetGround(Point tile)
+    {
+        var card = _selectedCard!;
+        var me = Current!;
+        if (!ReachableAim(me, tile, card)) { Toast(_ctx.Strings.Get("iso_out_of_range")); return; }
+
+        if (_armedTile != tile)
+        {
+            _armedTile = tile;
+            _targets.Clear();
+            _overlayKey = null;
+            return;
+        }
+
+        var options = ApproachOptions(me, new List<CharacterInstance>(), card);
+        var square = card.Delivery == Delivery.Cone
+            ? Tile(me)
+            : _moveSet.Keys.Append(Tile(me))
+                .Where(s2 => IsoMath.GridDistance(s2, tile) <= card.Range)
+                .OrderBy(s2 => _moveSet.TryGetValue(s2, out int c) ? c : 0).FirstOrDefault(Tile(me));
+
+        var area = AreaOf(card, square, tile);
+        if (square == Tile(me)) { PlayArea(area, tile); return; }
+        me.MovePoints -= _moveSet.TryGetValue(square, out int cost) ? cost : 0;
+        var aim = tile;
+        BeginWalk(me, square, () => PlayArea(AreaOf(card, Tile(me), aim), aim));
+    }
+
+    private void PlayArea(HashSet<Point> area, Point aim)
+    {
+        var card = _selectedCard;
+        if (card == null) return;
+        var caught = (card.TargetsAllies ? (IEnumerable<CharacterInstance>)LivingParty : VisibleEnemies)
+            .Where(c => area.Contains(Tile(c))).ToList();
+        PlayCard(caught, aim);
+    }
+
     /// <summary>How many enemies this card needs clicked before it can fire.</summary>
     private int TargetsWanted(Card card) => card.Kind == CardKind.MultiTarget
-        ? Math.Max(1, Math.Min(card.Targets, VisibleEnemies.Count))
+        ? Math.Max(1, Math.Min(card.Targets,
+            card.TargetsAllies ? LivingParty.Count : VisibleEnemies.Count))
         : 1;
 
     private void Commit(CharacterInstance me, Card card)
@@ -707,20 +773,16 @@ public class IsoLevelScreen : IScreen
         if (card == null) return;
         _actor = Current;
         _actingCard = card;
-        // a blast hits everything inside its own radius of the impact point;
-        // Range only governed how far it could be thrown
-        _victims = card.Kind == CardKind.AoEDamage
-            ? VisibleEnemies.Where(e =>
-                IsoMath.GridDistance(Tile(e), blastCenter) <= card.ExplosionRange).ToList()
-            : aimed;
+        _victims = aimed;
         _selectedCard = null;
         _targets.Clear();
         _approach = null;
         _approachOptions.Clear();
         _blastCenter = null;
+        _armedTile = null;
         _blastSet.Clear();
         _playedCard = true;
-        _actor!.MovePoints = 0;      // a card ends this turn's movement
+        _actor!.MovePoints = 0;      // a card ends this turn's movement, unless Nimble gives it back
         _overlayKey = null;
 
         _ctx.Sounds.Play(card.CastingSound);
@@ -780,12 +842,17 @@ public class IsoLevelScreen : IScreen
         _ctx.Sounds.Play(_hitIndex < card.HitEvents.Count ? card.HitEvents[_hitIndex].Sound : null);
 
         var report = new StringBuilder();
-        foreach (var v in _victims.Where(v => v.Alive))
+        var struck = _victims.Where(v => v.Alive).ToList();
+        foreach (var v in struck)
             ApplyHit(v, dmg, card.DamageType, report);
-        if (report.Length > 0) Toast(report.ToString().TrimEnd());
 
         _hitIndex++;
-        if (_hitIndex < card.HitEvents.Count)
+        bool lastBlow = _hitIndex >= card.HitEvents.Count;
+        if (lastBlow && card.Effects.Count > 0)
+            ApplyEffects(card, struck, report);
+        if (report.Length > 0) Toast(report.ToString().TrimEnd());
+
+        if (!lastBlow)
         {
             _hitTimer = card.HitEvents[_hitIndex].Delay;
             return;
@@ -800,23 +867,91 @@ public class IsoLevelScreen : IScreen
         _victims.Clear();
         _overlayKey = null;
         if (LivingParty.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
-        // movement is spent, so the turn is over the moment the card resolves
+        // Nimble hands movement back, so the turn continues instead of ending
+        var mover = Current;
+        if (mover != null && mover.IsPlayer && mover.Alive && mover.MovePoints > 0)
+        {
+            _mode = Mode.PlayerTurn;
+            return;
+        }
         NextTurn();
     }
 
+    /// <summary>
+    /// Armor is an extension of health: it soaks damage first and only what's
+    /// left over reaches hit points, so 6 damage against 5 armor strips the
+    /// armor and takes 1 off health.
+    /// </summary>
     private void ApplyHit(CharacterInstance target, int dmg, string type, StringBuilder report)
     {
-        if (dmg <= 0) return;
-        target.Hp -= dmg;
+        if (dmg <= 0 || !target.Alive) return;
         target.ShakeTimer = Formation.ShakeDuration;
-        report.AppendLine(_ctx.Strings.Format("battle_hit",
-            ("target", target.Name), ("dmg", dmg.ToString()), ("type", type)));
-        if (target.Hp <= 0 && target.Alive)
+
+        int soaked = Math.Min(target.Armor, dmg);
+        target.Armor -= soaked;
+        int through = dmg - soaked;
+        target.Hp -= through;
+
+        report.AppendLine(soaked > 0
+            ? _ctx.Strings.Format("iso_hit_armor", ("target", target.Name),
+                ("dmg", through.ToString()), ("type", type), ("soaked", soaked.ToString()))
+            : _ctx.Strings.Format("battle_hit", ("target", target.Name),
+                ("dmg", through.ToString()), ("type", type)));
+
+        if (target.Hp <= 0)
         {
             target.Hp = 0;
             target.Alive = false;
             report.AppendLine(_ctx.Strings.Format("battle_down", ("name", target.Name)));
         }
+    }
+
+    /// <summary>Runs a card's Effects against everything it hit.</summary>
+    private void ApplyEffects(Card card, IEnumerable<CharacterInstance> hit, StringBuilder report)
+    {
+        foreach (var effect in card.Effects)
+        {
+            if (effect.Is(Data.Effects.Nimble))
+            {
+                // Nimble hands movement back to the caster, not to the victims
+                if (_actor != null)
+                {
+                    _actor.MovePoints += effect.Amount;
+                    report.AppendLine(_ctx.Strings.Format("iso_nimble",
+                        ("name", _actor.Name), ("points", effect.Amount.ToString())));
+                }
+                continue;
+            }
+            foreach (var c in hit.Where(c => c.Alive))
+            {
+                if (effect.Is(Data.Effects.Burning))
+                {
+                    c.BurningStacks += effect.Amount;
+                    c.BurningTurns = Data.Effects.BurnTurns;   // a fresh stack refreshes the timer
+                    report.AppendLine(_ctx.Strings.Format("iso_burning",
+                        ("name", c.Name), ("stacks", c.BurningStacks.ToString())));
+                }
+                else if (effect.Is(Data.Effects.Armor))
+                {
+                    c.Armor += effect.Amount;
+                    report.AppendLine(_ctx.Strings.Format("iso_armored",
+                        ("name", c.Name), ("armor", c.Armor.ToString())));
+                }
+            }
+        }
+    }
+
+    /// <summary>Burning bites at the victim's own turn start. Returns false if it killed them.</summary>
+    private bool BurnAtTurnStart(CharacterInstance c)
+    {
+        if (c.BurningStacks <= 0) return true;
+        var report = new StringBuilder();
+        ApplyHit(c, c.BurningStacks * Data.Effects.BurnDamagePerStack, "Fire", report);
+        c.BurningTurns--;
+        if (c.BurningTurns <= 0) { c.BurningStacks = 0; report.AppendLine(
+            _ctx.Strings.Format("iso_burn_out", ("name", c.Name))); }
+        Toast(report.ToString().TrimEnd());
+        return c.Alive;
     }
 
     private void EnemyAct()
@@ -1016,16 +1151,37 @@ public class IsoLevelScreen : IScreen
             Ui.FillRect(batch, _ctx.Pixel,
                 new Rectangle(rect.X, rect.Y - 74, rect.Width, 12), Color.OrangeRed);
 
-        // health bar above the head, with the number in the middle of it
+        // health bar above the head. Armor extends the bar in metallic grey, so
+        // 10 health plus 5 armor makes the grey a third of its width.
         int barW = Math.Min(190, Math.Max(140, rect.Width));
         int barH = 34;
         var back = new Rectangle(rect.X + (rect.Width - barW) / 2, rect.Y - barH - 14, barW, barH);
         Ui.FillRect(batch, _ctx.Pixel, back, Color.Black * 0.72f);
-        int fill = (int)(barW * Math.Clamp(c.Hp / (float)c.MaxHp, 0f, 1f));
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, fill, barH),
+
+        int span = Math.Max(1, c.MaxHp + c.Armor);
+        int hpW = (int)(barW * Math.Clamp(c.Hp / (float)span, 0f, 1f));
+        int armW = (int)(barW * Math.Clamp(c.Armor / (float)span, 0f, 1f));
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, hpW, barH),
             c.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
+        if (armW > 0)
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, armW, barH),
+                new Color(168, 172, 180));
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, barW, 3), Color.Black * 0.5f);
-        Ui.DrawTextCentered(batch, _ctx.Font, c.Hp.ToString(), back, Color.White, 0.26f);
+        Ui.DrawTextCentered(batch, _ctx.Font,
+            c.Armor > 0 ? $"{c.Hp}+{c.Armor}" : c.Hp.ToString(), back, Color.White, 0.26f);
+
+        // burning: one flame per stack, sitting on the bar
+        if (c.BurningStacks > 0)
+        {
+            var flame = _ctx.Assets.LoadTexture("Content/Images/Effects/Flame.png");
+            int fw = barH, gap = fw - 8;
+            for (int i = 0; i < Math.Min(c.BurningStacks, 4); i++)
+                batch.Draw(flame, new Rectangle(back.X - fw + 4 + i * gap, back.Y - 12, fw, fw), Color.White);
+            if (c.BurningStacks > 4)
+                batch.DrawString(_ctx.Font, $"x{c.BurningStacks}",
+                    new Vector2(back.Right + 8, back.Y), Color.Orange,
+                    0f, Vector2.Zero, 0.24f, SpriteEffects.None, 0f);
+        }
     }
 
     private void DrawProjectile(SpriteBatch batch)
@@ -1188,10 +1344,12 @@ public class IsoLevelScreen : IScreen
             new Vector2(rect.X + 28 * s, rect.Y + 120 * s), ink * 0.9f,
             0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
 
-        int hitCount = card.Kind == CardKind.AoEDamage && _blastCenter is Point bc
-            ? VisibleEnemies.Count(e => IsoMath.GridDistance(Tile(e), bc) <= card.ExplosionRange)
+        int hitCount = card.TargetsGround && _blastSet.Count > 0
+            ? VisibleEnemies.Count(e => _blastSet.Contains(Tile(e)))
             : VisibleEnemies.Count;
-        string total = $"{card.TotalDamage(hitCount)} {card.DamageType}";
+        string total = card.Damage <= 0 && card.Effects.Count > 0
+            ? $"+{card.Effects[0].Amount} {card.Effects[0].Name}"
+            : $"{card.TotalDamage(hitCount)} {card.DamageType}";
         var size = _ctx.Font.MeasureString(total) * (0.36f * s);
         batch.DrawString(_ctx.Font, total,
             new Vector2(rect.Right - 24 * s - size.X, rect.Bottom - 28 * s - size.Y),

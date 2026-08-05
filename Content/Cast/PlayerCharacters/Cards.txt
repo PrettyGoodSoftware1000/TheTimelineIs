@@ -24,6 +24,15 @@
 # Casting Time:   ("Use Sound Time" waits exactly as long as the casting
 #                  sound runs; a number waits that many seconds. This is the
 #                  delay before a projectile launches or a walk begins.)
+# Effects:        (Extra things the card does, comma separated, e.g.
+#                  "Burning 1" or "Armor 5". Several cards can share one.
+#                    Burning N - N stacks; each stack burns the victim for 5
+#                                at the START of their turn, for 2 turns.
+#                                Stacks add up and refresh the timer.
+#                    Armor N   - adds N armour, which soaks damage before
+#                                health does and shows grey on the bar.
+#                    Nimble N  - the CASTER may move N more spaces after
+#                                playing this card.)
 # Explosion Range:(AoE cards only: blast radius in tiles around the impact
 #                  point. Separate from Range, which is only how far the card
 #                  reaches. Shown as a purple area while aiming.)
@@ -92,4 +101,50 @@ Hit Sound: [hitbasic.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys for 5 damage.
 Bottom Right: 10 Energy
+[]
+
+[]
+Card Name: Hot Lead
+Tags: Gun-O-Mancer
+Type: [cone] AoE damage
+Range: 3
+Effects: Burning 1
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [FireballCast.wav]
+Effect: AoE 5 stabby damage to enemies
+Card Text: Spray a cone of hot lead. 5 Stabby damage and they catch fire.
+Bottom Right: 5 Stabby
+[]
+
+[]
+Card Name: Reinforce
+Tags: Cyborg
+Type: [ranged] Single target, X hits.
+Range: 5
+Effects: Armor 5
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Bolt a plate onto a friend. Adds 5 Armor.
+Bottom Right: 0 Armor
+[]
+
+[]
+Card Name: Toss-A-Knife
+Tags: Dirtbag
+Type: [ranged] Single target, X hits.
+Range: 5
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 5 damage.
+Card Text: Throw a knife for 5 Stabby damage.
+Bottom Right: 5 Stabby
 []

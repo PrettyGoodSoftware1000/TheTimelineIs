@@ -54,6 +54,20 @@ public static class ContentValidator
 
             if (card.Kind == CardKind.MultiTarget && card.Targets < 1)
                 diag.Error(CardLibrary.Path, card.Line, $"'{card.Name}': needs at least one target");
+
+            foreach (var effect in card.Effects)
+            {
+                if (effect.Amount <= 0)
+                    diag.Error(CardLibrary.Path, card.Line,
+                        $"'{card.Name}': effect '{effect.Name}' needs an amount above 0");
+                if (effect.Is(Effects.Armor) && card.Damage > 0)
+                    diag.Warn(CardLibrary.Path, card.Line,
+                        $"'{card.Name}': carries Armor and damage, so it aims at enemies " +
+                        "and will armour whatever it hits");
+            }
+            if (card.Delivery == Delivery.Cone && card.Kind != CardKind.AoEDamage)
+                diag.Warn(CardLibrary.Path, card.Line,
+                    $"'{card.Name}': a [cone] card should be 'AoE damage' — the cone is its area");
         }
     }
 
@@ -209,7 +223,8 @@ public static class ContentValidator
             "iso_end_turn", "iso_move_left", "iso_out_of_range", "iso_card_spent",
             "iso_door_open", "iso_victory", "iso_card_range",
             "iso_move_spent", "iso_pick_target", "iso_confirm_strike", "iso_dialogue_next",
-            "iso_pick_more",
+            "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
+            "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

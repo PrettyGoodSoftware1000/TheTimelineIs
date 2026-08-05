@@ -42,6 +42,14 @@ public class CharacterInstance
     public int RangeTiles = 1;
     public string? AttackSound;
 
+    // --- status effects ---
+    /// <summary>Each stack burns for Effects.BurnDamagePerStack at this character's turn start.</summary>
+    public int BurningStacks;
+    /// <summary>Turns of burning left; a fresh application refreshes it.</summary>
+    public int BurningTurns;
+    /// <summary>Soaks damage before health does, and shows grey on the bar.</summary>
+    public int Armor;
+
     public string Folder => IsPlayer
         ? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";

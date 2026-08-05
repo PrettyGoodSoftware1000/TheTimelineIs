@@ -67,6 +67,20 @@ tactics test**: Title -> party select -> world map -> the destination opens
   walks there and attacks. A card wanting several targets (`Two targets,
   1 hit.`) collects one per click and fires once it has them all.
   Right-click cancels.
+- **Effects** (`Effects: Burning 1, Armor 5`) are shared behaviour any card
+  can carry:
+  - `Burning N` — N stacks; each stack burns the victim for 5 at the **start
+    of their turn**, for 2 turns. Stacks add up and a fresh one refreshes the
+    timer. Burning shows as flames on the health bar.
+  - `Armor N` — soaks damage before health does, shown as a metallic grey
+    extension of the bar (10 health + 5 armour makes the grey a third of it).
+    6 damage against 5 armour strips the armour and takes 1 off health.
+  - `Nimble N` — the **caster** may move N more spaces after playing the card,
+    instead of the turn ending.
+- **Cone cards** (`Type: [cone] AoE damage`) spray a wedge from the caster
+  toward the aim point, widening with distance and capped by `Range`.
+- **Area cards can be aimed at bare ground**, not just at enemies — click a
+  tile to arm it, click again to fire.
 - **Blast cards** take `Explosion Range: N`, a radius in tiles around the
   impact point, kept separate from `Range` (how far it can be thrown). The
   blast paints purple, following the cursor until a target is locked in, and
