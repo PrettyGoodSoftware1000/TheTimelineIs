@@ -42,12 +42,12 @@ public class GameState
     public int RoomIndex;
     public List<CharacterInstance> Instances = new();
 
-    /// <summary>The 3 classes chosen at New Game, in pick order.</summary>
+    /// <summary>The classes chosen at New Game, in pick order.</summary>
     public List<string> Party = new();
 
     /// <summary>Old saves and dev shortcuts have no party — fall back to one of each class.</summary>
     public List<string> PartyOrDefault() =>
-        Party.Count > 0 ? Party : new List<string> { "Dirtbag", "Gun-O-Mancer", "Cyborg" };
+        Party.Count > 0 ? Party : new List<string> { "Dirtbag", "Gun-O-Mancer", "Cyborg", "Werewitch" };
 
     /// <summary>New Game: wipe everything and set the chosen party.</summary>
     public void Reset(List<string> party)

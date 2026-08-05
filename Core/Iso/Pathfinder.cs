@@ -9,8 +9,9 @@ namespace TheTimelineIs.Core.Iso;
 /// <summary>
 /// Grid movement rules in one place. Step cost: orthogonal 1, diagonal 2,
 /// plus 1 per foot of height climbed; more than 4 feet up in one step is
-/// impassable; any drop is free. Closed doors, decorations, characters, and
-/// empty space all block.
+/// impassable; any drop is free. Closed doors, decorations, enemies, and
+/// empty space all block. Friendly characters can be walked through but not
+/// stopped on.
 /// </summary>
 public static class Pathfinder
 {
@@ -39,7 +40,7 @@ public static class Pathfinder
     public static (Dictionary<Point, int> Cost, Dictionary<Point, Point> Parent) Reachable(
         LevelData level, Point from, int budget,
         IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied,
-        bool ignoreHeight = false)
+        bool ignoreHeight = false, IReadOnlySet<Point>? passThrough = null)
     {
         var cost = new Dictionary<Point, int> { [from] = 0 };
         var parent = new Dictionary<Point, Point>();
@@ -54,7 +55,10 @@ public static class Pathfinder
             foreach (var (dx, dy, stepCost) in Steps)
             {
                 var next = new Point(here.X + dx, here.Y + dy);
-                if (!Standable(level, next, revealedRooms) || occupied.Contains(next)) continue;
+                // friends can be squeezed past, but not stood on — see the trim below
+                bool crossable = passThrough != null && passThrough.Contains(next);
+                if (!Standable(level, next, revealedRooms)) continue;
+                if (occupied.Contains(next) && !crossable) continue;
 
                 // a Leap goes over terrain: no climb cost, no height limit
                 int rise = ignoreHeight ? 0 : (level.BlockAt(next)?.Height ?? 0) - hereHeight;
@@ -69,6 +73,9 @@ public static class Pathfinder
             }
         }
         cost.Remove(from);
+        if (passThrough != null)
+            foreach (var tile in passThrough)
+                cost.Remove(tile);   // walked over, never landed on
         return (cost, parent);
     }
 

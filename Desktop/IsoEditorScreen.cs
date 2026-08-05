@@ -18,7 +18,7 @@ namespace TheTimelineIs.Desktop;
 /// Desktop-only; writes Content/Levels/TestLevel.txt in the source tree.
 ///
 ///   1/2/3 .. block palette   B next block type    left click  place
-///   D deco  O door  E enemy  P start  G trigger    right click delete
+///   D deco  O door  E enemy  P start  G trigger    Delete key  erase
 ///   scroll wheel or +/-      placement height (feet)
 ///   R then typing            set current room label (Enter to accept)
 ///   N then typing            set the dialogue name new triggers call
@@ -39,7 +39,6 @@ public class IsoEditorScreen : IScreen
     private string _trigger = "Intro";      // dialogue block a placed trigger calls
     private bool _typingRoom, _typingTrigger;
     private string _roomBuffer = "";
-    private string _pendingDoorRoom = "";   // set on the first door click, consumed on... simpler: doors join _room and typed target
     private Vector2 _camera;
     private Vector2 _origin = new(VirtualViewport.Width / 2f, 500);
     private Point _pointer;
@@ -124,9 +123,11 @@ public class IsoEditorScreen : IScreen
 
         var origin = _origin - _camera;
         if (input.Tap is Point place)
-            Place(IsoMath.ToGrid(place.ToVector2(), origin));
-        if (input.AltTap is Point del)
-            Delete(PickTile(del.ToVector2(), origin) ?? IsoMath.ToGrid(del.ToVector2(), origin));
+            Place(Target(place.ToVector2(), origin).Tile);
+        // right-drag pans the view, so erasing is the Delete key at the cursor
+        if (input.Delete)
+            Delete(PickTile(_pointer.ToVector2(), origin)
+                   ?? IsoMath.ToGrid(_pointer.ToVector2(), origin));
     }
 
     private Point? PickTile(Vector2 screen, Vector2 origin)
@@ -135,6 +136,21 @@ public class IsoEditorScreen : IScreen
             if (IsoMath.HitsTop(screen, b.X, b.Y, b.Height, origin))
                 return new Point(b.X, b.Y);
         return null;
+    }
+
+    /// <summary>
+    /// The cell under the cursor, and the height the cursor square should be
+    /// drawn at. A block goes down at the placement height over the flat grid;
+    /// everything else lands ON an existing block, so it has to pick that
+    /// block's raised top rather than reading the ground plane underneath it.
+    /// </summary>
+    private (Point Tile, int Height) Target(Vector2 screen, Vector2 origin)
+    {
+        var flat = IsoMath.ToGrid(screen, origin);
+        if (_tool == Tool.Block) return (flat, _height);
+        if (PickTile(screen, origin) is Point picked)
+            return (picked, _level.BlockAt(picked)?.Height ?? 0);
+        return (flat, 0);
     }
 
     private void Place(Point tile)
@@ -172,7 +188,7 @@ public class IsoEditorScreen : IScreen
             case Tool.PlayerStart when _level.BlockAt(tile) != null:
                 _level.PlayerStarts.Remove(tile);
                 _level.PlayerStarts.Add(tile);
-                while (_level.PlayerStarts.Count > 3) _level.PlayerStarts.RemoveAt(0);
+                while (_level.PlayerStarts.Count > 4) _level.PlayerStarts.RemoveAt(0);
                 break;
         }
     }
@@ -244,8 +260,14 @@ public class IsoEditorScreen : IScreen
             }
         }
 
-        // hovered cell + placement height preview
-        DrawTop(batch, hover.X, hover.Y, _tool == Tool.Block ? _height : 0, origin, Color.Yellow * 0.3f);
+        // hovered cell, sitting at the height it would actually place at, with
+        // that height written in the middle so it can be read against the blocks
+        var (cursor, cursorHeight) = Target(_pointer.ToVector2(), origin);
+        DrawTop(batch, cursor.X, cursor.Y, cursorHeight, origin, Color.Yellow * 0.3f);
+        var mid = IsoMath.ToScreen(cursor.X, cursor.Y, cursorHeight, origin);
+        Ui.DrawTextCentered(batch, _ctx.Font, cursorHeight.ToString(),
+            new Rectangle((int)(mid.X - IsoMath.TileW / 2f), (int)(mid.Y - IsoMath.TileH / 2f),
+                IsoMath.TileW, IsoMath.TileH), Color.Yellow, 0.36f);
 
         DrawHudText(batch);
         DrawRoomLabels(batch, origin);
@@ -296,7 +318,7 @@ public class IsoEditorScreen : IScreen
         };
         string line1 = $"EDITOR   tool: {tool}   height: {_height} ft   room: {_room}";
         string line2 = "1-3/B blocks  D deco  O door  E enemy  P start  G trigger  R room  N dialogue  " +
-                       "scroll/+- height  click place  right-click delete  S save  T test";
+                       "scroll/+- height  click place  DEL erase  S save  T test";
         batch.DrawString(_ctx.Font, line1, new Vector2(60, 40), Color.Yellow,
             0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
         batch.DrawString(_ctx.Font, line2, new Vector2(60, 120), Color.White * 0.75f,

@@ -21,6 +21,8 @@ public class DesktopInput : IInputSource
 
     private KeyboardState _prevKeys;
     private MouseState _prevMouse;
+    private Point _rightDownAt;
+    private bool _rightDragged;
     private readonly StringBuilder _typed = new();
     private bool _backspace;
 
@@ -70,13 +72,26 @@ public class DesktopInput : IInputSource
             state.Released = state.PointerPos;
 
         state.ScrollDelta = (mouse.ScrollWheelValue - _prevMouse.ScrollWheelValue) / 120;
+
+        // right-drag pans, so a right-click only registers if the pointer stayed put
         if (mouse.RightButton == ButtonState.Pressed && _prevMouse.RightButton == ButtonState.Released)
+        {
+            _rightDownAt = new Point(mouse.X, mouse.Y);
+            _rightDragged = false;
+        }
+        if (mouse.RightButton == ButtonState.Pressed &&
+            Vector2.DistanceSquared(new Vector2(mouse.X, mouse.Y),
+                new Vector2(_rightDownAt.X, _rightDownAt.Y)) > 36f)
+            _rightDragged = true;
+        if (mouse.RightButton == ButtonState.Released && _prevMouse.RightButton == ButtonState.Pressed
+            && !_rightDragged)
             state.AltTap = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
 
         state.Submit = Pressed(keys, Keys.Enter);
         state.Confirm = state.Submit || Pressed(keys, Keys.Space);
         state.Cancel = Pressed(keys, Keys.Escape);
         state.ToggleRuler = Pressed(keys, Keys.F12);
+        state.Delete = Pressed(keys, Keys.Delete) || Pressed(keys, Keys.Back);
 
         _prevKeys = keys;
         _prevMouse = mouse;

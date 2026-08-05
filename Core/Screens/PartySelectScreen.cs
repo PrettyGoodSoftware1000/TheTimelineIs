@@ -9,10 +9,10 @@ using TheTimelineIs.Core.Render;
 namespace TheTimelineIs.Core.Screens;
 
 /// <summary>
-/// New Game: pick 3 party members from the classes declared in Classes.txt
+/// New Game: pick a party of four from the classes declared in Classes.txt
 /// that have a PlayerCharacters folder. Duplicates are allowed —
-/// three Dirtbags is a legal, if fragrant, party. Click a class to add it,
-/// click a filled slot to clear it, Start when all 3 are chosen.
+/// four Dirtbags is a legal, if fragrant, party. Click a class to add it,
+/// click a filled slot to clear it, Start when all four are chosen.
 /// </summary>
 public class PartySelectScreen : IScreen
 {
@@ -20,6 +20,9 @@ public class PartySelectScreen : IScreen
     private readonly List<string> _classes;
     private readonly List<string> _picked = new();
     private Point? _tap;
+
+    /// <summary>How many characters go into the field.</summary>
+    public const int PartySize = 4;
 
     private const int SlotW = 480, SlotH = 700, SlotY = 320;
     private const int OptW = 480, OptH = 640, OptY = 1180;
@@ -52,9 +55,9 @@ public class PartySelectScreen : IScreen
         Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("party_title"),
             new Rectangle(0, 90, VirtualViewport.Width, 160), Color.White, 0.7f);
 
-        // the three party slots
-        int slotsX = (VirtualViewport.Width - (3 * SlotW + 2 * 80)) / 2;
-        for (int i = 0; i < 3; i++)
+        // the party slots
+        int slotsX = (VirtualViewport.Width - (PartySize * SlotW + (PartySize - 1) * 80)) / 2;
+        for (int i = 0; i < PartySize; i++)
         {
             var rect = new Rectangle(slotsX + i * (SlotW + 80), SlotY, SlotW, SlotH);
             Ui.FillRect(batch, _ctx.Pixel, rect, new Color(30, 30, 45));
@@ -91,14 +94,14 @@ public class PartySelectScreen : IScreen
             batch.Draw(tex, fit, Color.White);
             Ui.DrawTextCentered(batch, _ctx.Font, _classes[i],
                 new Rectangle(rect.X, rect.Bottom - 100, rect.Width, 90), Color.White, 0.38f);
-            if (_tap.HasValue && rect.Contains(_tap.Value) && _picked.Count < 3)
+            if (_tap.HasValue && rect.Contains(_tap.Value) && _picked.Count < PartySize)
             {
                 _picked.Add(_classes[i]);
                 _tap = null;
             }
         }
 
-        if (_picked.Count == 3 &&
+        if (_picked.Count == PartySize &&
             Ui.Button(batch, _ctx.Pixel, _ctx.Font, StartRect, _ctx.Strings.Get("party_start"), _tap))
         {
             _ctx.State.Reset(_picked.ToList());

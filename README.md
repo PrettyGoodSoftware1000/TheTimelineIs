@@ -50,23 +50,30 @@ tactics test**: Title -> party select -> world map -> the destination opens
   diamond, `{Type}Side.png` a 360x90 strip stacked once per foot; `Blocks.txt`
   lists the types.
 - **Movement**: orthogonal 1, diagonal 2, +1 per foot climbed, 4 ft max step
-  up, drops free. Reachable tiles show as blue fill with blue grid lines.
+  up, drops free. The reachable region is outlined in blue along its outer
+  edge — no fill, no inner grid — and only while a character is selected.
   Exploration is free-roam and per-character; a combat turn is movement
-  **then** a card — playing a card ends that turn's movement.
+  **then** a card, and playing a card spends the rest of that turn's movement
+  unless `Nimble` hands some back.
+- **Party members do not block each other.** A character walks straight
+  through its allies but can never stop on an occupied square. Enemies still
+  wall a path off.
 - **Sight**: walking within 15 tiles of an enemy in a revealed room springs
-  combat — the other two characters get a free positioning move first (Done
+  combat — the rest of the party gets a free positioning move first (Done
   starts the fight). Doors open when clicked from beside them, reveal the room
   behind, and enemies see through them.
 - **Cards**: melee cards reach 1 tile; ranged cards default to `Range: 5`
-  (override per card). Hovering or selecting a card paints how far it reaches
-  in red beyond the blue movement area.
-- **Targeting** always takes two clicks. The first click on an enemy arms it
-  and lights every legal approach square in yellow — for melee, the north,
-  east, south and west neighbours the character can afford — with the one the
-  cursor points at picked out brighter. A second click on an armed target
-  walks there and attacks. A card wanting several targets (`Two targets,
-  1 hit.`) collects one per click and fires once it has them all.
-  Right-click cancels.
+  (override per card). Hovering or selecting a card outlines its reach in red,
+  measured **from where the caster is standing right now** rather than from
+  everywhere it could walk to first. Red replaces the blue outline while it
+  shows.
+- **Targeting is one click.** Clicking an enemy fires the card at it; if the
+  caster has to close the distance first it walks there by the shortest route
+  and strikes — the player never picks the angle of approach. A card wanting
+  several targets (`Two targets, 1 hit.`) collects one per click and fires on
+  the last. Right-click cancels the armed card.
+- **Selection** is marked by a small gold arrow pointing down at the selected
+  character's health bar.
 - **Effects** (`Effects: Burning 1, Armor 5`) are shared behaviour any card
   can carry:
   - `Burning N` — N stacks; each stack burns the victim for 5 at the **start
@@ -91,13 +98,14 @@ tactics test**: Title -> party select -> world map -> the destination opens
   curses never share a hand. The validator warns about a form with no card
   that changes out of it.
 - **Cone cards** (`Type: [cone] AoE damage`) spray a wedge from the caster
-  toward the aim point, widening with distance and capped by `Range`.
-- **Area cards can be aimed at bare ground**, not just at enemies — click a
-  tile to arm it, click again to fire.
+  toward the aim point. The **point of the cone is on the caster** and the wide
+  end faces away, widening with distance and capped by `Range`.
+- **Area cards can be aimed at bare ground**, not just at enemies — one click
+  on a tile fires at it.
 - **Blast cards** take `Explosion Range: N`, a radius in tiles around the
   impact point, kept separate from `Range` (how far it can be thrown). The
-  blast paints purple, following the cursor until a target is locked in, and
-  damages whatever the purple covers — not everything in throwing range.
+  blast is outlined in purple, following the cursor, and damages whatever that
+  outline covers — not everything in throwing range.
 - Health bars sit above each head with the current HP in the middle.
 - **Dialogue**: trigger squares painted in the editor (G tool) play a named
   block from `Content/Levels/{Level}Dialogue.txt` the first time anyone steps
@@ -109,8 +117,12 @@ tactics test**: Title -> party select -> world map -> the destination opens
 - **Editor**: `dotnet run --project Desktop -- --editor`. 1-3/B block types,
   D decorations, O doors, E enemies, P player starts, G dialogue triggers,
   R room label, N trigger's dialogue name,
-  scroll or +/- for height, click place, right-click delete, S saves to
-  `Content/Levels/TestLevel.txt` in the repo, T play-tests immediately.
+  scroll or +/- for height, click place, **Delete key** erases (right-drag is
+  the pan gesture, so it is not a delete), S saves to
+  `Content/Levels/TestLevel.txt` in the repo, T play-tests immediately. The
+  yellow cursor square always shows its height as a number in the middle, and
+  for everything except the block tool it sits on top of the block under the
+  pointer rather than on the ground plane beneath it.
 - Levels complete when every enemy is dead; a wiped party reloads.
 
 ## Naming convention
@@ -181,7 +193,7 @@ Cast: Dirtbag, Goblin, Goblin
 - `Speaker: text` is dialogue; `[Battle!]` starts a turn-based card battle
   (win continues the room; a wiped party reloads the last save).
 - `Cast: Player characters, Goblin` — the literal token `Player characters`
-  expands to the 3-member party chosen at New Game.
+  expands to the party chosen at New Game.
 - After the last room, the mission completes and the map returns.
 
 ### Characters — `Content/Cast/{PlayerCharacters|EnemyCharacters}/{Name}/`
@@ -242,7 +254,7 @@ The ground is currently the same for every room. Making it per-room is a
 
 ## Party and formation
 
-New Game leads to a party picker: choose 3 from the playable classes
+New Game leads to a party picker: choose 4 from the playable classes
 (duplicates allowed). `Classes.txt` is the authoritative roster — one
 `Class: Name` line each — and a class appears in the picker once it also has a
 `Content/Cast/PlayerCharacters/{Name}/` folder.

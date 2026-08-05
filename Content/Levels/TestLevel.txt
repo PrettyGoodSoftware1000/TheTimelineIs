@@ -140,5 +140,6 @@ Enemy: 15, 4, Goblin
 PlayerStart: 1, 5
 PlayerStart: 2, 6
 PlayerStart: 3, 5
+PlayerStart: 2, 4
 Trigger: 4, 5, Intro
 Trigger: 9, 3, DoorWarning

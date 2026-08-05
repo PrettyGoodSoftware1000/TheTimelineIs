@@ -14,6 +14,17 @@ public static class Ui
     public static void FillRect(SpriteBatch batch, Texture2D pixel, Rectangle rect, Color color) =>
         batch.Draw(pixel, rect, color);
 
+    /// <summary>A straight line of any angle, stretched from the 1x1 white pixel.</summary>
+    public static void Line(SpriteBatch batch, Texture2D pixel, Vector2 a, Vector2 b,
+        float thickness, Color color)
+    {
+        var delta = b - a;
+        float length = delta.Length();
+        if (length < 0.01f) return;
+        batch.Draw(pixel, a, null, color, (float)System.Math.Atan2(delta.Y, delta.X),
+            new Vector2(0f, 0.5f), new Vector2(length, thickness), SpriteEffects.None, 0f);
+    }
+
     /// <summary>
     /// Largest rectangle of the given aspect that fits inside bounds, centered.
     /// Art is never stretched — letterboxed within its slot instead.

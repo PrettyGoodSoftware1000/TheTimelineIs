@@ -9,7 +9,7 @@ namespace TheTimelineIs.Core.Screens;
 
 public class TitleScreen : IScreen
 {
-    private const float ScrambleInterval = 0.25f;
+    private const float ScrambleInterval = 0.125f;
 
     private readonly GameContext _ctx;
     private readonly string _word;

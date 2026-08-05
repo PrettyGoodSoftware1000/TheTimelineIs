@@ -45,6 +45,12 @@ public struct InputState
     /// <summary>Mouse wheel notches this frame (positive = up). Editor uses it for height.</summary>
     public int ScrollDelta;
 
-    /// <summary>Secondary click (right button) this frame — the editor's delete.</summary>
+    /// <summary>
+    /// Secondary click: the right button released without having been dragged,
+    /// so panning the view never reads as a click.
+    /// </summary>
     public Point? AltTap;
+
+    /// <summary>Delete pressed this frame — the editor's erase.</summary>
+    public bool Delete;
 }

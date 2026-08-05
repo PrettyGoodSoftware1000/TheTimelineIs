@@ -43,23 +43,27 @@ public static class IsoMath
     public static int GridDistance(Point a, Point b) =>
         Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
 
-    /// <summary>How far off the cone's centre line a tile may sit; wider = fatter wedge.</summary>
-    private const float ConeCos = 0.40f;    // about 66 degrees to either side
+    /// <summary>How fast the wedge fans out per tile of depth.</summary>
+    private const float ConeSpread = 0.62f;
 
     /// <summary>
     /// Tiles inside a wedge running from the caster toward an aim point. The
-    /// test is angular, so the wedge naturally widens with distance while
-    /// staying within the card's range.
+    /// half-width is measured across the centre line and grows with depth, so
+    /// the point of the cone sits on the caster and the wide end faces away.
     /// </summary>
     public static bool InCone(Point from, Point aim, Point tile, int range)
     {
         if (tile == from) return false;
         if (GridDistance(from, tile) > range) return false;
+
         var dir = new Vector2(aim.X - from.X, aim.Y - from.Y);
         var to = new Vector2(tile.X - from.X, tile.Y - from.Y);
-        if (dir.LengthSquared() < 0.001f || to.LengthSquared() < 0.001f) return false;
+        if (dir.LengthSquared() < 0.001f) return false;
         dir.Normalize();
-        to.Normalize();
-        return Vector2.Dot(dir, to) >= ConeCos;
+
+        float depth = Vector2.Dot(to, dir);                    // how far along the centre line
+        if (depth < 0.5f) return false;                        // nothing behind the caster
+        float across = (to - dir * depth).Length();            // how far off that line
+        return across <= (depth - 0.5f) * ConeSpread + 0.5f;
     }
 }

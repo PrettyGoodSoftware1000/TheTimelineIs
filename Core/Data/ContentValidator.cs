@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using TheTimelineIs.Core.Iso;
+using TheTimelineIs.Core.Screens;
 
 namespace TheTimelineIs.Core.Data;
 
@@ -116,10 +117,10 @@ public static class ContentValidator
         }
 
         var playable = classes.PlayableClasses();
-        if (playable.Count is > 0 and < 3)
+        if (playable.Count is > 0 && playable.Count < PartySelectScreen.PartySize)
             diag.Warn(ClassLibrary.Path, 0,
                 $"only {playable.Count} class(es) can be picked ({string.Join(", ", playable)}); " +
-                "a party is 3, so slots will be filled with duplicates");
+                $"a party is {PartySelectScreen.PartySize}, so slots will be filled with duplicates");
     }
 
     private static void ValidateEnemies(EnemyLibrary enemies, Diagnostics diag)
@@ -173,9 +174,10 @@ public static class ContentValidator
                 diag.Error(path, 0, "level has no blocks at all");
             if (level.PlayerStarts.Count == 0)
                 diag.Error(path, 0, "no PlayerStart — the party has nowhere to appear");
-            else if (level.PlayerStarts.Count < 3)
+            else if (level.PlayerStarts.Count < PartySelectScreen.PartySize)
                 diag.Warn(path, 0,
-                    $"only {level.PlayerStarts.Count} PlayerStart(s); a party of 3 will stack the rest nearby");
+                    $"only {level.PlayerStarts.Count} PlayerStart(s); a party of " +
+                    $"{PartySelectScreen.PartySize} will stack the rest nearby");
 
             foreach (var block in level.Blocks.Values)
                 if (!BlockCatalog.IsBlockType(block.Type))
