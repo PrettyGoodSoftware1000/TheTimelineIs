@@ -88,18 +88,29 @@ tactics test**: Title -> party select -> world map -> the destination opens
     instead of the turn ending. Movement always hits 0 when a card is played;
     Nimble hands some back afterwards, so it's a retreat, not a longer reach.
   - `Leap N` — the approach move for *that card* reaches N further and ignores
-    height entirely, climbs and drops alike.
+    height entirely, climbs and drops alike. A Leap card's red outline is its
+    range measured from **everywhere the leap can put the caster**, not from the
+    tile underfoot, since the jump is part of the attack.
   - `Curse N` — the victim takes N extra damage from **melee** cards for 10 of
     their turns. Curses stack and each keeps its own clock.
   - `Form X` — the caster changes into their form X, swapping art and hand.
+    **Changing shape is free**: it spends neither the turn's card nor its
+    movement, so a shapeshifter can shift and then actually do something. The
+    shape persists across turns and through a save.
 - **Forms**: a class may declare `Form: Name, Art.png` lines in `Classes.txt`
   (first one is where it starts). A card with a matching `Form:` line only
   appears while its owner wears that shape, so the Werewitch's claws and
   curses never share a hand. The validator warns about a form with no card
   that changes out of it.
-- **Cone cards** (`Type: [cone] AoE damage`) spray a wedge from the caster
-  toward the aim point. The **point of the cone is on the caster** and the wide
-  end faces away, widening with distance and capped by `Range`.
+- **Cone cards** (`Type: [cone] AoE damage`) spray a staircase wedge measured
+  in whole tiles: **1 tile at depth 1, 3 at depth 2, 5 at depth 3** — the point
+  sits on the square in front of the caster and the wide end faces away.
+  `Range` caps the depth (range 3 = 9 tiles). The same shape rotates to all
+  eight headings; a diagonal cone is measured in diagonal steps so it stays
+  exactly congruent instead of covering twice the ground. Because a cone only
+  takes a heading from the cursor, it can be aimed at any tile, and it shows as
+  the purple wedge alone — no red range diamond, which would be a second,
+  wrong-shaped answer.
 - **Area cards can be aimed at bare ground**, not just at enemies — one click
   on a tile fires at it.
 - **Blast cards** take `Explosion Range: N`, a radius in tiles around the
@@ -119,7 +130,8 @@ tactics test**: Title -> party select -> world map -> the destination opens
   R room label, N trigger's dialogue name,
   scroll or +/- for height, click place, **Delete key** erases (right-drag is
   the pan gesture, so it is not a delete), S saves to
-  `Content/Levels/TestLevel.txt` in the repo, T play-tests immediately. The
+  `Content/Levels/{Level}.txt` in the repo, **V saves-as** under a typed name
+  and keeps editing that file from then on, T play-tests immediately. The
   yellow cursor square always shows its height as a number in the middle, and
   for everything except the block tool it sits on top of the block under the
   pointer rather than on the ground plane beneath it.

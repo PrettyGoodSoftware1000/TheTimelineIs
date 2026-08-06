@@ -73,10 +73,8 @@ public static class ContentValidator
             if (card.Form.Length > 0 && owners.Count > 0 && owners.All(o => o.FindForm(card.Form) == null))
                 diag.Error(CardLibrary.Path, card.Line,
                     $"'{card.Name}': needs form '{card.Form}', which no class holding its tags declares");
-            if (card.BecomesForm is string becomes && owners.Count > 0 &&
-                owners.All(o => o.FindForm(becomes) == null))
-                diag.Error(CardLibrary.Path, card.Line,
-                    $"'{card.Name}': changes into form '{becomes}', which no class holding its tags declares");
+            // (the matching check for BecomesForm lives in ValidateClasses, which
+            // can name the offending class and list the forms it does have)
 
             if (card.Delivery == Delivery.Cone && card.Kind != CardKind.AoEDamage)
                 diag.Warn(CardLibrary.Path, card.Line,
@@ -114,6 +112,25 @@ public static class ContentValidator
                 if (!AssetLoader.Exists($"{cls.Folder}/{sprite}"))
                     diag.Error(ClassLibrary.Path, cls.Line,
                         $"class '{name}': sprite '{sprite}' not found at {cls.Folder}/{sprite}");
+
+            // a class wears EITHER a form's art or its plain sprite list, so
+            // declaring both silently throws one of them away
+            if (cls.Forms.Count > 0 && cls.Sprites.Count > 0)
+                diag.Warn(ClassLibrary.Path, cls.Line,
+                    $"class '{name}': has both Form: and Sprites: lines. Forms win — " +
+                    $"'{string.Join(", ", cls.Sprites)}' is ignored. Give each form its own art instead.");
+
+            // a card that shifts into a shape the class never declared is a
+            // dead card: the shift silently fails at the moment it is played
+            foreach (var card in cards.All.Where(c => c.BecomesForm != null &&
+                         c.Tags.Intersect(classes.CardTagsFor(name), StringComparer.OrdinalIgnoreCase).Any()))
+                if (cls.FindForm(card.BecomesForm!) == null)
+                    diag.Error(CardLibrary.Path, card.Line,
+                        $"'{card.Name}' changes '{name}' into form '{card.BecomesForm}', " +
+                        $"which that class does not declare" +
+                        (cls.Forms.Count > 0
+                            ? $" (it has: {string.Join(", ", cls.Forms.Select(f => f.Name))})"
+                            : " (it has no Form: lines at all)"));
         }
 
         var playable = classes.PlayableClasses();

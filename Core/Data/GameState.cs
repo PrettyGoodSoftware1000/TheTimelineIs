@@ -10,6 +10,8 @@ public class SavedInstance
     public string Name { get; set; } = "";
     public int OccurrenceIndex { get; set; }
     public string SpriteFile { get; set; } = "";
+    /// <summary>A shapeshifter's current shape, so a save doesn't snap it back.</summary>
+    public string Form { get; set; } = "";
     public bool IsPlayer { get; set; }
     public bool Alive { get; set; } = true;
     public int MaxHp { get; set; } = 20;
@@ -99,6 +101,7 @@ public class GameState
                     Name = i.Name,
                     OccurrenceIndex = i.OccurrenceIndex,
                     SpriteFile = i.SpriteFile,
+                    Form = i.Form,
                     IsPlayer = i.IsPlayer,
                     Alive = i.Alive,
                     MaxHp = i.MaxHp,
@@ -126,6 +129,7 @@ public class GameState
                 Name = s.Name,
                 OccurrenceIndex = s.OccurrenceIndex,
                 SpriteFile = s.SpriteFile,
+                Form = s.Form,
                 IsPlayer = s.IsPlayer,
                 Alive = s.Alive,
                 MaxHp = s.MaxHp,

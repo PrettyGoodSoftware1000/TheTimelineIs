@@ -1,0 +1,145 @@
+# Isometric level. One entity per line; the in-game editor writes this file.
+# Block: x, y, height(feet), type, room
+Block: 0, 0, 0, Grass, RoomA
+Block: 1, 0, 0, Grass, RoomA
+Block: 2, 0, 0, Grass, RoomA
+Block: 3, 0, 0, Grass, RoomA
+Block: 4, 0, 0, Grass, RoomA
+Block: 5, 0, 0, Grass, RoomA
+Block: 6, 0, 0, Grass, RoomA
+Block: 7, 0, 0, Grass, RoomA
+Block: 8, 0, 0, Grass, RoomA
+Block: 9, 0, 0, Grass, RoomA
+Block: 11, 0, 0, Grass, RoomB
+Block: 12, 0, 0, Grass, RoomB
+Block: 13, 0, 0, Grass, RoomB
+Block: 14, 0, 0, Grass, RoomB
+Block: 15, 0, 0, Grass, RoomB
+Block: 16, 0, 0, Grass, RoomB
+Block: 17, 0, 1, Dirt, RoomB
+Block: 18, 0, 1, Dirt, RoomB
+Block: 0, 1, 0, Grass, RoomA
+Block: 1, 1, 2, Dirt, RoomA
+Block: 2, 1, 2, Dirt, RoomA
+Block: 3, 1, 0, Grass, RoomA
+Block: 4, 1, 0, Grass, RoomA
+Block: 5, 1, 0, Grass, RoomA
+Block: 6, 1, 0, Grass, RoomA
+Block: 7, 1, 0, Grass, RoomA
+Block: 8, 1, 0, Grass, RoomA
+Block: 9, 1, 0, Grass, RoomA
+Block: 11, 1, 0, Grass, RoomB
+Block: 12, 1, 0, Grass, RoomB
+Block: 13, 1, 0, Grass, RoomB
+Block: 14, 1, 0, Grass, RoomB
+Block: 15, 1, 0, Grass, RoomB
+Block: 16, 1, 0, Grass, RoomB
+Block: 17, 1, 1, Dirt, RoomB
+Block: 18, 1, 1, Dirt, RoomB
+Block: 0, 2, 0, Grass, RoomA
+Block: 1, 2, 2, Dirt, RoomA
+Block: 2, 2, 0, Grass, RoomA
+Block: 3, 2, 0, Grass, RoomA
+Block: 4, 2, 0, Grass, RoomA
+Block: 5, 2, 0, Grass, RoomA
+Block: 6, 2, 0, Grass, RoomA
+Block: 7, 2, 0, Grass, RoomA
+Block: 8, 2, 0, Grass, RoomA
+Block: 9, 2, 0, Grass, RoomA
+Block: 11, 2, 0, Grass, RoomB
+Block: 12, 2, 0, Grass, RoomB
+Block: 13, 2, 0, Grass, RoomB
+Block: 14, 2, 0, Grass, RoomB
+Block: 15, 2, 0, Grass, RoomB
+Block: 16, 2, 0, Grass, RoomB
+Block: 17, 2, 1, Dirt, RoomB
+Block: 18, 2, 1, Dirt, RoomB
+Block: 0, 3, 0, Grass, RoomA
+Block: 1, 3, 0, Grass, RoomA
+Block: 2, 3, 0, Stone, RoomA
+Block: 3, 3, 0, Stone, RoomA
+Block: 4, 3, 0, Stone, RoomA
+Block: 5, 3, 0, Stone, RoomA
+Block: 6, 3, 0, Stone, RoomA
+Block: 7, 3, 0, Stone, RoomA
+Block: 8, 3, 0, Stone, RoomA
+Block: 9, 3, 0, Stone, RoomA
+Block: 10, 3, 0, Stone, RoomA
+Block: 11, 3, 0, Stone, RoomB
+Block: 12, 3, 0, Stone, RoomB
+Block: 13, 3, 0, Stone, RoomB
+Block: 14, 3, 0, Stone, RoomB
+Block: 15, 3, 0, Stone, RoomB
+Block: 16, 3, 0, Stone, RoomB
+Block: 17, 3, 1, Dirt, RoomB
+Block: 18, 3, 1, Dirt, RoomB
+Block: 0, 4, 0, Grass, RoomA
+Block: 1, 4, 0, Grass, RoomA
+Block: 2, 4, 0, Stone, RoomA
+Block: 3, 4, 0, Stone, RoomA
+Block: 4, 4, 0, Stone, RoomA
+Block: 5, 4, 0, Stone, RoomA
+Block: 6, 4, 0, Stone, RoomA
+Block: 7, 4, 0, Stone, RoomA
+Block: 8, 4, 0, Stone, RoomA
+Block: 9, 4, 0, Stone, RoomA
+Block: 11, 4, 0, Grass, RoomB
+Block: 12, 4, 0, Grass, RoomB
+Block: 13, 4, 0, Grass, RoomB
+Block: 14, 4, 0, Grass, RoomB
+Block: 15, 4, 0, Grass, RoomB
+Block: 16, 4, 0, Grass, RoomB
+Block: 17, 4, 1, Dirt, RoomB
+Block: 18, 4, 1, Dirt, RoomB
+Block: 0, 5, 0, Grass, RoomA
+Block: 1, 5, 0, Grass, RoomA
+Block: 2, 5, 0, Grass, RoomA
+Block: 3, 5, 0, Grass, RoomA
+Block: 4, 5, 0, Grass, RoomA
+Block: 5, 5, 0, Grass, RoomA
+Block: 6, 5, 0, Grass, RoomA
+Block: 7, 5, 0, Grass, RoomA
+Block: 8, 5, 0, Grass, RoomA
+Block: 9, 5, 0, Grass, RoomA
+Block: 11, 5, 0, Grass, RoomB
+Block: 12, 5, 0, Grass, RoomB
+Block: 13, 5, 0, Grass, RoomB
+Block: 14, 5, 0, Grass, RoomB
+Block: 15, 5, 0, Grass, RoomB
+Block: 16, 5, 0, Grass, RoomB
+Block: 17, 5, 1, Dirt, RoomB
+Block: 18, 5, 1, Dirt, RoomB
+Block: 0, 6, 0, Grass, RoomA
+Block: 1, 6, 0, Grass, RoomA
+Block: 2, 6, 0, Grass, RoomA
+Block: 3, 6, 0, Grass, RoomA
+Block: 4, 6, 0, Grass, RoomA
+Block: 5, 6, 0, Grass, RoomA
+Block: 6, 6, 0, Grass, RoomA
+Block: 7, 6, 0, Grass, RoomA
+Block: 8, 6, 0, Grass, RoomA
+Block: 9, 6, 0, Grass, RoomA
+Block: 0, 7, 0, Grass, RoomA
+Block: 1, 7, 0, Grass, RoomA
+Block: 2, 7, 0, Grass, RoomA
+Block: 3, 7, 0, Grass, RoomA
+Block: 4, 7, 0, Grass, RoomA
+Block: 5, 7, 0, Grass, RoomA
+Block: 6, 7, 0, Grass, RoomA
+Block: 7, 7, 0, Grass, RoomA
+Block: 8, 7, 0, Grass, RoomA
+Block: 9, 7, 0, Grass, RoomA
+Decoration: 4, 0, Tree1.png
+Decoration: 13, 0, Rock1.png
+Decoration: 6, 1, Rock1.png
+Decoration: 8, 6, Tree1.png
+Door: 10, 3, RoomA, RoomB
+Enemy: 17, 1, Goblin
+Enemy: 17, 3, Goblin
+Enemy: 15, 4, Goblin
+Trigger: 9, 3, DoorWarning
+Trigger: 4, 5, Intro
+PlayerStart: 1, 5
+PlayerStart: 2, 6
+PlayerStart: 3, 5
+PlayerStart: 2, 4

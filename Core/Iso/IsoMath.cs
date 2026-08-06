@@ -43,27 +43,50 @@ public static class IsoMath
     public static int GridDistance(Point a, Point b) =>
         Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
 
-    /// <summary>How fast the wedge fans out per tile of depth.</summary>
-    private const float ConeSpread = 0.62f;
+    /// <summary>
+    /// The aim direction snapped to one of the eight compass headings. Each
+    /// heading owns a 45-degree slice, so tan(22.5) = 0.4142 is the cutoff
+    /// between "straight along an axis" and "diagonal".
+    /// </summary>
+    private static Point SnapDirection(Point from, Point aim)
+    {
+        int dx = aim.X - from.X, dy = aim.Y - from.Y;
+        int ax = Math.Abs(dx), ay = Math.Abs(dy);
+        int sx = Math.Sign(dx), sy = Math.Sign(dy);
+        if (ay <= 0.4142f * ax) return new Point(sx, 0);
+        if (ax <= 0.4142f * ay) return new Point(0, sy);
+        return new Point(sx, sy);
+    }
 
     /// <summary>
-    /// Tiles inside a wedge running from the caster toward an aim point. The
-    /// half-width is measured across the centre line and grows with depth, so
-    /// the point of the cone sits on the caster and the wide end faces away.
+    /// Tiles inside the cone a caster sprays toward an aim point. The shape is
+    /// a staircase wedge measured in whole tiles: one tile at depth 1, three at
+    /// depth 2, five at depth 3 — the point sits on the square in front of the
+    /// caster and the wide end faces away. Formally, a tile is in the cone when
+    /// it lies at depth d (1..range) along the heading with an offset of at
+    /// most d-1 tiles across it.
+    ///
+    /// The same shape rotates to all eight headings. For a diagonal heading the
+    /// wedge is measured in diagonal steps, which keeps it exactly congruent to
+    /// the orthogonal one rather than fanning out over twice the ground.
     /// </summary>
     public static bool InCone(Point from, Point aim, Point tile, int range)
     {
         if (tile == from) return false;
-        if (GridDistance(from, tile) > range) return false;
+        var dir = SnapDirection(from, aim);
+        if (dir == Point.Zero) return false;
 
-        var dir = new Vector2(aim.X - from.X, aim.Y - from.Y);
-        var to = new Vector2(tile.X - from.X, tile.Y - from.Y);
-        if (dir.LengthSquared() < 0.001f) return false;
-        dir.Normalize();
+        // Rotate the offset into the heading's frame: 'dir' is forward and
+        // (dir.Y, -dir.X) is across it. A diagonal heading spans two grid steps
+        // per unit of depth, hence the divide.
+        int ox = tile.X - from.X, oy = tile.Y - from.Y;
+        int span = dir.X * dir.X + dir.Y * dir.Y;          // 1 orthogonal, 2 diagonal
+        int forward = ox * dir.X + oy * dir.Y;
+        int across = ox * dir.Y - oy * dir.X;
+        if (forward % span != 0 || across % span != 0) return false;  // off the lattice
 
-        float depth = Vector2.Dot(to, dir);                    // how far along the centre line
-        if (depth < 0.5f) return false;                        // nothing behind the caster
-        float across = (to - dir * depth).Length();            // how far off that line
-        return across <= (depth - 0.5f) * ConeSpread + 0.5f;
+        int depth = forward / span;
+        int off = Math.Abs(across / span);
+        return depth >= 1 && depth <= range && off <= depth - 1;
     }
 }

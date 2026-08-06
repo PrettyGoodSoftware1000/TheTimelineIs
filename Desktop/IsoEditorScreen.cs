@@ -22,7 +22,8 @@ namespace TheTimelineIs.Desktop;
 ///   scroll wheel or +/-      placement height (feet)
 ///   R then typing            set current room label (Enter to accept)
 ///   N then typing            set the dialogue name new triggers call
-///   WASD/arrows              pan     S save     F5 play-test the level
+///   V then typing            save as a new level name, and keep editing it
+///   WASD/arrows              pan     S save     T play-test the level
 /// </summary>
 public class IsoEditorScreen : IScreen
 {
@@ -30,14 +31,15 @@ public class IsoEditorScreen : IScreen
 
     private readonly GameContext _ctx;
     private readonly LevelData _level;
-    private readonly string _savePath;
+    private readonly string _levelsDir;
+    private string _levelName = "TestLevel";
 
     private Tool _tool = Tool.Block;
     private int _blockIndex, _decoIndex, _enemyIndex;
     private int _height;
     private string _room = "Main";
     private string _trigger = "Intro";      // dialogue block a placed trigger calls
-    private bool _typingRoom, _typingTrigger;
+    private bool _typingRoom, _typingTrigger, _typingSaveAs;
     private string _roomBuffer = "";
     private Vector2 _camera;
     private Vector2 _origin = new(VirtualViewport.Width / 2f, 500);
@@ -48,21 +50,24 @@ public class IsoEditorScreen : IScreen
     public IsoEditorScreen(GameContext ctx)
     {
         _ctx = ctx;
-        _level = LevelData.Load("TestLevel");
-        _savePath = FindSavePath();
+        _level = LevelData.Load(_levelName);
+        _levelsDir = FindLevelsDir();
     }
 
-    private static string FindSavePath()
+    /// <summary>The repo's Content/Levels, so a save lands in the source tree.</summary>
+    private static string FindLevelsDir()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
         {
             if (File.Exists(Path.Combine(dir.FullName, "TheTimelineIs.sln")))
-                return Path.Combine(dir.FullName, "Content", "Levels", "TestLevel.txt");
+                return Path.Combine(dir.FullName, "Content", "Levels");
             dir = dir.Parent;
         }
-        return Path.Combine(AppContext.BaseDirectory, "Content", "Levels", "TestLevel.txt");
+        return Path.Combine(AppContext.BaseDirectory, "Content", "Levels");
     }
+
+    private string SavePath => Path.Combine(_levelsDir, _levelName + ".txt");
 
     private void Status(string text) { _status = text; _statusTimer = 3f; }
 
@@ -72,16 +77,17 @@ public class IsoEditorScreen : IScreen
         _camera += input.PanDelta;
         if (_statusTimer > 0) _statusTimer -= dt;
 
-        if (_typingRoom || _typingTrigger)
+        if (_typingRoom || _typingTrigger || _typingSaveAs)
         {
             _roomBuffer += input.TypedChars;
             if (input.Backspace && _roomBuffer.Length > 0) _roomBuffer = _roomBuffer[..^1];
-            if (input.Cancel) { _typingRoom = _typingTrigger = false; }
+            if (input.Cancel) { _typingRoom = _typingTrigger = _typingSaveAs = false; }
             if (input.Submit && _roomBuffer.Trim().Length > 0)
             {
                 if (_typingRoom) { _room = _roomBuffer.Trim(); Status($"room = {_room}"); }
+                else if (_typingSaveAs) SaveAs(_roomBuffer);
                 else { _trigger = _roomBuffer.Trim(); Status($"trigger dialogue = {_trigger}"); }
-                _typingRoom = _typingTrigger = false;
+                _typingRoom = _typingTrigger = _typingSaveAs = false;
             }
             return;
         }
@@ -116,6 +122,7 @@ public class IsoEditorScreen : IScreen
                 case '+' or '=': _height = Math.Min(_height + 1, 12); break;
                 case '-': _height = Math.Max(_height - 1, 0); break;
                 case 's': Save(); break;
+                case 'v': _typingSaveAs = true; _roomBuffer = _levelName; break;
                 case 't': PlayTest(); break;
             }
 
@@ -205,16 +212,39 @@ public class IsoEditorScreen : IScreen
 
     private void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_savePath)!);
-        File.WriteAllText(_savePath, _level.Serialize());
-        Status($"saved -> {_savePath}");
+        Directory.CreateDirectory(_levelsDir);
+        File.WriteAllText(SavePath, _level.Serialize());
+        Status($"saved -> {SavePath}");
+    }
+
+    /// <summary>
+    /// Save As: writes the level under a new name and keeps editing THAT file,
+    /// so plain S from then on saves the copy and the original is left as it
+    /// was. The name is a bare level name — no folders, no extension — because
+    /// levels are loaded by name from Content/Levels.
+    /// </summary>
+    private void SaveAs(string typed)
+    {
+        string name = typed.Trim();
+        if (name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
+        // a level name is used to build a path and a dialogue filename, so it
+        // has to stay a plain name
+        if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            name.Contains('/') || name.Contains('\\'))
+        {
+            Status($"'{typed.Trim()}' is not a usable level name — letters and digits, no folders");
+            return;
+        }
+        _levelName = name;
+        _level.Name = name;
+        Save();
     }
 
     private void PlayTest()
     {
         Save();
         _ctx.State.Reset(_ctx.State.PartyOrDefault());
-        _ctx.SwitchTo(new IsoLevelScreen(_ctx, "TestLevel"));
+        _ctx.SwitchTo(new IsoLevelScreen(_ctx, _levelName));
     }
 
     public void Draw(SpriteBatch batch)
@@ -247,7 +277,7 @@ public class IsoEditorScreen : IScreen
             if (_level.DecorationAt(tile) is LevelDecoration deco)
                 Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, b.Height, origin, Color.White);
             foreach (var e in _level.Enemies.Where(e => e.X == b.X && e.Y == b.Y))
-                if (_ctx.Enemies.Get(e.Name) is EnemyDef def)
+                if (_ctx.Enemies.Get(e.Name) is EnemyDef def && def.SpriteFiles.Count > 0)
                     Billboard(batch, $"{def.Folder}/{def.SpriteFiles[0]}", tile, b.Height, origin, Color.White * 0.9f);
             if (_level.PlayerStarts.Contains(tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.LimeGreen * 0.35f);
@@ -316,16 +346,17 @@ public class IsoEditorScreen : IScreen
             Tool.Trigger => $"TRIGGER -> {_trigger}",
             _ => "PLAYER START",
         };
-        string line1 = $"EDITOR   tool: {tool}   height: {_height} ft   room: {_room}";
+        string line1 = $"EDITOR   {_levelName}.txt   tool: {tool}   height: {_height} ft   room: {_room}";
         string line2 = "1-3/B blocks  D deco  O door  E enemy  P start  G trigger  R room  N dialogue  " +
-                       "scroll/+- height  click place  DEL erase  S save  T test";
+                       "scroll/+- height  click place  DEL erase  S save  V save-as  T test";
         batch.DrawString(_ctx.Font, line1, new Vector2(60, 40), Color.Yellow,
             0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
         batch.DrawString(_ctx.Font, line2, new Vector2(60, 120), Color.White * 0.75f,
             0f, Vector2.Zero, 0.3f, SpriteEffects.None, 0f);
-        if (_typingRoom || _typingTrigger)
+        if (_typingRoom || _typingTrigger || _typingSaveAs)
             batch.DrawString(_ctx.Font,
-                (_typingRoom ? "room name: " : "dialogue name: ") + _roomBuffer + "_",
+                (_typingRoom ? "room name: " : _typingSaveAs ? "save as: " : "dialogue name: ")
+                + _roomBuffer + "_",
                 new Vector2(60, 200), Color.Cyan, 0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
         if (_statusTimer > 0)
             batch.DrawString(_ctx.Font, _status, new Vector2(60, 280), Color.LightGreen,

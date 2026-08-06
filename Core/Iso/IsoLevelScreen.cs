@@ -62,6 +62,7 @@ public class IsoLevelScreen : IScreen
     // overlays, recomputed only when the mover, position, or card changes
     private Dictionary<Point, int> _moveSet = new();
     private HashSet<Point> _rangeSet = new();
+    private bool _cardArmed;          // a card is selected or hovered: red replaces blue
     private object? _overlayKey;
 
     private Vector2 _camera;
@@ -433,7 +434,9 @@ public class IsoLevelScreen : IScreen
 
         _moveSet = new Dictionary<Point, int>();
         _rangeSet = new HashSet<Point>();
+        _cardArmed = false;
         if (mover == null) return;
+        _cardArmed = card != null && _mode != Mode.Explore;
 
         // a Leap card reaches further and vaults terrain while closing in
         int budget = _mode == Mode.Explore ? 9999 : mover.MovePoints + (card?.LeapBonus ?? 0);
@@ -441,12 +444,22 @@ public class IsoLevelScreen : IScreen
             OccupiedExcept(mover), card?.IgnoresHeight ?? false, PassThroughFor(mover)).Cost;
         if (card == null || _mode == Mode.Explore) return;
 
+        // a cone is shown by the purple wedge that follows the cursor, so a red
+        // diamond around it would only be a second, wrong-shaped answer
+        if (card.Delivery == Delivery.Cone) return;
+
+        // A Leap card carries its own approach: the reach it advertises is the
+        // card's range measured from anywhere the leap can put the caster, not
+        // from the tile they happen to be standing on.
         var here = Tile(mover);
+        var stands = card.LeapBonus > 0
+            ? _moveSet.Keys.Append(here).ToList()
+            : new List<Point> { here };
         foreach (var block in _level.Blocks.Values)
         {
             if (!_revealed.Contains(block.Room)) continue;
             var tile = new Point(block.X, block.Y);
-            if (IsoMath.GridDistance(here, tile) <= card.Range)
+            if (stands.Any(s => IsoMath.GridDistance(s, tile) <= card.Range))
                 _rangeSet.Add(tile);
         }
     }
@@ -488,9 +501,13 @@ public class IsoLevelScreen : IScreen
         return set;
     }
 
-    /// <summary>Is this tile within the card's reach of where the caster stands now?</summary>
+    /// <summary>
+    /// Can the card be aimed at this tile? A cone only takes a heading from the
+    /// aim point — its own Range caps how far the wedge runs — so any tile will
+    /// do. Everything else has to be within reach of where the caster stands.
+    /// </summary>
     private bool ReachableAim(CharacterInstance me, Point aim, Card card) =>
-        IsoMath.GridDistance(Tile(me), aim) <= card.Range;
+        card.Delivery == Delivery.Cone || IsoMath.GridDistance(Tile(me), aim) <= card.Range;
 
     /// <summary>
     /// Where the caster acts from: where it already stands if that works, else
@@ -715,8 +732,13 @@ public class IsoLevelScreen : IScreen
         _selectedCard = null;
         _targets.Clear();
         _blastSet.Clear();
-        _playedCard = true;
-        _actor!.MovePoints = 0;      // a card ends this turn's movement, unless Nimble gives it back
+        // changing shape is free: it costs neither the turn's card nor its
+        // movement, so a shapeshifter can shift and then actually do something
+        if (card.BecomesForm == null)
+        {
+            _playedCard = true;
+            _actor!.MovePoints = 0;  // a card ends this turn's movement, unless Nimble gives it back
+        }
         _overlayKey = null;
 
         _ctx.Sounds.Play(card.CastingSound);
@@ -744,7 +766,9 @@ public class IsoLevelScreen : IScreen
         {
             case Act.Casting when _actingCard is { Delivery: Delivery.Ranged } ranged:
                 var aim = _victims.FirstOrDefault();
-                if (aim == null) { FinishAction(); return; }
+                // a self-cast has nobody to fly at, but its effects still have
+                // to resolve — skip the projectile, not the hit phase
+                if (aim == null) { _hitIndex = 0; EnterAct(Act.Hits, 0f); return; }
                 _projFrom = FootOf(_actor!) - new Vector2(0, 160);
                 _projTo = FootOf(aim) - new Vector2(0, 160);
                 _projRotation = (float)Math.Atan2(_projTo.Y - _projFrom.Y, _projTo.X - _projFrom.X);
@@ -803,9 +827,10 @@ public class IsoLevelScreen : IScreen
         _victims.Clear();
         _overlayKey = null;
         if (LivingParty.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
-        // Nimble hands movement back, so the turn continues instead of ending
+        // the turn carries on while there is anything left to do with it: a
+        // form change spends no card at all, and Nimble hands movement back
         var mover = Current;
-        if (mover != null && mover.IsPlayer && mover.Alive && mover.MovePoints > 0)
+        if (mover != null && mover.IsPlayer && mover.Alive && (!_playedCard || mover.MovePoints > 0))
         {
             _mode = Mode.PlayerTurn;
             return;
@@ -1033,7 +1058,7 @@ public class IsoLevelScreen : IScreen
             list.Add(c);
         }
 
-        bool armed = _rangeSet.Count > 0;
+        bool armed = _cardArmed;
         foreach (var block in _level.Blocks.Values
                      .Where(b => _revealed.Contains(b.Room))
                      .OrderBy(b => b.X + b.Y).ThenBy(b => b.X))
