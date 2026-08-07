@@ -59,7 +59,8 @@ public class TimelineGame : Game
             SaveStore = _platform.SaveStore,
             Pixel = pixel,
             Config = GameConfig.Load(),
-            Cards = CardLibrary.Load(),
+            Cards = CardLibrary.Load(CardLibrary.PlayerPath),
+            EnemyCards = CardLibrary.Load(CardLibrary.EnemyPath),
             Classes = ClassLibrary.Load(),
             Enemies = EnemyLibrary.Load(),
             Sounds = new SoundBank(),
@@ -67,7 +68,7 @@ public class TimelineGame : Game
             DevWriter = _platform.DevWriter,
         };
 
-        ContentValidator.Run(_ctx.Cards, _ctx.Classes, _ctx.Enemies, _ctx.Strings);
+        ContentValidator.Run(_ctx.Cards, _ctx.EnemyCards, _ctx.Classes, _ctx.Enemies, _ctx.Strings);
         _platform.LogStore.Write(Diagnostics.Current.RenderLog());
 
         IScreen home = _platform.CreateEditorScreen(_ctx) ?? new TitleScreen(_ctx);

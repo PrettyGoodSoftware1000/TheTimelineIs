@@ -5,6 +5,20 @@ using System.Linq;
 namespace TheTimelineIs.Core.Data;
 
 /// <summary>
+/// One borrowed card: who lost it, and how many of the thief's turns are left
+/// before it goes home. The same object sits in the thief's Stolen list and the
+/// victim's Lost list, so returning it is one removal from each.
+/// </summary>
+public class StolenCard
+{
+    public string CardName = "";
+    public CharacterInstance? From;
+    /// <summary>True when it came out of EnemyCards.txt rather than PlayerCards.txt.</summary>
+    public bool FromEnemyDeck;
+    public int TurnsLeft;
+}
+
+/// <summary>
 /// A concrete character on stage during a mission run. The Nth mention of a
 /// name in a room's Cast line maps to the Nth instance of that character in
 /// the run, so instances keep their sprite and alive/dead state across rooms.
@@ -65,6 +79,12 @@ public class CharacterInstance
     /// <summary>Which shape a shapeshifter currently wears; blank for everyone else.</summary>
     public string Form = "";
 
+    /// <summary>Cards lifted off somebody else and playable until the clock runs out.</summary>
+    public List<StolenCard> Stolen = new();
+
+    /// <summary>The same records, seen from the victim's side: cards they can't play.</summary>
+    public List<StolenCard> Lost = new();
+
     public string Folder => IsPlayer
         ? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";
@@ -77,6 +97,8 @@ public class CharacterInstance
         var copy = (CharacterInstance)MemberwiseClone();
         copy.Burns = new List<int>(Burns);   // don't share the stack lists with the original
         copy.Curses = new List<(int, int)>(Curses);
+        copy.Stolen = new List<StolenCard>(Stolen);
+        copy.Lost = new List<StolenCard>(Lost);
         return copy;
     }
 }

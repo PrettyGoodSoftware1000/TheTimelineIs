@@ -225,3 +225,19 @@ Effect: Single target. 1 times x 0 damage.
 Card Text: Mark one of them. Melee hits them for 3 more, for 10 turns.
 Bottom Right: 0 Cursed
 []
+
+[]
+Card Name: Beg, Borrow, but Mostly Steal
+Tags: Dirtbag
+Type: [ranged] Single target, X hits.
+Effects: Steal 3
+Range: 4
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Lift a card off anyone - friend or foe. They lose it, you hold it. Play it now, or on either of your next 2 turns.
+Bottom Right: 0 Stolen
+[]

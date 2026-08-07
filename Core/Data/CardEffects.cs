@@ -26,9 +26,10 @@ public static class Effects
     public const string Leap = "Leap";
     public const string Curse = "Curse";
     public const string Form = "Form";
+    public const string Steal = "Steal";
 
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
-    public static readonly string[] Known = { Burning, Armor, Nimble, Leap, Curse, Form };
+    public static readonly string[] Known = { Burning, Armor, Nimble, Leap, Curse, Form, Steal };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
     public const int BurnDamagePerStack = 5;
@@ -41,6 +42,15 @@ public static class Effects
 
     /// <summary>How many of the victim's turns a Curse lingers for.</summary>
     public const int CurseTurns = 10;
+
+    /// <summary>
+    /// Steal takes one card off whoever it hits, friend or foe, and hands it to
+    /// the caster. "Steal N" means the thief holds it for N of their own turns
+    /// counting the one they stole it on, so Steal 3 is "play it now, or on
+    /// either of your next two turns". The card is unusable by its owner in the
+    /// meantime and goes back the moment the thief plays it or the clock runs out.
+    /// </summary>
+    public const int StealTurns = 3;
 
     public static bool IsKnown(string name) =>
         Known.Any(k => k.Equals(name, StringComparison.OrdinalIgnoreCase));

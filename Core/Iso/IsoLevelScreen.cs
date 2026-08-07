@@ -17,23 +17,30 @@ namespace TheTimelineIs.Core.Iso;
 /// the rest of the party first gets a free positioning move, then turn order
 /// rolls (sides shuffled, alternating).
 ///
-/// Overlays are outlines, never washes of colour: the movement region shows as
-/// a blue border around its edge and only while somebody is selected. Arming or
-/// hovering a card swaps that for a red border — the card's reach measured from
-/// where the caster is standing right now — and an area card adds a purple
-/// border around what it would cover.
+/// Each highlighted region is a colour wash with a border around its outer
+/// edge, at the strengths Config.txt gives: blue for where the selected
+/// character can walk, red for an armed card's reach, purple for an area. Red
+/// replaces blue while a card is up, and none of it shows until somebody is
+/// selected.
 ///
 /// One click does everything. Clicking an enemy targets it, and a card that
 /// wants several targets fires the moment its last one is clicked; if the
 /// caster has to close the distance first it walks there itself. Right-click
 /// cancels the armed card.
 ///
+/// Both sides act through the same card pipeline — the party's from
+/// PlayerCards.txt, enemies' from EnemyCards.txt — so hit sequences, sounds,
+/// projectiles and effects behave identically whoever plays them.
+///
+/// Nothing about damage is printed over the level. Every blow, burn, theft and
+/// turn event goes into the log behind the + button at the top left.
+///
 /// Stepping on a trigger square plays its dialogue block once.
 /// </summary>
 public class IsoLevelScreen : IScreen
 {
     private enum Mode { Explore, FreeMove, PlayerTurn, PlayerTarget, EnemyTurn, Acting, Victory }
-    private enum Act { Casting, Projectile, MeleeWait, Hits, EnemyWindup }
+    private enum Act { Casting, Projectile, MeleeWait, Hits }
 
     private const int AggroTiles = 15;
     private const float WalkTilesPerSec = 5f;
@@ -63,6 +70,8 @@ public class IsoLevelScreen : IScreen
     private Dictionary<Point, int> _moveSet = new();
     private HashSet<Point> _rangeSet = new();
     private bool _cardArmed;          // a card is selected or hovered: red replaces blue
+    private string _rangeOpacityKey = "Range";   // "Leap" when the card jumps
+    private string _blastOpacityKey = "AoE";     // "Cone" for a wedge
     private object? _overlayKey;
 
     private Vector2 _camera;
@@ -71,6 +80,11 @@ public class IsoLevelScreen : IScreen
     private Point? _tap;
     private string _toast = "";
     private float _toastTimer;
+
+    // the combat log: every blow, burn and turn event, hidden behind a + button
+    private readonly List<string> _log = new();
+    private bool _logOpen;
+    private int _logScroll;           // lines scrolled back from the newest
 
     // walking
     private CharacterInstance? _walker;
@@ -94,6 +108,14 @@ public class IsoLevelScreen : IScreen
     private List<DialogueLine>? _lines;
     private int _lineIndex;
 
+    // the turn strip starts clear of the log button and runs right
+    private static readonly Rectangle TurnStrip = new(220, 34, 2900, 200);
+    private const int TurnFaceActive = 190, TurnFace = 130, TurnFaceGap = 18;
+
+    private static readonly Rectangle LogToggleRect = new(60, 40, 96, 96);
+    private static readonly Rectangle LogPanel = new(60, 156, 1500, 1180);
+    private const float LogTextScale = 0.30f;
+    private const int LogLineH = 46;
     private static readonly Rectangle EndTurnRect = new(3280, 60, 500, 160);
     private static readonly Rectangle DoneRect = new(3280, 60, 500, 160);
     private static readonly Rectangle WinRect = new(1620, 1250, 600, 180);
@@ -120,7 +142,7 @@ public class IsoLevelScreen : IScreen
             var focus = IsoMath.ToScreen(_party[0].GX, _party[0].GY, HeightAt(Tile(_party[0])), Vector2.Zero);
             _baseOrigin = new Vector2(VirtualViewport.Width / 2f, VirtualViewport.Height / 2f) - focus;
         }
-        Toast(_ctx.Strings.Get("iso_enter"));
+        Log(_ctx.Strings.Get("iso_enter"));
     }
 
     private void SpawnParty()
@@ -205,7 +227,68 @@ public class IsoLevelScreen : IScreen
     private CharacterInstance? Current => _turn >= 0 && _turn < _order.Count ? _order[_turn] : null;
     private bool DialogueActive => _lines != null;
 
-    private void Toast(string text) { _toast = text; _toastTimer = 3f; }
+    /// <summary>
+    /// Records what happened. Everything about damage, burning, shapes and
+    /// turns goes here and nowhere else — the log panel is the only place the
+    /// player reads it, so the level itself stays uncluttered.
+    /// </summary>
+    private void Log(string text)
+    {
+        foreach (var line in text.Split('\n'))
+            if (line.Trim().Length > 0)
+                _log.Add(line.Trim());
+        if (_logScroll > 0) _logScroll++;      // keep the reader's place while pinned back
+    }
+
+    /// <summary>
+    /// Immediate feedback on something the player just tried to do — out of
+    /// range, no movement left. Flashes on screen AND joins the log.
+    /// </summary>
+    private void Toast(string text)
+    {
+        _toast = text;
+        _toastTimer = 3f;
+        Log(text);
+    }
+
+    /// <summary>The deck a character's own cards come from.</summary>
+    private CardLibrary DeckOf(CharacterInstance c) => c.IsPlayer ? _ctx.Cards : _ctx.EnemyCards;
+
+    /// <summary>Looks a card up by name in whichever deck it came from.</summary>
+    private Card? FindCard(string name, bool enemyDeck) =>
+        (enemyDeck ? _ctx.EnemyCards : _ctx.Cards).All
+            .FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Everything a character can play right now: their own cards, minus any
+    /// the Dirtbag is currently holding off them, plus anything they have
+    /// stolen from somebody else.
+    /// </summary>
+    private List<Card> HandOf(CharacterInstance who)
+    {
+        var tags = who.IsPlayer
+            ? _ctx.Classes.CardTagsFor(who.Name)
+            : _ctx.Enemies.CardTagsFor(who.Name);
+        var hand = who.IsPlayer
+            ? DeckOf(who).HandFor(tags, who.Form)
+            : DeckOf(who).HandFor(tags);
+
+        if (who.Lost.Count > 0)
+            hand = hand.Where(c => !who.Lost.Any(l =>
+                l.CardName.Equals(c.Name, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        foreach (var loot in who.Stolen)
+            if (FindCard(loot.CardName, loot.FromEnemyDeck) is Card borrowed)
+                hand.Add(borrowed);
+        return hand;
+    }
+
+    /// <summary>Gives a borrowed card back and clears it from both sides.</summary>
+    private void ReturnStolen(StolenCard loot, CharacterInstance thief)
+    {
+        thief.Stolen.Remove(loot);
+        loot.From?.Lost.Remove(loot);
+    }
 
     /// <summary>Who the current mode lets the player move.</summary>
     private CharacterInstance? ActiveMover => _mode switch
@@ -238,6 +321,18 @@ public class IsoLevelScreen : IScreen
         _camera += input.PanDelta;
         if (_toastTimer > 0) _toastTimer -= dt;
         Formation.UpdateShakes(_party.Concat(_enemies).ToList(), dt);
+
+        if (_tap is Point logTap && LogToggleRect.Contains(logTap))
+        {
+            _logOpen = !_logOpen;
+            _logScroll = 0;
+            _tap = null;
+            return;
+        }
+        // the wheel scrolls the log back through history while it is open
+        if (_logOpen && LogPanel.Contains(_pointer) && input.ScrollDelta != 0)
+            _logScroll = Math.Clamp(_logScroll + input.ScrollDelta,
+                0, Math.Max(0, _log.Count - LogLines));
 
         if (DialogueActive)
         {
@@ -354,7 +449,7 @@ public class IsoLevelScreen : IScreen
             _mode = Mode.FreeMove;
             _selected = _freeMovers.FirstOrDefault();
             _overlayKey = null;
-            Toast(_ctx.Strings.Get("iso_spotted"));
+            Log(_ctx.Strings.Get("iso_spotted"));
         }
         return true;
     }
@@ -388,7 +483,7 @@ public class IsoLevelScreen : IScreen
             _overlayKey = null;
             if (_enemies.All(e => !e.Alive)) { _mode = Mode.Victory; return; }
             _mode = Mode.Explore;
-            Toast(_ctx.Strings.Get("iso_clear"));
+            Log(_ctx.Strings.Get("iso_clear"));
             return;
         }
 
@@ -407,7 +502,7 @@ public class IsoLevelScreen : IScreen
         if (current.IsPlayer)
         {
             _playedCard = false;
-            _hand = _ctx.Cards.HandFor(_ctx.Classes.CardTagsFor(current.Name), current.Form);
+            _hand = HandOf(current);
             _mode = Mode.PlayerTurn;
         }
         else
@@ -443,6 +538,10 @@ public class IsoLevelScreen : IScreen
         _moveSet = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed,
             OccupiedExcept(mover), card?.IgnoresHeight ?? false, PassThroughFor(mover)).Cost;
         if (card == null || _mode == Mode.Explore) return;
+
+        // a Leap card's reach covers a lot of ground, so it gets its own,
+        // lighter wash rather than drowning the level in red
+        _rangeOpacityKey = card.LeapBonus > 0 ? "Leap" : "Range";
 
         // a cone is shown by the purple wedge that follows the cursor, so a red
         // diamond around it would only be a second, wrong-shaped answer
@@ -480,6 +579,7 @@ public class IsoLevelScreen : IScreen
     {
         _blastSet = new HashSet<Point>();
         if (_selectedCard is not { TargetsGround: true } card || Current == null) return;
+        _blastOpacityKey = card.Delivery == Delivery.Cone ? "Cone" : "AoE";
 
         if (FindTileAt(_pointer.ToVector2()) is Point c && ReachableAim(Current, c, card))
             _blastSet = AreaOf(card, Tile(Current), c);
@@ -540,6 +640,9 @@ public class IsoLevelScreen : IScreen
             if (_mode == Mode.PlayerTarget && _selectedCard is Card aiming)
             {
                 if (aiming.TargetsGround) TryTargetGround(Tile(c));
+                // stealing works on anyone, so it skips the side check entirely
+                else if (aiming.TargetsAnyone && c != Current) TryTarget(c);
+                else if (aiming.TargetsAnyone) Toast(_ctx.Strings.Get("iso_needs_other"));
                 else if (c.IsPlayer == aiming.TargetsAllies) TryTarget(c);
                 else Toast(_ctx.Strings.Get(aiming.TargetsAllies ? "iso_needs_ally" : "iso_needs_enemy"));
                 return;
@@ -576,7 +679,7 @@ public class IsoLevelScreen : IScreen
         _revealed.Add(door.RoomA);
         _revealed.Add(door.RoomB);
         _overlayKey = null;
-        Toast(_ctx.Strings.Get("iso_door_open"));
+        Log(_ctx.Strings.Get("iso_door_open"));
         var nearest = LivingParty.OrderBy(p =>
             IsoMath.GridDistance(Tile(p), new Point(door.X, door.Y))).First();
         CheckAggro(nearest);
@@ -732,6 +835,15 @@ public class IsoLevelScreen : IScreen
         _selectedCard = null;
         _targets.Clear();
         _blastSet.Clear();
+        // playing a borrowed card uses it up and hands it straight back
+        if (_actor != null && _actor.Stolen.FirstOrDefault(st =>
+                st.CardName.Equals(card.Name, StringComparison.OrdinalIgnoreCase)) is StolenCard spent)
+        {
+            ReturnStolen(spent, _actor);
+            Log(_ctx.Strings.Format("iso_steal_over",
+                ("card", spent.CardName), ("owner", spent.From?.Name ?? "?")));
+        }
+
         // changing shape is free: it costs neither the turn's card nor its
         // movement, so a shapeshifter can shift and then actually do something
         if (card.BecomesForm == null)
@@ -784,9 +896,6 @@ public class IsoLevelScreen : IScreen
                 _hitIndex = 0;
                 EnterAct(Act.Hits, 0f);
                 break;
-            case Act.EnemyWindup:
-                ResolveEnemyHit();
-                break;
         }
     }
 
@@ -810,7 +919,7 @@ public class IsoLevelScreen : IScreen
         bool lastBlow = _hitIndex >= card.HitEvents.Count;
         if (lastBlow && card.Effects.Count > 0)
             ApplyEffects(card, struck, report);
-        if (report.Length > 0) Toast(report.ToString().TrimEnd());
+        if (report.Length > 0) Log(report.ToString().TrimEnd());
 
         if (!lastBlow)
         {
@@ -912,8 +1021,51 @@ public class IsoLevelScreen : IScreen
                     report.AppendLine(_ctx.Strings.Format("iso_cursed",
                         ("name", c.Name), ("bonus", c.CurseBonus.ToString())));
                 }
+                else if (effect.Is(Data.Effects.Steal))
+                {
+                    StealFrom(c, effect.Amount, report);
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// Lifts one card off the victim — friend or foe — and hands it to the
+    /// caster for the next few of their turns. The victim cannot play it while
+    /// it is gone, which is how an enemy ends up with nothing to attack with.
+    /// A card already stolen from somebody is not stolen again.
+    /// </summary>
+    private void StealFrom(CharacterInstance victim, int turns, StringBuilder report)
+    {
+        if (_actor == null || _actor == victim) return;
+
+        // only cards that are genuinely theirs: not ones they are themselves
+        // borrowing, and not the Steal card being played right now
+        var borrowed = victim.Stolen
+            .Select(st => st.CardName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var takeable = HandOf(victim)
+            .Where(c => !borrowed.Contains(c.Name))
+            .Where(c => c != _actingCard)
+            .ToList();
+        if (takeable.Count == 0)
+        {
+            report.AppendLine(_ctx.Strings.Format("iso_nothing_to_steal", ("name", victim.Name)));
+            return;
+        }
+
+        var loot = takeable[Rng.Next(takeable.Count)];
+        var record = new StolenCard
+        {
+            CardName = loot.Name,
+            From = victim,
+            FromEnemyDeck = !victim.IsPlayer,
+            TurnsLeft = Math.Max(1, turns),
+        };
+        _actor.Stolen.Add(record);
+        victim.Lost.Add(record);
+        report.AppendLine(_ctx.Strings.Format("iso_stole",
+            ("thief", _actor.Name), ("card", loot.Name), ("victim", victim.Name),
+            ("turns", record.TurnsLeft.ToString())));
     }
 
     /// <summary>Swaps a shapeshifter's shape, and with it the cards in its hand.</summary>
@@ -929,7 +1081,7 @@ public class IsoLevelScreen : IScreen
         who.Form = target.Name;
         who.SpriteFile = target.Sprite;
         if (who == Current)
-            _hand = _ctx.Cards.HandFor(_ctx.Classes.CardTagsFor(who.Name), who.Form);
+            _hand = HandOf(who);
         report.AppendLine(_ctx.Strings.Format("iso_form", ("name", who.Name), ("form", target.Name)));
     }
     /// <summary>
@@ -946,6 +1098,16 @@ public class IsoLevelScreen : IScreen
                 c.Curses[i] = (c.Curses[i].Amount, c.Curses[i].Turns - 1);
             c.Curses.RemoveAll(x => x.Turns <= 0);
         }
+        // borrowed cards run on the THIEF's clock: the turn they were taken on
+        // counts as the first, so Steal 3 is "now, or either of your next two"
+        for (int i = c.Stolen.Count - 1; i >= 0; i--)
+        {
+            var loot = c.Stolen[i];
+            if (--loot.TurnsLeft > 0) continue;
+            ReturnStolen(loot, c);
+            Log(_ctx.Strings.Format("iso_steal_over",
+                ("card", loot.CardName), ("owner", loot.From?.Name ?? "?")));
+        }
         if (c.Burns.Count == 0) return true;
         var report = new StringBuilder();
         ApplyHit(c, c.Burns.Count * Data.Effects.BurnDamagePerStack, "Fire", report);
@@ -958,69 +1120,108 @@ public class IsoLevelScreen : IScreen
                 ("name", c.Name), ("gone", (before - c.Burns.Count).ToString()),
                 ("left", c.Burns.Count.ToString())));
 
-        Toast(report.ToString().TrimEnd());
+        Log(report.ToString().TrimEnd());
         return c.Alive;
     }
 
+    /// <summary>
+    /// What an enemy does with its turn, driven entirely by its cards in
+    /// EnemyCards.txt:
+    ///   1. A melee card it can actually land this turn wins — it walks at the
+    ///      nearest player it can reach and swings.
+    ///   2. Otherwise a ranged card: it closes only as far as it must to bring
+    ///      the nearest player inside that card's range, and no further.
+    ///   3. With no usable attack card — none authored, or the Dirtbag has
+    ///      lifted the only one — it cannot attack at all, so it wanders to a
+    ///      random square it can reach.
+    /// </summary>
     private void EnemyAct()
     {
         var me = Current!;
         var players = LivingParty;
         if (players.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
-        var target = players.OrderBy(p => IsoMath.GridDistance(Tile(me), Tile(p))).First();
 
-        if (IsoMath.GridDistance(Tile(me), Tile(target)) > me.RangeTiles)
+        var hand = HandOf(me).Where(c => !c.TargetsAllies).ToList();
+        var reach = Pathfinder.Reachable(_level, Tile(me), me.MovePoints, _revealed,
+            OccupiedExcept(me)).Cost;
+        var stands = reach.Keys.Append(Tile(me)).ToList();
+
+        // longest reach first within each kind, so a spear beats a fist
+        foreach (var card in hand.Where(c => c.Delivery == Delivery.Melee)
+                                 .OrderByDescending(c => c.Range)
+                                 .Concat(hand.Where(c => c.Delivery != Delivery.Melee)
+                                             .OrderByDescending(c => c.Range)))
         {
-            var goal = Pathfinder.StepToward(_level, Tile(me), Tile(target), me.MovePoints,
-                me.RangeTiles, _revealed, OccupiedExcept(me), out var path);
+            // the cheapest square that puts somebody in this card's range
+            var shot = players
+                .SelectMany(p => stands.Select(sq => (Square: sq, Target: p)))
+                .Where(x => IsoMath.GridDistance(x.Square, Tile(x.Target)) <= card.Range)
+                .OrderBy(x => reach.TryGetValue(x.Square, out int c) ? c : 0)
+                .ThenBy(x => IsoMath.GridDistance(x.Square, Tile(x.Target)))
+                .Select(x => ((Point, CharacterInstance)?)(x.Square, x.Target))
+                .FirstOrDefault();
+            if (shot == null) continue;
+
+            var (square, victim) = shot.Value;
+            if (square == Tile(me)) { EnemyPlay(me, card, victim); return; }
+            me.MovePoints -= reach.TryGetValue(square, out int cost) ? cost : 0;
+            var goal = square;
+            BeginWalk(me, goal, () => EnemyPlay(me, card, victim));
+            return;
+        }
+
+        // holding a weapon but out of reach of everyone: close the distance
+        // and try again next turn
+        if (hand.Count > 0)
+        {
+            var near = players.OrderBy(p => IsoMath.GridDistance(Tile(me), Tile(p))).First();
+            int wanted = hand.Max(c => c.Range);
+            var goal = Pathfinder.StepToward(_level, Tile(me), Tile(near), me.MovePoints,
+                wanted, _revealed, OccupiedExcept(me), out var path);
+            me.MovePoints = 0;
             if (goal != null && path.Count > 0)
             {
                 _walker = me;
                 _walkFrom = Tile(me);
                 _walkPath = path;
                 _walkT = 0f;
-                _afterWalk = () => EnemyStrikeOrPass(me, target);
+                _afterWalk = NextTurn;
                 return;
             }
+            NextTurn();
+            return;
         }
-        EnemyStrikeOrPass(me, target);
+
+        EnemyWander(me, reach);
     }
 
-    private void EnemyStrikeOrPass(CharacterInstance me, CharacterInstance target)
+    /// <summary>
+    /// Nothing to attack with at all — no cards authored, or the Dirtbag is
+    /// holding the only one. It cannot fight, so it picks a square inside its
+    /// movement range at random and ambles there.
+    /// </summary>
+    private void EnemyWander(CharacterInstance me, Dictionary<Point, int> reach)
     {
-        if (target.Alive && IsoMath.GridDistance(Tile(me), Tile(target)) <= me.RangeTiles)
-        {
-            _actor = me;
-            _victims = new List<CharacterInstance> { target };
-            _mode = Mode.Acting;
-            EnterAct(Act.EnemyWindup, 0.35f);
-        }
-        else NextTurn();
+        Log(_ctx.Strings.Format("iso_no_cards", ("name", me.Name)));
+        me.MovePoints = 0;
+        if (reach.Count == 0) { NextTurn(); return; }
+        var where = reach.Keys.ElementAt(Rng.Next(reach.Count));
+        BeginWalk(me, where, NextTurn);
     }
 
-    private void ResolveEnemyHit()
+    /// <summary>
+    /// Enemies fire cards through exactly the same pipeline the party uses, so
+    /// hit sequences, projectiles, sounds and effects all behave identically.
+    /// </summary>
+    private void EnemyPlay(CharacterInstance me, Card card, CharacterInstance victim)
     {
-        var me = _actor!;
-        var target = _victims.FirstOrDefault();
-        if (target != null && target.Alive)
+        if (!victim.Alive || IsoMath.GridDistance(Tile(me), Tile(victim)) > card.Range)
         {
-            _ctx.Sounds.Play(me.AttackSound);
-            var report = new StringBuilder(_ctx.Strings.Format("battle_enemy_hit",
-                ("attacker", me.Name), ("target", target.Name),
-                ("dmg", me.AttackDmg.ToString()), ("type", me.AttackType)));
-            target.Hp -= me.AttackDmg;
-            target.ShakeTimer = Formation.ShakeDuration;
-            if (target.Hp <= 0)
-            {
-                target.Hp = 0;
-                target.Alive = false;
-                report.Append('\n').Append(_ctx.Strings.Format("battle_down", ("name", target.Name)));
-            }
-            Toast(report.ToString());
+            NextTurn();
+            return;
         }
-        _actor = null;
-        _victims.Clear();
-        NextTurn();
+        _selectedCard = card;
+        PlayCard(new List<CharacterInstance> { victim }, Tile(victim));
     }
 
     // ---------------- drawing ----------------
@@ -1066,19 +1267,26 @@ public class IsoLevelScreen : IScreen
             DrawBlock(batch, block);
             var tile = new Point(block.X, block.Y);
 
-            // only the border of each region is drawn, and red replaces blue
-            // whenever a card is armed or hovered
+            // each region gets a colour wash inside plus a border around the
+            // outside; red replaces blue whenever a card is armed or hovered.
+            // The wash strengths all come from Config.txt.
             if (armed)
             {
                 if (_rangeSet.Contains(tile))
-                    Outline(batch, tile, block.Height, _rangeSet, new Color(255, 70, 70), 7f);
+                    Region(batch, tile, block.Height, _rangeSet, new Color(255, 70, 70),
+                        _rangeOpacityKey, 7f);
             }
             else if (_moveSet.ContainsKey(tile))
-                Outline(batch, tile, block.Height, _moveSet.Keys, new Color(90, 150, 255), 7f);
+                Region(batch, tile, block.Height, _moveSet.Keys, new Color(90, 150, 255),
+                    "Movement", 7f);
             if (_blastSet.Contains(tile))
-                Outline(batch, tile, block.Height, _blastSet, new Color(190, 100, 255), 9f);
+                Region(batch, tile, block.Height, _blastSet, new Color(190, 100, 255),
+                    _blastOpacityKey, 9f);
             if (_level.TriggerAt(tile) is { Fired: false })
+            {
+                Fill(batch, tile, block.Height, Color.Violet * _ctx.Config.Opacity("Trigger"));
                 Edge(batch, tile, block.Height, Color.Violet * 0.8f);
+            }
 
             if (_level.DoorAt(tile) is LevelDoor door)
                 Billboard(batch, "Content/Images/Decorations/Door.png", tile, block.Height,
@@ -1093,6 +1301,7 @@ public class IsoLevelScreen : IScreen
 
         DrawProjectile(batch);
         DrawHud(batch);
+        DrawLog(batch);
         if (DialogueActive) DrawDialogue(batch);
         _tap = null;
     }
@@ -1119,10 +1328,30 @@ public class IsoLevelScreen : IScreen
             IsoMath.TileW, IsoMath.TileH);
     }
 
+    private void Fill(SpriteBatch batch, Point tile, int height, Color color)
+    {
+        if (color.A == 0) return;
+        batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayTop.png"),
+            DiamondRect(tile, height), color);
+    }
+
+    /// <summary>
+    /// One tile of a highlighted region: a colour wash across its top face at
+    /// the strength Config.txt asks for, plus the region's border where this
+    /// tile faces out of it. Painting every tile this way leaves a solid area
+    /// with a clean edge and no grid lines through the middle.
+    /// </summary>
+    private void Region(SpriteBatch batch, Point tile, int height, ICollection<Point> region,
+        Color color, string opacityKey, float thickness)
+    {
+        Fill(batch, tile, height, color * _ctx.Config.Opacity(opacityKey));
+        Outline(batch, tile, height, region, color, thickness);
+    }
+
     /// <summary>
     /// Draws only the sides of this tile's diamond that face OUT of the region —
     /// do it for every tile in a region and what's left is its border alone,
-    /// with none of the inner grid and no wash of colour over the level.
+    /// with none of the inner grid running through it.
     /// </summary>
     private void Outline(SpriteBatch batch, Point tile, int height,
         ICollection<Point> region, Color color, float thickness)
@@ -1331,17 +1560,112 @@ public class IsoLevelScreen : IScreen
         }
     }
 
+    /// <summary>How many lines the panel shows at once.</summary>
+    private static int LogLines => LogPanel.Height / LogLineH - 1;
+
+    /// <summary>
+    /// The + button, and the log panel behind it. Collapsed by default so the
+    /// level is clean; open, it shows the most recent entries with the newest
+    /// at the bottom, and the wheel scrolls back through the rest.
+    /// </summary>
+    private void DrawLog(SpriteBatch batch)
+    {
+        if (_logOpen)
+        {
+            Ui.FillRect(batch, _ctx.Pixel, LogPanel, new Color(0, 0, 0, 205));
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(LogPanel.X, LogPanel.Y, LogPanel.Width, 3), Color.White * 0.3f);
+
+            int shown = Math.Min(LogLines, _log.Count);
+            int end = _log.Count - _logScroll;          // exclusive
+            int start = Math.Max(0, end - shown);
+            for (int i = start; i < end; i++)
+            {
+                // the newest entries read brightest, older ones fade back
+                float age = (end - 1 - i) / (float)Math.Max(1, shown);
+                batch.DrawString(_ctx.Font, Ui.Wrap(_ctx.Font, _log[i], LogPanel.Width - 56, LogTextScale),
+                    new Vector2(LogPanel.X + 28, LogPanel.Y + 26 + (i - start) * LogLineH),
+                    Color.White * (1f - age * 0.45f),
+                    0f, Vector2.Zero, LogTextScale, SpriteEffects.None, 0f);
+            }
+            if (_log.Count == 0)
+                Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("iso_log_empty"),
+                    LogPanel, Color.White * 0.4f, LogTextScale);
+            if (_logScroll > 0)
+                Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("iso_log_more"),
+                    new Rectangle(LogPanel.X, LogPanel.Bottom - 46, LogPanel.Width, 40),
+                    Color.Gold * 0.8f, 0.26f);
+        }
+
+        Ui.FillRect(batch, _ctx.Pixel, LogToggleRect, new Color(20, 20, 28, 235));
+        Ui.FillRect(batch, _ctx.Pixel,
+            new Rectangle(LogToggleRect.X, LogToggleRect.Y, LogToggleRect.Width, 3), Color.White * 0.5f);
+        Ui.FillRect(batch, _ctx.Pixel,
+            new Rectangle(LogToggleRect.X, LogToggleRect.Bottom - 3, LogToggleRect.Width, 3), Color.White * 0.5f);
+        Ui.FillRect(batch, _ctx.Pixel,
+            new Rectangle(LogToggleRect.X, LogToggleRect.Y, 3, LogToggleRect.Height), Color.White * 0.5f);
+        Ui.FillRect(batch, _ctx.Pixel,
+            new Rectangle(LogToggleRect.Right - 3, LogToggleRect.Y, 3, LogToggleRect.Height), Color.White * 0.5f);
+
+        // a drawn +/- rather than a glyph, so it stays centred at any font size
+        var c = LogToggleRect.Center;
+        var ink = _logOpen ? Color.Gold : Color.White;
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(c.X - 26, c.Y - 4, 52, 8), ink);
+        if (!_logOpen)
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(c.X - 4, c.Y - 26, 8, 52), ink);
+    }
+
+    /// <summary>
+    /// Turn order as a row of faces rather than a row of names. Whoever is
+    /// acting sits at the far left, so the strip shuffles along by one every
+    /// turn and "next up" is always the face beside the big one.
+    /// </summary>
     private void DrawTurnStrip(SpriteBatch batch)
     {
         if (_order.Count == 0) return;
-        var strip = string.Join("  >  ", _order.Select((inst, i) =>
-            i == _turn ? "[" + inst.Name + "]" : inst.Alive ? inst.Name : "-"));
-        Ui.DrawTextCentered(batch, _ctx.Font, strip,
-            new Rectangle(0, 40, VirtualViewport.Width, 90), Color.White * 0.85f, 0.34f);
+
+        // rotate the running order so the current actor leads it, skipping
+        // anyone who has died and won't be taking a turn
+        var upcoming = new List<CharacterInstance>();
+        for (int step = 0; step < _order.Count; step++)
+        {
+            var who = _order[(_turn + step + _order.Count) % _order.Count];
+            if (who.Alive) upcoming.Add(who);
+        }
+        if (upcoming.Count == 0) return;
+
+        int x = TurnStrip.X;
+        for (int i = 0; i < upcoming.Count && x < TurnStrip.Right; i++)
+        {
+            var who = upcoming[i];
+            bool active = i == 0;
+            int size = active ? TurnFaceActive : TurnFace;
+            var slot = new Rectangle(x, TurnStrip.Y + (TurnFaceActive - size) / 2, size, size);
+
+            // the acting character gets a gold frame; the rest sit dimmer and smaller
+            var frame = active ? Color.Gold : Color.White * 0.4f;
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(slot.X - 4, slot.Y - 4, slot.Width + 8, slot.Height + 8), frame);
+            Ui.FillRect(batch, _ctx.Pixel, slot, new Color(16, 16, 22));
+
+            var face = _ctx.Assets.LoadFirstAvailable(who.ThumbPath, who.SpritePath);
+            var fit = Ui.FitCentered(new Vector2(face.Width, face.Height),
+                new Rectangle(slot.X + 4, slot.Y + 4, slot.Width - 8, slot.Height - 8));
+            batch.Draw(face, fit, active ? Color.White : Color.White * 0.65f);
+
+            // a thin bar under each face says which side it is on
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(slot.X, slot.Bottom - 10, slot.Width, 10),
+                who.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
+
+            x += size + TurnFaceGap;
+        }
+
         if (Current != null)
-            Ui.DrawTextCentered(batch, _ctx.Font,
+            batch.DrawString(_ctx.Font,
                 _ctx.Strings.Format("battle_turn", ("name", Current.Name)),
-                new Rectangle(0, 140, VirtualViewport.Width, 90), Color.Gold, 0.46f);
+                new Vector2(TurnStrip.X, TurnStrip.Bottom + 12), Color.Gold,
+                0f, Vector2.Zero, 0.38f, SpriteEffects.None, 0f);
     }
 
     private void DrawHand(SpriteBatch batch)

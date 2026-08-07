@@ -50,8 +50,10 @@ tactics test**: Title -> party select -> world map -> the destination opens
   diamond, `{Type}Side.png` a 360x90 strip stacked once per foot; `Blocks.txt`
   lists the types.
 - **Movement**: orthogonal 1, diagonal 2, +1 per foot climbed, 4 ft max step
-  up, drops free. The reachable region is outlined in blue along its outer
-  edge — no fill, no inner grid — and only while a character is selected.
+  up, drops free. The reachable region is washed blue with a border around its
+  outer edge, and only shows while a character is selected. Every overlay's
+  fill strength comes from `Config.txt` (`Movement opacity: 20%` and friends);
+  0% there means outline only.
   Exploration is free-roam and per-character; a combat turn is movement
   **then** a card, and playing a card spends the rest of that turn's movement
   unless `Nimble` hands some back.
@@ -65,7 +67,7 @@ tactics test**: Title -> party select -> world map -> the destination opens
 - **Cards**: melee cards reach 1 tile; ranged cards default to `Range: 5`
   (override per card). Hovering or selecting a card outlines its reach in red,
   measured **from where the caster is standing right now** rather than from
-  everywhere it could walk to first. Red replaces the blue outline while it
+  everywhere it could walk to first. Red replaces the blue region while it
   shows.
 - **Targeting is one click.** Clicking an enemy fires the card at it; if the
   caster has to close the distance first it walks there by the shortest route
@@ -74,6 +76,15 @@ tactics test**: Title -> party select -> world map -> the destination opens
   the last. Right-click cancels the armed card.
 - **Selection** is marked by a small gold arrow pointing down at the selected
   character's health bar.
+- **Turn order** is a row of face thumbnails across the top. Whoever is acting
+  sits at the far left at double size with a gold frame, so the strip shuffles
+  along by one each turn and "next up" is always the face beside it. A green or
+  red bar under each face says which side it is on.
+- **The combat log** lives behind the small `+` button at the top left. Nothing
+  about damage is printed over the level any more: every blow, burn, theft,
+  shapeshift and turn event goes in there, newest at the bottom, and the mouse
+  wheel scrolls back through the history. Only immediate "you can't do that"
+  feedback still flashes on screen — and it is logged too.
 - **Effects** (`Effects: Burning 1, Armor 5`) are shared behaviour any card
   can carry:
   - `Burning N` — N stacks; each stack burns the victim for 5 at the **start
@@ -93,6 +104,12 @@ tactics test**: Title -> party select -> world map -> the destination opens
     tile underfoot, since the jump is part of the attack.
   - `Curse N` — the victim takes N extra damage from **melee** cards for 10 of
     their turns. Curses stack and each keeps its own clock.
+  - `Steal N` — takes one card off whoever it hits, **friend or foe**, and
+    hands it to the caster for N of the caster's own turns counting the one it
+    was stolen on. `Steal 3` is "play it now, or on either of your next two".
+    The owner cannot play it while it is gone, and it goes straight back the
+    moment the thief plays it or the clock runs out. An enemy robbed of its
+    only card has nothing to attack with.
   - `Form X` — the caster changes into their form X, swapping art and hand.
     **Changing shape is free**: it spends neither the turn's card nor its
     movement, so a shapeshifter can shift and then actually do something. The
@@ -121,6 +138,24 @@ tactics test**: Title -> party select -> world map -> the destination opens
 - **Dialogue**: trigger squares painted in the editor (G tool) play a named
   block from `Content/Levels/{Level}Dialogue.txt` the first time anyone steps
   on them. Same `Speaker: text` format as the old mission scripts.
+- **Cards live in `Content/Cards/`**: `PlayerCards.txt` for the party,
+  `EnemyCards.txt` for enemies. Identical format — the only difference is
+  whether a card's `Tags:` match a class in `Classes.txt` or an enemy in
+  `Enemies.txt`.
+- **Enemies act through cards**, exactly as the party does. Their turn:
+  1. a **melee** card it can actually land this turn wins — it walks at the
+     nearest player it can reach and swings;
+  2. otherwise a **ranged** card — it closes only as far as it must to bring
+     the nearest player inside that card's range, and no further;
+  3. holding a weapon but out of reach of anyone, it advances and tries again
+     next turn;
+  4. holding **no usable attack card** — none authored, or the Dirtbag has
+     lifted the only one — it cannot attack at all, so it walks to a random
+     square inside its movement range.
+
+  `Basic Attack Damage`, `Sounds` and `Range` in `Enemies.txt` belong to the
+  older side-view battles; an isometric enemy needs a card in `EnemyCards.txt`,
+  and the validator warns when one has none.
 - **Classes.txt** now holds all class stats (`Class:`/`HP:`/`Movement:`,
   optional `Sprites:` and `Card Tags:`) — the per-character `{Name}.txt`
   manifests are gone. **Enemies.txt** does the same for enemies

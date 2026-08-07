@@ -1,0 +1,38 @@
+# ========================= ENEMY CARD FORMAT =========================
+# Exactly the same format as PlayerCards.txt - see that file's header for
+# every key. The only difference is who holds the card: "Tags:" here matches
+# an enemy in Enemies.txt (by its name, or by its "Card Tags:" line) instead
+# of a player class.
+#
+# HOW AN ENEMY USES THESE
+#   1. If it holds a MELEE card and it can reach a player this turn (its
+#      movement plus that card's range), it walks at the nearest such player
+#      and swings.
+#   2. Otherwise, if it holds a RANGED card, it moves only as far as it must
+#      to bring the nearest player inside that card's range, then fires.
+#      It does not close any further than that.
+#   3. If it holds no attack card it can use - because it has none, or
+#      because the Dirtbag has stolen the only one - it cannot attack at all.
+#      It picks a random square inside its movement range and wanders there.
+#
+# An enemy with several melee cards uses the longest-ranged one it can afford;
+# same for ranged. Enemies never play cards that target allies.
+#
+# "Basic Attack Damage", "Sounds" and "Range" in Enemies.txt are NOT used by
+# the isometric levels any more - they belong to the older side-view battles.
+# An enemy that should hit things in an isometric level needs a card here.
+# =====================================================================
+
+[]
+Card Name: Goblin Claw
+Tags: Goblin
+Type: [melee] Single target, X hits.
+Range: 1
+Melee Time: 0.35
+Casting Sound: [Blank.wav]
+Casting Time: 0.15
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 5 damage.
+Card Text: A grubby swipe. Nothing personal.
+Bottom Right: 5 Stabby
+[]

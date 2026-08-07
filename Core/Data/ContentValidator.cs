@@ -16,81 +16,87 @@ namespace TheTimelineIs.Core.Data;
 /// </summary>
 public static class ContentValidator
 {
-    public static void Run(CardLibrary cards, ClassLibrary classes, EnemyLibrary enemies, Strings strings)
+    public static void Run(CardLibrary cards, CardLibrary enemyCards, ClassLibrary classes,
+        EnemyLibrary enemies, Strings strings)
     {
         var diag = Diagnostics.Current;
-        ValidateCards(cards, classes, diag);
+        ValidateCards(cards, classes.AllPlayableTags(), diag);
+        ValidateCards(enemyCards, enemies.AllTags(), diag);
+        ValidateCardsAgainstClasses(cards, classes, diag);
         ValidateRoster(classes, cards, diag);
-        ValidateEnemies(enemies, diag);
+        ValidateEnemies(enemies, enemyCards, diag);
         ValidateLevels(enemies, diag);
         ValidateStrings(strings, diag);
     }
 
-    private static void ValidateCards(CardLibrary cards, ClassLibrary classes, Diagnostics diag)
+    /// <summary>Checks that hold for any deck: art, sounds, shapes, effects.</summary>
+    private static void ValidateCards(CardLibrary cards, HashSet<string> holderTags, Diagnostics diag)
     {
         if (cards.All.Count == 0)
-            diag.Error(CardLibrary.Path, 0, "no cards were loaded at all");
-
-        var playableTags = classes.AllPlayableTags();
+            diag.Error(cards.Source, 0, "no cards were loaded at all");
 
         foreach (var card in cards.All)
         {
             foreach (var tag in card.Tags)
-                if (!playableTags.Contains(tag))
-                    diag.Error(CardLibrary.Path, card.Line,
-                        $"'{card.Name}': no class in {ClassLibrary.Path} plays the tag '{tag}', " +
+                if (!holderTags.Contains(tag))
+                    diag.Error(card.Source, card.Line,
+                        $"'{card.Name}': nothing declares the tag '{tag}', " +
                         "so nobody can ever hold this card");
 
             if (card.Delivery == Delivery.Ranged)
             {
                 string art = $"Content/Images/Effects/{card.ProjectileArt}";
                 if (!AssetLoader.Exists(art))
-                    diag.Error(CardLibrary.Path, card.Line,
+                    diag.Error(card.Source, card.Line,
                         $"'{card.Name}': Projectile Art '{card.ProjectileArt}' not found at {art}");
             }
 
-            CheckSound(card.Name, card.Line, card.CastingSound, "Casting Sound", diag);
+            CheckSound(card, card.CastingSound, "Casting Sound", diag);
             foreach (var hit in card.HitEvents)
-                CheckSound(card.Name, card.Line, hit.Sound, "Hit Sound", diag);
+                CheckSound(card, hit.Sound, "Hit Sound", diag);
 
             if (card.Kind == CardKind.MultiTarget && card.Targets < 1)
-                diag.Error(CardLibrary.Path, card.Line, $"'{card.Name}': needs at least one target");
+                diag.Error(card.Source, card.Line, $"'{card.Name}': needs at least one target");
 
             foreach (var effect in card.Effects)
             {
                 if (effect.Amount <= 0)
-                    diag.Error(CardLibrary.Path, card.Line,
+                    diag.Error(card.Source, card.Line,
                         $"'{card.Name}': effect '{effect.Name}' needs an amount above 0");
                 if (effect.Is(Effects.Armor) && card.Damage > 0)
-                    diag.Warn(CardLibrary.Path, card.Line,
+                    diag.Warn(card.Source, card.Line,
                         $"'{card.Name}': carries Armor and damage, so it aims at enemies " +
                         "and will armour whatever it hits");
             }
-            // a form-gated card must name a form some class that can play it actually has
-            var owners = classes.ClassNames
-                .Where(n => classes.CardTagsFor(n).Intersect(card.Tags, StringComparer.OrdinalIgnoreCase).Any())
-                .Select(n => classes.Get(n)!).ToList();
-            if (card.Form.Length > 0 && owners.Count > 0 && owners.All(o => o.FindForm(card.Form) == null))
-                diag.Error(CardLibrary.Path, card.Line,
-                    $"'{card.Name}': needs form '{card.Form}', which no class holding its tags declares");
-            // (the matching check for BecomesForm lives in ValidateClasses, which
-            // can name the offending class and list the forms it does have)
-
             if (card.Delivery == Delivery.Cone && card.Kind != CardKind.AoEDamage)
-                diag.Warn(CardLibrary.Path, card.Line,
+                diag.Warn(card.Source, card.Line,
                     $"'{card.Name}': a [cone] card should be 'AoE damage' — the cone is its area");
         }
     }
 
-    private static void CheckSound(string owner, int line, string? file, string field, Diagnostics diag)
+    /// <summary>Form gating only means anything for the player deck.</summary>
+    private static void ValidateCardsAgainstClasses(CardLibrary cards, ClassLibrary classes, Diagnostics diag)
+    {
+        foreach (var card in cards.All.Where(c => c.Form.Length > 0))
+        {
+            var owners = classes.ClassNames
+                .Where(n => classes.CardTagsFor(n).Intersect(card.Tags, StringComparer.OrdinalIgnoreCase).Any())
+                .Select(n => classes.Get(n)!).ToList();
+            if (owners.Count > 0 && owners.All(o => o.FindForm(card.Form) == null))
+                diag.Error(card.Source, card.Line,
+                    $"'{card.Name}': needs form '{card.Form}', which no class holding its tags declares");
+        }
+    }
+
+    private static void CheckSound(Card card, string? file, string field, Diagnostics diag)
     {
         if (string.IsNullOrWhiteSpace(file)) return;
         string path = $"{Audio.SoundBank.Folder}/{file}";
         if (!AssetLoader.Exists(path))
-            diag.Error(CardLibrary.Path, line, $"'{owner}': {field} '{file}' not found at {path}");
+            diag.Error(card.Source, card.Line, $"'{card.Name}': {field} '{file}' not found at {path}");
         else if (!file.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
-            diag.Warn(CardLibrary.Path, line,
-                $"'{owner}': {field} '{file}' is not a .wav — only PCM WAV can be played");
+            diag.Warn(card.Source, card.Line,
+                $"'{card.Name}': {field} '{file}' is not a .wav — only PCM WAV can be played");
     }
 
     private static void ValidateRoster(ClassLibrary classes, CardLibrary cards, Diagnostics diag)
@@ -125,7 +131,7 @@ public static class ContentValidator
             foreach (var card in cards.All.Where(c => c.BecomesForm != null &&
                          c.Tags.Intersect(classes.CardTagsFor(name), StringComparer.OrdinalIgnoreCase).Any()))
                 if (cls.FindForm(card.BecomesForm!) == null)
-                    diag.Error(CardLibrary.Path, card.Line,
+                    diag.Error(card.Source, card.Line,
                         $"'{card.Name}' changes '{name}' into form '{card.BecomesForm}', " +
                         $"which that class does not declare" +
                         (cls.Forms.Count > 0
@@ -140,11 +146,20 @@ public static class ContentValidator
                 $"a party is {PartySelectScreen.PartySize}, so slots will be filled with duplicates");
     }
 
-    private static void ValidateEnemies(EnemyLibrary enemies, Diagnostics diag)
+    private static void ValidateEnemies(EnemyLibrary enemies, CardLibrary enemyCards, Diagnostics diag)
     {
         foreach (var name in enemies.EnemyNames)
         {
             var def = enemies.Get(name)!;
+            // an isometric enemy acts entirely through its cards
+            var hand = enemyCards.HandFor(enemies.CardTagsFor(name));
+            if (hand.Count == 0)
+                diag.Warn(EnemyLibrary.Path, def.Line,
+                    $"enemy '{name}': no cards in {CardLibrary.EnemyPath} carry its tags, so it " +
+                    "cannot attack in an isometric level — it will just wander");
+            else if (hand.All(c => c.TargetsAllies))
+                diag.Warn(EnemyLibrary.Path, def.Line,
+                    $"enemy '{name}': every one of its cards targets allies, so it never attacks");
             foreach (var sprite in def.SpriteFiles)
                 if (!AssetLoader.Exists($"{def.Folder}/{sprite}"))
                     diag.Error(EnemyLibrary.Path, def.Line,
@@ -260,10 +275,12 @@ public static class ContentValidator
             "iso_enter", "iso_explore_hint", "iso_spotted", "iso_done", "iso_clear",
             "iso_end_turn", "iso_move_left", "iso_out_of_range", "iso_card_spent",
             "iso_door_open", "iso_victory", "iso_card_range",
-            "iso_move_spent", "iso_pick_target", "iso_confirm_strike", "iso_dialogue_next",
+            "iso_move_spent", "iso_pick_target", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
             "iso_cursed", "iso_form",
+            "iso_stole", "iso_steal_over", "iso_nothing_to_steal", "iso_no_cards", "iso_needs_other",
+            "iso_log_empty", "iso_log_more",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

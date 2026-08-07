@@ -15,6 +15,8 @@ public class EnemyDef
     /// <summary>Attack reach in tiles; 1 = melee ("Range: Melee").</summary>
     public int Range = 1;
     public List<string> Sprites = new();
+    /// <summary>Which cards in EnemyCards.txt this enemy holds; its own name by default.</summary>
+    public List<string> CardTags = new();
     public int Line;
 
     public string Folder => $"Content/Cast/EnemyCharacters/{Name}";
@@ -45,6 +47,14 @@ public class EnemyLibrary
 
     public IReadOnlyList<string> EnemyNames => _order;
     public EnemyDef? Get(string name) => _enemies.TryGetValue(name, out var e) ? e : null;
+
+    /// <summary>The tags this enemy's cards may be filed under; its own name by default.</summary>
+    public IReadOnlyList<string> CardTagsFor(string name) =>
+        Get(name) is EnemyDef d && d.CardTags.Count > 0 ? d.CardTags : new List<string> { name };
+
+    /// <summary>Every tag any enemy holds — what an enemy card may legally be tagged with.</summary>
+    public HashSet<string> AllTags() =>
+        new(_order.SelectMany(CardTagsFor), StringComparer.OrdinalIgnoreCase);
 
     public static EnemyLibrary Load()
     {
@@ -109,6 +119,9 @@ public class EnemyLibrary
                     break;
                 case "sprites":
                     current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                    break;
+                case "card tags":
+                    current.CardTags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
                     break;
                 default:
                     diag.Warn(Path, lineNo, $"'{current.Name}': unknown line '{line}' ignored");

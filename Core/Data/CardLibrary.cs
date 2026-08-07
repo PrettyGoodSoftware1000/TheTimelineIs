@@ -35,6 +35,9 @@ public class Card
 
     /// <summary>Line in Cards.txt where this card starts, for error messages.</summary>
     public int Line;
+
+    /// <summary>The file this card was read from — PlayerCards.txt or EnemyCards.txt.</summary>
+    public string Source = CardLibrary.PlayerPath;
     public string EffectLine = "";
 
     // --- machine-read: matched case-insensitively ---
@@ -83,6 +86,12 @@ public class Card
 
     /// <summary>A card that only helps (Armor, no damage) is aimed at the party instead.</summary>
     public bool TargetsAllies => Damage <= 0 && Effects.Exists(e => Effects_IsFriendly(e));
+
+    /// <summary>
+    /// Cards that do not care whose side the target is on. Stealing works the
+    /// same on a friend as on a foe, so it may be pointed at either.
+    /// </summary>
+    public bool TargetsAnyone => Effects.Exists(e => e.Is(Data.Effects.Steal));
 
     private static bool Effects_IsFriendly(CardEffect e) => Data.Effects.IsFriendly(e.Name);
 
@@ -135,7 +144,14 @@ public class CardLibrary
 {
     public List<Card> All { get; } = new();
 
-    public const string Path = "Content/Cast/PlayerCharacters/Cards.txt";
+    /// <summary>Cards the party can play.</summary>
+    public const string PlayerPath = "Content/Cards/PlayerCards.txt";
+
+    /// <summary>Cards enemies act with. Same format, different holders.</summary>
+    public const string EnemyPath = "Content/Cards/EnemyCards.txt";
+
+    /// <summary>Which file this library was read from — for error messages.</summary>
+    public string Source { get; private set; } = PlayerPath;
 
     // longest first, so "card text" is tested before "card"
     private static readonly string[] Keys =
@@ -153,15 +169,15 @@ public class CardLibrary
     private static readonly Regex HitToken =
         new(@"\[(?<snd>[^\]]*)\]|delay\s*(?<d>\d+(?:\.\d+)?)", RegexOptions.IgnoreCase);
 
-    public static CardLibrary Load()
+    public static CardLibrary Load(string path)
     {
         var diag = Diagnostics.Current;
-        var lib = new CardLibrary();
+        var lib = new CardLibrary { Source = path };
         Card? card = null;
         bool inBlock = false;
         int blockLine = 0;
 
-        foreach (var (lineNo, raw) in AssetLoader.ReadNumbered(Path, Path))
+        foreach (var (lineNo, raw) in AssetLoader.ReadNumbered(path, path))
         {
             string line = TrailingNote.Replace(TextUtil.Clean(raw), "").Trim();
             if (line.Length == 0) continue;
@@ -169,7 +185,7 @@ public class CardLibrary
             if (line == "[]")
             {
                 if (inBlock && card == null)
-                    diag.Error(Path, blockLine, "this [] block has no 'Card Name:' line");
+                    diag.Error(path, blockLine, "this [] block has no 'Card Name:' line");
                 inBlock = !inBlock;
                 blockLine = lineNo;
                 if (!inBlock) card = null;
@@ -180,7 +196,7 @@ public class CardLibrary
                 line.StartsWith(k, StringComparison.OrdinalIgnoreCase));
             if (key == null)
             {
-                diag.Error(Path, lineNo,
+                diag.Error(path, lineNo,
                     $"unrecognized line '{Trim(line)}' — expected one of: {string.Join(", ", Keys)}");
                 continue;
             }
@@ -190,25 +206,25 @@ public class CardLibrary
             {
                 if (value.Length == 0)
                 {
-                    diag.Error(Path, lineNo, "'Card Name:' has no name after it");
+                    diag.Error(path, lineNo, "'Card Name:' has no name after it");
                     continue;
                 }
                 if (lib.All.Any(c => c.Name.Equals(value, StringComparison.OrdinalIgnoreCase)))
-                    diag.Error(Path, lineNo, $"a second card is also named '{value}'");
-                card = new Card { Name = value, Line = lineNo };
+                    diag.Error(path, lineNo, $"a second card is also named '{value}'");
+                card = new Card { Name = value, Line = lineNo, Source = path };
                 lib.All.Add(card);
                 continue;
             }
             if (card == null)
             {
-                diag.Error(Path, lineNo, $"'{key}' appears before any 'Card Name:' line");
+                diag.Error(path, lineNo, $"'{key}' appears before any 'Card Name:' line");
                 continue;
             }
             Apply(card, key, value, lineNo, diag);
         }
 
         if (inBlock)
-            diag.Error(Path, blockLine, "a [] block was opened but never closed");
+            diag.Error(path, blockLine, "a [] block was opened but never closed");
         foreach (var c in lib.All) Validate(c, diag);
         return lib;
     }
@@ -257,7 +273,7 @@ public class CardLibrary
                 else if (ParseFloat(value) is float ct)
                     card.CastingTime = ct;
                 else
-                    diag.Error(CardLibrary.Path, lineNo,
+                    diag.Error(card.Source, lineNo,
                         $"'{card.Name}': Casting Time must be a number or 'Use Sound Time', got '{value}'");
                 break;
 
@@ -269,7 +285,7 @@ public class CardLibrary
                 }
                 else
                 {
-                    diag.Error(CardLibrary.Path, lineNo,
+                    diag.Error(card.Source, lineNo,
                         $"'{card.Name}': Speed must be a number of feet per second " +
                         $"(or 0 to use the default), got '{value}'");
                 }
@@ -277,7 +293,7 @@ public class CardLibrary
 
             case "range":
                 if (int.TryParse(value, out int rng) && rng > 0) card.Range = rng;
-                else diag.Error(CardLibrary.Path, lineNo,
+                else diag.Error(card.Source, lineNo,
                     $"'{card.Name}': Range must be a positive number of tiles, got '{value}'");
                 break;
 
@@ -291,13 +307,13 @@ public class CardLibrary
 
             case "explosion range":
                 if (int.TryParse(value, out int blast) && blast > 0) card.ExplosionRange = blast;
-                else diag.Error(CardLibrary.Path, lineNo,
+                else diag.Error(card.Source, lineNo,
                     $"'{card.Name}': Explosion Range must be a positive number of tiles, got '{value}'");
                 break;
 
             case "melee time":
                 if (ParseFloat(value) is float mt) card.MeleeTime = mt;
-                else diag.Error(CardLibrary.Path, lineNo,
+                else diag.Error(card.Source, lineNo,
                     $"'{card.Name}': Melee Time must be a number of seconds, got '{value}'");
                 break;
 
@@ -320,7 +336,7 @@ public class CardLibrary
                 break;
 
             case "sounds":
-                diag.Warn(CardLibrary.Path, lineNo, $"'{card.Name}': the old 'Sounds:' line is " +
+                diag.Warn(card.Source, lineNo, $"'{card.Name}': the old 'Sounds:' line is " +
                     "obsolete — use Casting Sound / Casting Time / Hit Sound. Ignored.");
                 break;
         }
@@ -393,7 +409,7 @@ public class CardLibrary
                 entry.StartsWith(k, StringComparison.OrdinalIgnoreCase));
             if (name == null)
             {
-                diag.Error(CardLibrary.Path, lineNo,
+                diag.Error(card.Source, lineNo,
                     $"'{card.Name}': unknown effect '{raw}' — known effects are " +
                     string.Join(", ", Data.Effects.Known));
                 continue;
@@ -402,14 +418,14 @@ public class CardLibrary
             if (Data.Effects.TakesText(name))
             {
                 if (rest.Length == 0)
-                    diag.Error(CardLibrary.Path, lineNo, $"'{card.Name}': '{name}' needs a name after it");
+                    diag.Error(card.Source, lineNo, $"'{card.Name}': '{name}' needs a name after it");
                 else
                     card.Effects.Add(new CardEffect(name, 1, rest));
                 continue;
             }
             if (rest.Length == 0) card.Effects.Add(new CardEffect(name, 1));
             else if (int.TryParse(rest, out int amount)) card.Effects.Add(new CardEffect(name, amount));
-            else diag.Error(CardLibrary.Path, lineNo,
+            else diag.Error(card.Source, lineNo,
                 $"'{card.Name}': effect '{name}' wants a number, got '{rest}'");
         }
     }
@@ -440,7 +456,7 @@ public class CardLibrary
         }
         else
         {
-            diag.Error(CardLibrary.Path, lineNo, $"'{card.Name}': unrecognized Type '{card.TypeLine}' — " +
+            diag.Error(card.Source, lineNo, $"'{card.Name}': unrecognized Type '{card.TypeLine}' — " +
                 "expected 'AoE damage', 'Single target, X hits.' or 'N targets, 1 hit.'; treated as a single hit");
             card.Kind = CardKind.SingleTargetHits;
             card.Damage = nums.Count > 0 ? nums[0] : 0;
@@ -454,24 +470,24 @@ public class CardLibrary
         if (c.Kind == CardKind.AoEDamage && c.Delivery != Delivery.Cone && c.ExplosionRange <= 0)
         {
             c.ExplosionRange = 1;
-            diag.Warn(Path, c.Line, $"'{c.Name}': AoE card has no 'Explosion Range:' line; " +
+            diag.Warn(c.Source, c.Line, $"'{c.Name}': AoE card has no 'Explosion Range:' line; " +
                 "using 1 tile. Range is only how far it can be thrown.");
         }
 
         if (c.Damage <= 0 && c.Effects.Count == 0)
-            diag.Error(Path, c.Line,
+            diag.Error(c.Source, c.Line,
                 $"'{c.Name}': no damage number in its Effect line, and no Effects to apply either");
         if (c.Tags.Count == 0)
-            diag.Error(Path, c.Line, $"'{c.Name}': no Tags, so no class can ever play it");
+            diag.Error(c.Source, c.Line, $"'{c.Name}': no Tags, so no class can ever play it");
         if (c.CardText.Length == 0)
-            diag.Warn(Path, c.Line, $"'{c.Name}': no Card Text, so the card face is blank");
+            diag.Warn(c.Source, c.Line, $"'{c.Name}': no Card Text, so the card face is blank");
         if (c.DamageType.Length == 0)
-            diag.Warn(Path, c.Line, $"'{c.Name}': no damage type in Bottom Right");
+            diag.Warn(c.Source, c.Line, $"'{c.Name}': no damage type in Bottom Right");
         if (c.Kind == CardKind.SingleTargetHits && c.HitEvents.Count > 1 && c.HitEvents.Count != c.Hits)
-            diag.Warn(Path, c.Line, $"'{c.Name}': Effect says {c.Hits} hits but there are " +
+            diag.Warn(c.Source, c.Line, $"'{c.Name}': Effect says {c.Hits} hits but there are " +
                 $"{c.HitEvents.Count} Hit Sound entries — damage is split across the sounds instead");
         if (c.Delivery == Delivery.Instant && (c.HitEvents.Count > 1 || c.MeleeTime > 0))
-            diag.Warn(Path, c.Line, $"'{c.Name}': has timing set but no [melee] or [ranged] tag, " +
+            diag.Warn(c.Source, c.Line, $"'{c.Name}': has timing set but no [melee] or [ranged] tag, " +
                 "so it resolves instantly");
     }
 

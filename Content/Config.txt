@@ -9,3 +9,22 @@
 Global scale: 100%
 Cast scale: 125%
 Dirtbag scale: 0
+
+# ---------------------------------------------------------------------
+# Overlay opacity for the isometric levels: how solid the colour wash is
+# INSIDE each highlighted region. The outline around the region is always
+# drawn at full strength, so 0% here means "outline only, no fill" - unlike
+# the scale lines above, 0 is a real value here and not "ignore this line".
+#   Movement - blue, where the selected character can walk
+#   Range    - red, how far the armed card reaches
+#   Leap     - red, the same for a card carrying Leap (usually a wide area,
+#              so it earns a lighter wash)
+#   AoE      - purple, a blast card's explosion radius
+#   Cone     - purple, a cone card's wedge
+#   Trigger  - violet, an unfired dialogue square
+Movement opacity: 20%
+Range opacity: 18%
+Leap opacity: 10%
+AoE opacity: 30%
+Cone opacity: 30%
+Trigger opacity: 18%

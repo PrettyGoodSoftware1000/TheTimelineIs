@@ -21,7 +21,11 @@ public class GameContext
     public required ISaveStore SaveStore;
     public required Texture2D Pixel;
     public required GameConfig Config;
+    /// <summary>Cards the party plays.</summary>
     public required CardLibrary Cards;
+
+    /// <summary>Cards enemies act with — same format, read from EnemyCards.txt.</summary>
+    public required CardLibrary EnemyCards;
     public required ClassLibrary Classes;
     public required EnemyLibrary Enemies;
     public required SoundBank Sounds;
