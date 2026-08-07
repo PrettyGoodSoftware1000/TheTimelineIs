@@ -134,6 +134,37 @@ public class LevelData
         return level;
     }
 
+    /// <summary>
+    /// A deep copy of everything placeable — what the editor's undo stack keeps.
+    /// </summary>
+    public LevelData Clone()
+    {
+        var copy = new LevelData { Name = Name };
+        foreach (var (at, b) in Blocks)
+            copy.Blocks[at] = new LevelBlock { X = b.X, Y = b.Y, Height = b.Height, Type = b.Type, Room = b.Room };
+        copy.Decorations.AddRange(Decorations.Select(d =>
+            new LevelDecoration { X = d.X, Y = d.Y, File = d.File }));
+        copy.Doors.AddRange(Doors.Select(d =>
+            new LevelDoor { X = d.X, Y = d.Y, RoomA = d.RoomA, RoomB = d.RoomB, Open = d.Open }));
+        copy.Enemies.AddRange(Enemies.Select(e => new LevelEnemy { X = e.X, Y = e.Y, Name = e.Name }));
+        copy.Triggers.AddRange(Triggers.Select(t =>
+            new LevelTrigger { X = t.X, Y = t.Y, Dialogue = t.Dialogue, Fired = t.Fired }));
+        copy.PlayerStarts.AddRange(PlayerStarts);
+        return copy;
+    }
+
+    /// <summary>Replaces this level's contents with another's — undo, in place.</summary>
+    public void CopyFrom(LevelData other)
+    {
+        Blocks.Clear();
+        foreach (var (at, b) in other.Blocks) Blocks[at] = b;
+        Decorations.Clear(); Decorations.AddRange(other.Decorations);
+        Doors.Clear(); Doors.AddRange(other.Doors);
+        Enemies.Clear(); Enemies.AddRange(other.Enemies);
+        Triggers.Clear(); Triggers.AddRange(other.Triggers);
+        PlayerStarts.Clear(); PlayerStarts.AddRange(other.PlayerStarts);
+    }
+
     /// <summary>Round-trips everything the editor places. Runtime door state is not saved.</summary>
     public string Serialize()
     {

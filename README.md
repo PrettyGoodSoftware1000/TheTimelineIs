@@ -45,6 +45,9 @@ This branch replaces missions and side-view rooms with an **isometric
 tactics test**: Title -> party select -> world map -> the destination opens
 `Content/Levels/TestLevel.txt` over a black void.
 
+- **Decorations** (`Content/Images/Decorations/`, listed in `Decorations.txt`)
+  sit on a square and block it: trees, rocks, and a treasure chest. The chest
+  is scenery for now; it will hand out items when a character steps beside it.
 - **Blocks**: square-top tiles with textured sides and adjustable height in
   feet. Palette in `Content/Images/Blocks/` — `{Type}Top.png` is a 360x180
   diamond, `{Type}Side.png` a 360x90 strip stacked once per foot; `Blocks.txt`
@@ -178,16 +181,32 @@ tactics test**: Title -> party select -> world map -> the destination opens
   optional `Sprites:` and `Card Tags:`) — the per-character `{Name}.txt`
   manifests are gone. **Enemies.txt** does the same for enemies
   (`Enemy:`/`HP:`/`Movement:`/`Basic Attack Damage:`/`Sounds:`/`Range:`).
-- **Editor**: `dotnet run --project Desktop -- --editor`. 1-3/B block types,
-  D decorations, O doors, E enemies, P player starts, G dialogue triggers,
-  R room label, N trigger's dialogue name,
-  scroll or +/- for height, click place, **Delete key** erases (right-drag is
-  the pan gesture, so it is not a delete), S saves to
-  `Content/Levels/{Level}.txt` in the repo, **V saves-as** under a typed name
-  and keeps editing that file from then on, T play-tests immediately. The
-  yellow cursor square always shows its height as a number in the middle, and
-  for everything except the block tool it sits on top of the block under the
-  pointer rather than on the ground plane beneath it.
+- **Editor**: `dotnet run --project Desktop -- --editor`. Every tool has both a
+  **button in the strip across the top** and a hotkey, and the two stay in step;
+  palettes with more than one entry (blocks, decorations, enemies) hang a
+  **dropdown** off their button rather than spending a button each.
+  - `1-3`/`B` block types, `D` decorations, `O` doors, `E` enemies, `P` player
+    starts, `G` dialogue triggers, `R` room label, `N` trigger's dialogue name,
+    `V` save-as, `S` save, `T` play-test.
+  - **Hold the left button to paint** — every square the cursor crosses is
+    placed once, and the whole stroke is a single undo step. Blocks,
+    decorations and triggers paint; doors, enemies and starts stay one click
+    each, where a repeat would be meaningless.
+  - **Hold `Delete` to rub out** whatever the cursor crosses, same stroke rule.
+  - **`Ctrl`+`Delete`** arms a box: drag one out and everything inside goes at
+    once. The cursor turns red while it is armed and returns to normal as soon
+    as the box is drawn; `Esc` cancels.
+  - **`Ctrl`+`Z`** undoes the last stroke, 40 deep.
+  - **Right-click a trigger square** to open that level's
+    `{Level}Dialogue.txt` in whatever the OS uses for `.txt`. If the file or
+    the block the trigger names doesn't exist yet, it is stubbed in first — so
+    right-clicking a fresh trigger lands you on the lines you need to write.
+  - Scroll or `+`/`-` for placement height, `WASD`/arrows or right-drag to pan.
+  - The yellow cursor square shows its height as a number in the middle, and
+    for everything except the block tool it sits on top of the block under the
+    pointer rather than on the ground plane beneath it.
+  - `S` saves to `Content/Levels/{Level}.txt` in the repo; `V` saves-as under a
+    typed name and keeps editing that file from then on.
 - Levels complete when every enemy is dead; a wiped party reloads.
 
 ## Adding a level to the world map

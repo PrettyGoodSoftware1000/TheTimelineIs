@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Microsoft.Xna.Framework;
@@ -15,10 +16,18 @@ namespace TheTimelineIs.Desktop;
 
 /// <summary>
 /// The isometric level editor (dotnet run --project Desktop -- --editor).
-/// Desktop-only; writes Content/Levels/TestLevel.txt in the source tree.
+/// Desktop-only; writes Content/Levels/{Level}.txt in the source tree.
 ///
-///   1/2/3 .. block palette   B next block type    left click  place
-///   D deco  O door  E enemy  P start  G trigger    Delete key  erase
+/// Every tool has a button in the strip across the top AND a hotkey; the two
+/// stay in step. Palettes with more than one entry (blocks, decorations,
+/// enemies) hang a dropdown off their button instead of spending a button per
+/// entry.
+///
+///   1/2/3 .. block palette   B next block type    hold left  paint
+///   D deco  O door  E enemy  P start  G trigger   hold Del   rub out
+///   Ctrl+Del                 drag a box, everything inside it goes
+///   Ctrl+Z                   undo the last stroke
+///   right click a trigger    open that level's dialogue file in a text editor
 ///   scroll wheel or +/-      placement height (feet)
 ///   R then typing            set current room label (Enter to accept)
 ///   N then typing            set the dialogue name new triggers call
@@ -29,8 +38,12 @@ public class IsoEditorScreen : IScreen
 {
     private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger }
 
+    /// <summary>Tools you drag across the ground; the rest are one click each.</summary>
+    private static bool Paints(Tool t) =>
+        t is Tool.Block or Tool.Decoration or Tool.Trigger;
+
     private readonly GameContext _ctx;
-    private readonly LevelData _level;
+    private LevelData _level;
     private readonly string _levelsDir;
     private string _levelName = "TestLevel";
 
@@ -42,10 +55,26 @@ public class IsoEditorScreen : IScreen
     private bool _typingRoom, _typingTrigger, _typingSaveAs;
     private string _roomBuffer = "";
     private Vector2 _camera;
-    private Vector2 _origin = new(VirtualViewport.Width / 2f, 500);
+    private Vector2 _origin = new(VirtualViewport.Width / 2f, 620);
     private Point _pointer;
     private string _status = "";
     private float _statusTimer;
+
+    // drag state: the tile last painted or rubbed out, so one stroke does each
+    // square once instead of once per frame
+    private Point? _paintedLast, _erasedLast;
+    private bool _strokeOpen;               // an undo snapshot has been taken for this stroke
+
+    // Ctrl+Delete box
+    private bool _boxMode;
+    private Point? _boxStart, _boxEnd;
+
+    private string? _openMenu;              // which button's dropdown is showing
+    private readonly List<LevelData> _undo = new();
+    private const int UndoDepth = 40;
+
+    private const int BarY = 30, BarH = 108, BarGap = 12;
+    private static readonly Rectangle ToolbarBand = new(0, 0, VirtualViewport.Width, 260);
 
     public IsoEditorScreen(GameContext ctx)
     {
@@ -68,8 +97,137 @@ public class IsoEditorScreen : IScreen
     }
 
     private string SavePath => Path.Combine(_levelsDir, _levelName + ".txt");
+    private string DialoguePath => Path.Combine(_levelsDir, _levelName + "Dialogue.txt");
 
-    private void Status(string text) { _status = text; _statusTimer = 3f; }
+    private void Status(string text) { _status = text; _statusTimer = 4f; }
+
+    // ---------------- undo ----------------
+
+    /// <summary>
+    /// Snapshots the level before an edit. A drag stroke calls this once, on its
+    /// first square, so one undo takes back the whole stroke rather than one
+    /// tile of it.
+    /// </summary>
+    private void BeginEdit()
+    {
+        _undo.Add(_level.Clone());
+        if (_undo.Count > UndoDepth) _undo.RemoveAt(0);
+    }
+
+    private void Undo()
+    {
+        if (_undo.Count == 0) { Status("nothing to undo"); return; }
+        _level.CopyFrom(_undo[^1]);
+        _undo.RemoveAt(_undo.Count - 1);
+        Status($"undo ({_undo.Count} left)");
+    }
+
+    // ---------------- toolbar ----------------
+
+    private readonly record struct Btn(Rectangle Rect, string Label, string Id, bool Active, bool Menu);
+
+    private string BlockName => BlockCatalog.BlockTypes.Count > 0
+        ? BlockCatalog.BlockTypes[Math.Clamp(_blockIndex, 0, BlockCatalog.BlockTypes.Count - 1)] : "-";
+    private string DecoName => BlockCatalog.Decorations.Count > 0
+        ? BlockCatalog.Decorations[Math.Clamp(_decoIndex, 0, BlockCatalog.Decorations.Count - 1)] : "-";
+    private string EnemyName => _ctx.Enemies.EnemyNames.Count > 0
+        ? _ctx.Enemies.EnemyNames[Math.Clamp(_enemyIndex, 0, _ctx.Enemies.EnemyNames.Count - 1)] : "-";
+
+    /// <summary>
+    /// The button strip, rebuilt every frame so Update and Draw can never
+    /// disagree about where anything is. Widths follow the labels.
+    /// </summary>
+    private List<Btn> Buttons()
+    {
+        var list = new List<Btn>();
+        int x = 60;
+
+        void Add(string label, string id, bool active, bool menu = false, int pad = 44)
+        {
+            int w = (int)(_ctx.Font.MeasureString(label).X * 0.30f) + pad + (menu ? 34 : 0);
+            list.Add(new Btn(new Rectangle(x, BarY, w, BarH), label, id, active, menu));
+            x += w + BarGap;
+        }
+
+        Add($"Block: {BlockName}", "block", _tool == Tool.Block, menu: true);
+        Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
+        Add("Door", "door", _tool == Tool.Door);
+        Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
+        Add("Start", "start", _tool == Tool.PlayerStart);
+        Add($"Trigger: {_trigger}", "trigger", _tool == Tool.Trigger);
+        Add("-", "hminus", false, pad: 30);
+        Add($"{_height} ft", "height", false, pad: 30);
+        Add("+", "hplus", false, pad: 30);
+        Add($"Room: {_room}", "room", false);
+        Add("Dialogue", "dialogue", false);
+        Add("Undo", "undo", false);
+        Add("Save", "save", false);
+        Add("Save As", "saveas", false);
+        Add("Test", "test", false);
+        return list;
+    }
+
+    private static string Strip(string file) =>
+        file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? file[..^4] : file;
+
+    /// <summary>The entries a dropdown shows, and what picking one does.</summary>
+    private List<string> MenuItems(string id) => id switch
+    {
+        "block" => BlockCatalog.BlockTypes.ToList(),
+        "deco" => BlockCatalog.Decorations.Select(Strip).ToList(),
+        "enemy" => _ctx.Enemies.EnemyNames.ToList(),
+        _ => new List<string>(),
+    };
+
+    private List<Rectangle> MenuRects(string id)
+    {
+        var btn = Buttons().FirstOrDefault(b => b.Id == id);
+        var items = MenuItems(id);
+        var rects = new List<Rectangle>();
+        for (int i = 0; i < items.Count; i++)
+            rects.Add(new Rectangle(btn.Rect.X, btn.Rect.Bottom + 6 + i * (BarH - 12),
+                Math.Max(btn.Rect.Width, 460), BarH - 14));
+        return rects;
+    }
+
+    private void PickMenu(string id, int index)
+    {
+        switch (id)
+        {
+            case "block": _blockIndex = index; _tool = Tool.Block; break;
+            case "deco": _decoIndex = index; _tool = Tool.Decoration; break;
+            case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
+        }
+        _openMenu = null;
+    }
+
+    /// <summary>A toolbar button was clicked. Returns true if it was handled.</summary>
+    private bool HitButton(string id)
+    {
+        switch (id)
+        {
+            case "block" or "deco" or "enemy":
+                // the button both selects its tool and opens its palette
+                _tool = id == "block" ? Tool.Block : id == "deco" ? Tool.Decoration : Tool.Enemy;
+                _openMenu = _openMenu == id ? null : id;
+                return true;
+            case "door": _tool = Tool.Door; return true;
+            case "start": _tool = Tool.PlayerStart; return true;
+            case "trigger": _tool = Tool.Trigger; return true;
+            case "hminus": _height = Math.Max(_height - 1, 0); return true;
+            case "hplus": _height = Math.Min(_height + 1, 12); return true;
+            case "height": return true;
+            case "room": _typingRoom = true; _roomBuffer = _room; return true;
+            case "dialogue": _typingTrigger = true; _roomBuffer = _trigger; return true;
+            case "undo": Undo(); return true;
+            case "save": Save(); return true;
+            case "saveas": _typingSaveAs = true; _roomBuffer = _levelName; return true;
+            case "test": PlayTest(); return true;
+        }
+        return false;
+    }
+
+    // ---------------- update ----------------
 
     public void Update(InputState input, float dt)
     {
@@ -77,21 +235,76 @@ public class IsoEditorScreen : IScreen
         _camera += input.PanDelta;
         if (_statusTimer > 0) _statusTimer -= dt;
 
-        if (_typingRoom || _typingTrigger || _typingSaveAs)
+        if (_typingRoom || _typingTrigger || _typingSaveAs) { UpdateTyping(input); return; }
+
+        var origin = _origin - _camera;
+
+        if (input.CtrlHeld && input.Delete) { _boxMode = true; _boxStart = _boxEnd = null; }
+        if (input.Undo) Undo();
+
+        // a dropdown swallows the next click wherever it lands
+        if (_openMenu != null && UpdateMenu(input)) return;
+
+        if (input.Tap is Point tap && ToolbarBand.Contains(tap))
         {
-            _roomBuffer += input.TypedChars;
-            if (input.Backspace && _roomBuffer.Length > 0) _roomBuffer = _roomBuffer[..^1];
-            if (input.Cancel) { _typingRoom = _typingTrigger = _typingSaveAs = false; }
-            if (input.Submit && _roomBuffer.Trim().Length > 0)
-            {
-                if (_typingRoom) { _room = _roomBuffer.Trim(); Status($"room = {_room}"); }
-                else if (_typingSaveAs) SaveAs(_roomBuffer);
-                else { _trigger = _roomBuffer.Trim(); Status($"trigger dialogue = {_trigger}"); }
-                _typingRoom = _typingTrigger = _typingSaveAs = false;
-            }
-            return;
+            foreach (var b in Buttons())
+                if (b.Rect.Contains(tap) && HitButton(b.Id))
+                    return;
+            return;   // clicks on the bar never fall through to the ground
         }
 
+        UpdateHotkeys(input);
+        _height = Math.Clamp(_height + input.ScrollDelta, 0, 12);
+
+        if (_boxMode) { UpdateBox(input, origin); return; }
+
+        UpdatePaint(input, origin);
+        UpdateErase(input, origin);
+
+        // right-clicking a dialogue square opens that level's dialogue file
+        if (input.AltTap is Point rc && !ToolbarBand.Contains(rc))
+        {
+            var t = PickTile(rc.ToVector2(), origin) ?? IsoMath.ToGrid(rc.ToVector2(), origin);
+            if (_level.TriggerAt(t) is LevelTrigger trig) OpenDialogueFile(trig.Dialogue);
+        }
+    }
+
+    private void UpdateTyping(InputState input)
+    {
+        _roomBuffer += input.TypedChars;
+        if (input.Backspace && _roomBuffer.Length > 0) _roomBuffer = _roomBuffer[..^1];
+        if (input.Cancel) _typingRoom = _typingTrigger = _typingSaveAs = false;
+        if (input.Submit && _roomBuffer.Trim().Length > 0)
+        {
+            if (_typingRoom) { _room = _roomBuffer.Trim(); Status($"room = {_room}"); }
+            else if (_typingSaveAs) SaveAs(_roomBuffer);
+            else
+            {
+                _trigger = _roomBuffer.Trim();
+                _tool = Tool.Trigger;
+                Status($"trigger dialogue = {_trigger}");
+            }
+            _typingRoom = _typingTrigger = _typingSaveAs = false;
+        }
+    }
+
+    /// <summary>Returns true when the click belonged to the open dropdown.</summary>
+    private bool UpdateMenu(InputState input)
+    {
+        if (input.Cancel || input.AltTap.HasValue) { _openMenu = null; return true; }
+        if (input.Tap is not Point tap) return false;
+
+        var rects = MenuRects(_openMenu!);
+        for (int i = 0; i < rects.Count; i++)
+            if (rects[i].Contains(tap)) { PickMenu(_openMenu!, i); return true; }
+
+        // a click anywhere else just dismisses it, without also placing a tile
+        _openMenu = null;
+        return true;
+    }
+
+    private void UpdateHotkeys(InputState input)
+    {
         foreach (char c in input.TypedChars.ToLowerInvariant())
             switch (c)
             {
@@ -125,17 +338,89 @@ public class IsoEditorScreen : IScreen
                 case 'v': _typingSaveAs = true; _roomBuffer = _levelName; break;
                 case 't': PlayTest(); break;
             }
-
-        _height = Math.Clamp(_height + input.ScrollDelta, 0, 12);
-
-        var origin = _origin - _camera;
-        if (input.Tap is Point place)
-            Place(Target(place.ToVector2(), origin).Tile);
-        // right-drag pans the view, so erasing is the Delete key at the cursor
-        if (input.Delete)
-            Delete(PickTile(_pointer.ToVector2(), origin)
-                   ?? IsoMath.ToGrid(_pointer.ToVector2(), origin));
     }
+
+    /// <summary>
+    /// Holding the left button paints continuously: each square the cursor
+    /// crosses is placed once, and the whole stroke is a single undo step.
+    /// Tools where repeats are meaningless (doors, enemies, starts) stay on
+    /// one click each.
+    /// </summary>
+    private void UpdatePaint(InputState input, Vector2 origin)
+    {
+        if (!input.PointerHeld)
+        {
+            _paintedLast = null;
+            if (!input.DeleteHeld) _strokeOpen = false;
+            return;
+        }
+        if (ToolbarBand.Contains(_pointer)) return;
+
+        var tile = Target(_pointer.ToVector2(), origin).Tile;
+        if (!Paints(_tool))
+        {
+            // one-shot tools act on the press frame only
+            if (input.Tap.HasValue) { BeginEdit(); Place(tile); }
+            return;
+        }
+        if (_paintedLast == tile) return;
+        if (!_strokeOpen) { BeginEdit(); _strokeOpen = true; }
+        _paintedLast = tile;
+        Place(tile);
+    }
+
+    /// <summary>Holding Delete rubs out everything the cursor crosses.</summary>
+    private void UpdateErase(InputState input, Vector2 origin)
+    {
+        if (!input.DeleteHeld)
+        {
+            _erasedLast = null;
+            if (!input.PointerHeld) _strokeOpen = false;
+            return;
+        }
+        if (ToolbarBand.Contains(_pointer)) return;
+
+        var tile = PickTile(_pointer.ToVector2(), origin)
+                   ?? IsoMath.ToGrid(_pointer.ToVector2(), origin);
+        if (_erasedLast == tile) return;
+        if (!_strokeOpen) { BeginEdit(); _strokeOpen = true; }
+        _erasedLast = tile;
+        Delete(tile);
+    }
+
+    /// <summary>
+    /// Ctrl+Delete arms a box: drag one out and everything inside goes at once.
+    /// The cursor returns to normal as soon as the box is drawn.
+    /// </summary>
+    private void UpdateBox(InputState input, Vector2 origin)
+    {
+        if (input.Cancel || input.AltTap.HasValue)
+        {
+            _boxMode = false; _boxStart = _boxEnd = null;
+            Status("box delete cancelled");
+            return;
+        }
+
+        var under = PickTile(_pointer.ToVector2(), origin)
+                    ?? IsoMath.ToGrid(_pointer.ToVector2(), origin);
+        if (input.Tap.HasValue && !ToolbarBand.Contains(_pointer)) _boxStart = under;
+        if (_boxStart != null) _boxEnd = under;
+
+        if (input.Released.HasValue && _boxStart is Point a && _boxEnd is Point b)
+        {
+            BeginEdit();
+            int x0 = Math.Min(a.X, b.X), x1 = Math.Max(a.X, b.X);
+            int y0 = Math.Min(a.Y, b.Y), y1 = Math.Max(a.Y, b.Y);
+            int n = 0;
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                    n += DeleteAll(new Point(x, y));
+            _boxMode = false; _boxStart = _boxEnd = null;
+            Status($"box deleted {n} thing(s)");
+        }
+    }
+
+    // ---------------- the level ----------------
 
     private Point? PickTile(Vector2 screen, Vector2 origin)
     {
@@ -190,7 +475,6 @@ public class IsoEditorScreen : IScreen
             case Tool.Trigger when _level.BlockAt(tile) != null:
                 _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
                 _level.Triggers.Add(new LevelTrigger { X = tile.X, Y = tile.Y, Dialogue = _trigger });
-                Status($"trigger -> {_trigger}");
                 break;
             case Tool.PlayerStart when _level.BlockAt(tile) != null:
                 _level.PlayerStarts.Remove(tile);
@@ -200,6 +484,7 @@ public class IsoEditorScreen : IScreen
         }
     }
 
+    /// <summary>Rubs out the topmost thing on a square: contents first, block last.</summary>
     private void Delete(Point tile)
     {
         if (_level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y) > 0) return;
@@ -209,6 +494,21 @@ public class IsoEditorScreen : IScreen
         if (_level.PlayerStarts.Remove(tile)) return;
         _level.Blocks.Remove(tile);
     }
+
+    /// <summary>Everything on a square at once — what the box delete does.</summary>
+    private int DeleteAll(Point tile)
+    {
+        int n = 0;
+        n += _level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y);
+        n += _level.Doors.RemoveAll(d => d.X == tile.X && d.Y == tile.Y);
+        n += _level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y);
+        n += _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
+        if (_level.PlayerStarts.Remove(tile)) n++;
+        if (_level.Blocks.Remove(tile)) n++;
+        return n;
+    }
+
+    // ---------------- files ----------------
 
     private void Save()
     {
@@ -240,12 +540,50 @@ public class IsoEditorScreen : IScreen
         Save();
     }
 
+    /// <summary>
+    /// Opens this level's dialogue file in whatever the OS uses for .txt. If
+    /// the file doesn't exist yet, or doesn't contain the block the trigger
+    /// names, the missing block is stubbed in first — so right-clicking a fresh
+    /// trigger square lands you on the lines you need to write.
+    /// </summary>
+    private void OpenDialogueFile(string blockName)
+    {
+        try
+        {
+            Directory.CreateDirectory(_levelsDir);
+            string text = File.Exists(DialoguePath) ? File.ReadAllText(DialoguePath) : "";
+            if (text.Length == 0)
+                text = $"# Dialogue for {_levelName}. A trigger square placed in the editor (G tool)\n" +
+                       "# names one of these blocks; stepping on it plays the block once.\n" +
+                       "# Format: \"Speaker: text\", one line each.\n";
+
+            bool present = text.Split('\n').Any(l =>
+                l.TrimStart().StartsWith("Dialogue:", StringComparison.OrdinalIgnoreCase) &&
+                l.Split(':', 2)[1].Trim().Equals(blockName, StringComparison.OrdinalIgnoreCase));
+            if (!present)
+            {
+                text = text.TrimEnd() + $"\n\nDialogue: {blockName}\nDirtbag: (write this scene)\n";
+                Status($"added an empty '{blockName}' block and opened the file");
+            }
+            else Status($"opened {Path.GetFileName(DialoguePath)} at '{blockName}'");
+
+            File.WriteAllText(DialoguePath, text);
+            Process.Start(new ProcessStartInfo(DialoguePath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Status($"could not open {DialoguePath}: {ex.Message}");
+        }
+    }
+
     private void PlayTest()
     {
         Save();
         _ctx.State.Reset(_ctx.State.PartyOrDefault());
         _ctx.SwitchTo(new IsoLevelScreen(_ctx, _levelName));
     }
+
+    // ---------------- drawing ----------------
 
     public void Draw(SpriteBatch batch)
     {
@@ -288,6 +626,33 @@ public class IsoEditorScreen : IScreen
                 batch.DrawString(_ctx.Font, trig.Dialogue, new Vector2(tc.X - 70, tc.Y - 40),
                     Color.Violet, 0f, Vector2.Zero, 0.26f, SpriteEffects.None, 0f);
             }
+            if (InBox(tile))
+                DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Red * 0.45f);
+        }
+
+        DrawCursor(batch, origin);
+        DrawToolbar(batch);
+        DrawHudText(batch);
+        DrawRoomLabels(batch, origin);
+    }
+
+    private bool InBox(Point tile) =>
+        _boxStart is Point a && _boxEnd is Point b &&
+        tile.X >= Math.Min(a.X, b.X) && tile.X <= Math.Max(a.X, b.X) &&
+        tile.Y >= Math.Min(a.Y, b.Y) && tile.Y <= Math.Max(a.Y, b.Y);
+
+    private void DrawCursor(SpriteBatch batch, Vector2 origin)
+    {
+        if (ToolbarBand.Contains(_pointer)) return;
+
+        // the box tool has its own cursor: red, and it shows the span it covers
+        if (_boxMode)
+        {
+            var at = PickTile(_pointer.ToVector2(), origin)
+                     ?? IsoMath.ToGrid(_pointer.ToVector2(), origin);
+            int h = _level.BlockAt(at)?.Height ?? 0;
+            DrawTop(batch, at.X, at.Y, h, origin, Color.Red * 0.55f);
+            return;
         }
 
         // hovered cell, sitting at the height it would actually place at, with
@@ -298,9 +663,47 @@ public class IsoEditorScreen : IScreen
         Ui.DrawTextCentered(batch, _ctx.Font, cursorHeight.ToString(),
             new Rectangle((int)(mid.X - IsoMath.TileW / 2f), (int)(mid.Y - IsoMath.TileH / 2f),
                 IsoMath.TileW, IsoMath.TileH), Color.Yellow, 0.36f);
+    }
 
-        DrawHudText(batch);
-        DrawRoomLabels(batch, origin);
+    private void DrawToolbar(SpriteBatch batch)
+    {
+        Ui.FillRect(batch, _ctx.Pixel,
+            new Rectangle(0, 0, VirtualViewport.Width, BarY + BarH + 18), new Color(14, 14, 20, 235));
+
+        foreach (var b in Buttons())
+        {
+            bool hot = b.Rect.Contains(_pointer);
+            Ui.FillRect(batch, _ctx.Pixel, b.Rect,
+                b.Active ? new Color(120, 96, 20) : hot ? new Color(52, 52, 66) : new Color(32, 32, 42));
+            var edge = b.Active ? Color.Yellow : hot ? Color.White : Color.White * 0.35f;
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.X, b.Rect.Y, b.Rect.Width, 3), edge);
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.X, b.Rect.Bottom - 3, b.Rect.Width, 3), edge);
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.X, b.Rect.Y, 3, b.Rect.Height), edge);
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.Right - 3, b.Rect.Y, 3, b.Rect.Height), edge);
+            Ui.DrawTextCentered(batch, _ctx.Font, b.Label,
+                b.Menu ? new Rectangle(b.Rect.X, b.Rect.Y, b.Rect.Width - 30, b.Rect.Height) : b.Rect,
+                b.Active ? Color.White : Color.White * 0.9f, 0.30f);
+
+            // a little triangle marks the buttons that drop a palette down
+            if (!b.Menu) continue;
+            int cx = b.Rect.Right - 22, cy = b.Rect.Center.Y - 4;
+            for (int r = 0; r < 10; r++)
+                Ui.FillRect(batch, _ctx.Pixel,
+                    new Rectangle(cx - 10 + r, cy + r, 21 - r * 2, 1), Color.White * 0.8f);
+        }
+
+        if (_openMenu == null) return;
+        var items = MenuItems(_openMenu);
+        var rects = MenuRects(_openMenu);
+        for (int i = 0; i < items.Count; i++)
+        {
+            bool hot = rects[i].Contains(_pointer);
+            Ui.FillRect(batch, _ctx.Pixel, rects[i],
+                hot ? new Color(70, 70, 90, 250) : new Color(26, 26, 34, 250));
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(rects[i].X, rects[i].Y, rects[i].Width, 2), Color.White * 0.3f);
+            Ui.DrawTextCentered(batch, _ctx.Font, items[i], rects[i], Color.White, 0.30f);
+        }
     }
 
     private void DrawTop(SpriteBatch batch, int gx, int gy, int height, Vector2 origin, Color tint)
@@ -334,32 +737,25 @@ public class IsoEditorScreen : IScreen
     private void DrawHudText(SpriteBatch batch)
     {
         // editor is a dev tool: literal strings, not Strings.txt
-        string block = BlockCatalog.BlockTypes.Count > 0 ? BlockCatalog.BlockTypes[_blockIndex] : "-";
-        string deco = BlockCatalog.Decorations.Count > 0 ? BlockCatalog.Decorations[_decoIndex] : "-";
-        string enemy = _ctx.Enemies.EnemyNames.Count > 0 ? _ctx.Enemies.EnemyNames[_enemyIndex] : "-";
-        string tool = _tool switch
-        {
-            Tool.Block => $"BLOCK {block}",
-            Tool.Decoration => $"DECO {deco}",
-            Tool.Door => $"DOOR -> room {_room}",
-            Tool.Enemy => $"ENEMY {enemy}",
-            Tool.Trigger => $"TRIGGER -> {_trigger}",
-            _ => "PLAYER START",
-        };
-        string line1 = $"EDITOR   {_levelName}.txt   tool: {tool}   height: {_height} ft   room: {_room}";
-        string line2 = "1-3/B blocks  D deco  O door  E enemy  P start  G trigger  R room  N dialogue  " +
-                       "scroll/+- height  click place  DEL erase  S save  V save-as  T test";
-        batch.DrawString(_ctx.Font, line1, new Vector2(60, 40), Color.Yellow,
-            0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
-        batch.DrawString(_ctx.Font, line2, new Vector2(60, 120), Color.White * 0.75f,
-            0f, Vector2.Zero, 0.3f, SpriteEffects.None, 0f);
+        int y = BarY + BarH + 26;
+        string mode = _boxMode ? "  BOX DELETE: drag a box, Esc to cancel" : "";
+        batch.DrawString(_ctx.Font,
+            $"{_levelName}.txt   room: {_room}   blocks: {_level.Blocks.Count}{mode}",
+            new Vector2(60, y), _boxMode ? Color.Red : Color.Yellow,
+            0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
+        batch.DrawString(_ctx.Font,
+            "hold left: paint   hold Del: erase   Ctrl+Del: box delete   Ctrl+Z: undo   " +
+            "right-click a trigger: open its dialogue file   scroll: height   WASD: pan",
+            new Vector2(60, y + 46), Color.White * 0.6f,
+            0f, Vector2.Zero, 0.26f, SpriteEffects.None, 0f);
+
         if (_typingRoom || _typingTrigger || _typingSaveAs)
             batch.DrawString(_ctx.Font,
                 (_typingRoom ? "room name: " : _typingSaveAs ? "save as: " : "dialogue name: ")
                 + _roomBuffer + "_",
-                new Vector2(60, 200), Color.Cyan, 0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
-        if (_statusTimer > 0)
-            batch.DrawString(_ctx.Font, _status, new Vector2(60, 280), Color.LightGreen,
-                0f, Vector2.Zero, 0.34f, SpriteEffects.None, 0f);
+                new Vector2(60, y + 100), Color.Cyan, 0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
+        else if (_statusTimer > 0)
+            batch.DrawString(_ctx.Font, _status, new Vector2(60, y + 100), Color.LightGreen,
+                0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
     }
 }

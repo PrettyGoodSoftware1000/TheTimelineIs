@@ -53,4 +53,16 @@ public struct InputState
 
     /// <summary>Delete pressed this frame — the editor's erase.</summary>
     public bool Delete;
+
+    /// <summary>Delete still down. Held over the grid, the editor rubs tiles out.</summary>
+    public bool DeleteHeld;
+
+    /// <summary>Either Ctrl down, for the editor's modified shortcuts.</summary>
+    public bool CtrlHeld;
+
+    /// <summary>
+    /// Ctrl+Z this frame. It gets its own flag because TypedChars drops control
+    /// characters, so the editor can never see it as a typed key.
+    /// </summary>
+    public bool Undo;
 }

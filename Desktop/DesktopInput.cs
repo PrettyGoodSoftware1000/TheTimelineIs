@@ -92,6 +92,9 @@ public class DesktopInput : IInputSource
         state.Cancel = Pressed(keys, Keys.Escape);
         state.ToggleRuler = Pressed(keys, Keys.F12);
         state.Delete = Pressed(keys, Keys.Delete) || Pressed(keys, Keys.Back);
+        state.DeleteHeld = keys.IsKeyDown(Keys.Delete) || keys.IsKeyDown(Keys.Back);
+        state.CtrlHeld = keys.IsKeyDown(Keys.LeftControl) || keys.IsKeyDown(Keys.RightControl);
+        state.Undo = state.CtrlHeld && Pressed(keys, Keys.Z);
 
         _prevKeys = keys;
         _prevMouse = mouse;

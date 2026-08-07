@@ -24,9 +24,9 @@
 # An enemy with several melee cards uses the longest-ranged one it can afford;
 # same for ranged. Enemies never play cards that target allies.
 #
-# "Basic Attack Damage", "Sounds" and "Range" in Enemies.txt are NOT used by
-# the isometric levels any more - they belong to the older side-view battles.
-# An enemy that should hit things in an isometric level needs a card here.
+# "Basic Attack Damage", "Sounds" and "Range" are gone from Enemies.txt: how
+# hard an enemy hits, what it sounds like and how far it reaches all live here
+# now. Those lines warn and are ignored if you leave them in an old file.
 # =====================================================================
 
 []

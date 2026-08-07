@@ -1,3 +1,4 @@
 # Decorations placeable in the editor; each blocks its square.
 Tree1.png
 Rock1.png
+Chest1.png
