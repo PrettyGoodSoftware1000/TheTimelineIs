@@ -280,7 +280,7 @@ public static class ContentValidator
             "iso_cursed", "iso_form",
             "iso_stole", "iso_steal_over", "iso_nothing_to_steal", "iso_no_cards", "iso_needs_other",
             "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_no_actions",
-            "iso_steal_pick", "iso_steal_pick_form",
+            "iso_steal_pick", "iso_steal_pick_form", "iso_empty_square",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

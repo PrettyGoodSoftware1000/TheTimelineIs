@@ -79,6 +79,16 @@ tactics test**: Title -> party select -> world map -> the destination opens
   the last. Right-click cancels the armed card.
 - **Selection** is marked by a small gold arrow pointing down at the selected
   character's health bar.
+- **Hold `Ctrl` to aim by square.** Everyone on the ground — party, enemies,
+  decorations and doors — drops to 20% opacity so the grid reads clearly, and
+  the square under the cursor lights up with a yellow wash and outline
+  (`Hover opacity` in `Config.txt`). While it is held, clicks resolve against
+  the **square** rather than against whichever sprite happens to be over it: a
+  click with no card up is a move (or picks the party member standing there),
+  and a click with a card up plays it exactly as if whoever occupies that
+  square had been clicked. It is the way to reach somebody standing behind a
+  tree or beneath a taller neighbour. Health bars stay at full strength — they
+  are the information you are aiming with, not something in the way.
 - **Turn order** is a row of face thumbnails across the top. Whoever is acting
   sits at the far left at double size with a gold frame, so the strip shuffles
   along by one each turn and "next up" is always the face beside it. A green or
@@ -196,12 +206,28 @@ tactics test**: Title -> party select -> world map -> the destination opens
   - **`Ctrl`+`Delete`** arms a box: drag one out and everything inside goes at
     once. The cursor turns red while it is armed and returns to normal as soon
     as the box is drawn; `Esc` cancels.
+  - **`Shift`+drag** fills a box with the current block at the placement
+    height. It paints over bare ground too, since it creates blocks.
+  - **`Ctrl`+drag** marks a **selection** that stays put when you let go:
+    `+`/`-` raise and lower every block in it, `Ctrl`+`C` copies, `Ctrl`+`V`
+    pastes with the top-left corner on the cursor, `Delete` empties it, `Esc`
+    drops it.
+  - **Middle click** is an eyedropper: it adopts the block type, height and
+    room of the square under it.
+  - **`Level: ▾`** in the strip lists every level file in `Content/Levels` and
+    opens the one you pick, so you no longer have to restart to edit another.
+  - The **`OK` / `! n`** button counts the things the startup validator would
+    complain about in this level — decorations, enemies, triggers or starts
+    floating with no block under them, too few player starts, an empty level.
+    Click it for the details.
   - **`Ctrl`+`Z`** undoes the last stroke, 40 deep.
   - **Right-click a trigger square** to open that level's
     `{Level}Dialogue.txt` in whatever the OS uses for `.txt`. If the file or
     the block the trigger names doesn't exist yet, it is stubbed in first — so
     right-clicking a fresh trigger lands you on the lines you need to write.
-  - Scroll or `+`/`-` for placement height, `WASD`/arrows or right-drag to pan.
+  - Scroll or `+`/`-` for placement height. **The editor pans on the arrow keys
+    and right-drag only** — `W`/`A`/`S`/`D` are tool keys there. In game they
+    still pan as before.
   - The yellow cursor square shows its height as a number in the middle, and
     for everything except the block tool it sits on top of the block under the
     pointer rather than on the ground plane beneath it.

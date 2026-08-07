@@ -45,22 +45,31 @@ public class DesktopInput : IInputSource
         _typed.Clear();
         _backspace = false;
 
-        var pan = Vector2.Zero;
-        if (keys.IsKeyDown(Keys.Left) || keys.IsKeyDown(Keys.A)) pan.X -= 1;
-        if (keys.IsKeyDown(Keys.Right) || keys.IsKeyDown(Keys.D)) pan.X += 1;
-        if (keys.IsKeyDown(Keys.Up) || keys.IsKeyDown(Keys.W)) pan.Y -= 1;
-        if (keys.IsKeyDown(Keys.Down) || keys.IsKeyDown(Keys.S)) pan.Y += 1;
-        if (pan != Vector2.Zero)
-        {
-            pan.Normalize();
-            state.PanDelta += pan * KeyPanSpeed * dt;
-        }
+        // arrows and WASD are reported both together and separately, so a
+        // screen that needs the letters for something else can drop them
+        var arrows = Vector2.Zero;
+        if (keys.IsKeyDown(Keys.Left)) arrows.X -= 1;
+        if (keys.IsKeyDown(Keys.Right)) arrows.X += 1;
+        if (keys.IsKeyDown(Keys.Up)) arrows.Y -= 1;
+        if (keys.IsKeyDown(Keys.Down)) arrows.Y += 1;
 
-        // right-drag pans opposite the cursor motion, like dragging a paper map
+        var letters = Vector2.Zero;
+        if (keys.IsKeyDown(Keys.A)) letters.X -= 1;
+        if (keys.IsKeyDown(Keys.D)) letters.X += 1;
+        if (keys.IsKeyDown(Keys.W)) letters.Y -= 1;
+        if (keys.IsKeyDown(Keys.S)) letters.Y += 1;
+
+        state.PanDelta = KeyPan(arrows + letters, dt);
+        state.PanDeltaNoLetters = KeyPan(arrows, dt);
+
+        // right-drag pans opposite the cursor motion, like dragging a paper map.
+        // Dragging belongs to both readings of the pan.
         if (mouse.RightButton == ButtonState.Pressed && _prevMouse.RightButton == ButtonState.Pressed)
         {
             var drag = new Vector2(mouse.X - _prevMouse.X, mouse.Y - _prevMouse.Y);
-            state.PanDelta -= viewport.ScreenToVirtual(drag);
+            var scrolled = viewport.ScreenToVirtual(drag);
+            state.PanDelta -= scrolled;
+            state.PanDeltaNoLetters -= scrolled;
         }
 
         if (mouse.LeftButton == ButtonState.Pressed && _prevMouse.LeftButton == ButtonState.Released)
@@ -94,11 +103,23 @@ public class DesktopInput : IInputSource
         state.Delete = Pressed(keys, Keys.Delete) || Pressed(keys, Keys.Back);
         state.DeleteHeld = keys.IsKeyDown(Keys.Delete) || keys.IsKeyDown(Keys.Back);
         state.CtrlHeld = keys.IsKeyDown(Keys.LeftControl) || keys.IsKeyDown(Keys.RightControl);
+        state.ShiftHeld = keys.IsKeyDown(Keys.LeftShift) || keys.IsKeyDown(Keys.RightShift);
         state.Undo = state.CtrlHeld && Pressed(keys, Keys.Z);
+        state.Copy = state.CtrlHeld && Pressed(keys, Keys.C);
+        state.Paste = state.CtrlHeld && Pressed(keys, Keys.V);
+        if (mouse.MiddleButton == ButtonState.Pressed && _prevMouse.MiddleButton == ButtonState.Released)
+            state.MiddleTap = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
 
         _prevKeys = keys;
         _prevMouse = mouse;
         return state;
+    }
+
+    private static Vector2 KeyPan(Vector2 dir, float dt)
+    {
+        if (dir == Vector2.Zero) return Vector2.Zero;
+        dir.Normalize();
+        return dir * KeyPanSpeed * dt;
     }
 
     private bool Pressed(KeyboardState keys, Keys key) =>

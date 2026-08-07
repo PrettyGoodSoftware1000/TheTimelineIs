@@ -43,6 +43,7 @@ public class GameConfig
             ["Cone"] = 0.30f,
             ["Leap"] = 0.18f,
             ["Trigger"] = 0.18f,
+            ["Hover"] = 0.35f,
         };
 
     public static GameConfig Load()

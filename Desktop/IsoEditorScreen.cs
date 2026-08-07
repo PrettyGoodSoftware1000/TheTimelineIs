@@ -23,16 +23,21 @@ namespace TheTimelineIs.Desktop;
 /// enemies) hang a dropdown off their button instead of spending a button per
 /// entry.
 ///
-///   1/2/3 .. block palette   B next block type    hold left  paint
-///   D deco  O door  E enemy  P start  G trigger   hold Del   rub out
-///   Ctrl+Del                 drag a box, everything inside it goes
+///   1/2/3 .. block palette   B next block type    hold left   paint
+///   D deco  O door  E enemy  P start  G trigger   hold Del    rub out
+///   Shift+drag               fill a box at the placement height
+///   Ctrl+Del, then drag      empty a box
+///   Ctrl+drag                select a box: +/- raise and lower it,
+///                            Ctrl+C copies, Ctrl+V pastes at the cursor,
+///                            Del empties it, Esc drops it
+///   middle click             eyedropper: adopt that square's type/height/room
 ///   Ctrl+Z                   undo the last stroke
 ///   right click a trigger    open that level's dialogue file in a text editor
 ///   scroll wheel or +/-      placement height (feet)
 ///   R then typing            set current room label (Enter to accept)
 ///   N then typing            set the dialogue name new triggers call
 ///   V then typing            save as a new level name, and keep editing it
-///   WASD/arrows              pan     S save     T play-test the level
+///   ARROWS ONLY pan here, so WASD stay free as tool keys. S save, T test.
 /// </summary>
 public class IsoEditorScreen : IScreen
 {
@@ -65,14 +70,21 @@ public class IsoEditorScreen : IScreen
     private Point? _paintedLast, _erasedLast;
     private bool _strokeOpen;               // an undo snapshot has been taken for this stroke
 
-    // Ctrl+Delete box
+    // box drags. _boxMode is armed by Ctrl+Delete; the other two read their
+    // modifier live, so they need no arming
     private bool _boxMode;
     private Point? _boxStart, _boxEnd;
+    private Point? _fillStart, _fillEnd;      // Shift+drag: box place
+    private Point? _selStart, _selEnd;        // Ctrl+drag: a selection that sticks
+    private Point? _selA, _selB;              // the committed selection
+    private List<LevelBlock> _clipboard = new();
+    private Point _clipOrigin;
 
     private string? _openMenu;              // which button's dropdown is showing
     private readonly List<LevelData> _undo = new();
     private const int UndoDepth = 40;
 
+    private int _problems;                    // validator complaints about this level
     private const int BarY = 30, BarH = 108, BarGap = 12;
     private static readonly Rectangle ToolbarBand = new(0, 0, VirtualViewport.Width, 260);
 
@@ -100,6 +112,9 @@ public class IsoEditorScreen : IScreen
     private string DialoguePath => Path.Combine(_levelsDir, _levelName + "Dialogue.txt");
 
     private void Status(string text) { _status = text; _statusTimer = 4f; }
+
+    /// <summary>Rescans for problems a few times a second rather than every frame.</summary>
+    private float _problemTimer;
 
     // ---------------- undo ----------------
 
@@ -149,6 +164,7 @@ public class IsoEditorScreen : IScreen
             x += w + BarGap;
         }
 
+        Add($"Level: {_levelName}", "level", false, menu: true);
         Add($"Block: {BlockName}", "block", _tool == Tool.Block, menu: true);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
         Add("Door", "door", _tool == Tool.Door);
@@ -160,6 +176,7 @@ public class IsoEditorScreen : IScreen
         Add("+", "hplus", false, pad: 30);
         Add($"Room: {_room}", "room", false);
         Add("Dialogue", "dialogue", false);
+        Add(_problems == 0 ? "OK" : $"! {_problems}", "problems", false, pad: 34);
         Add("Undo", "undo", false);
         Add("Save", "save", false);
         Add("Save As", "saveas", false);
@@ -176,8 +193,29 @@ public class IsoEditorScreen : IScreen
         "block" => BlockCatalog.BlockTypes.ToList(),
         "deco" => BlockCatalog.Decorations.Select(Strip).ToList(),
         "enemy" => _ctx.Enemies.EnemyNames.ToList(),
+        "level" => LevelNames(),
         _ => new List<string>(),
     };
+
+    /// <summary>
+    /// Every level file in the repo's Content/Levels, so one can be opened
+    /// without restarting. Dialogue files sit in the same folder and are not
+    /// levels. Directory enumeration is fine here: the editor is desktop-only
+    /// and already reads and writes the source tree directly.
+    /// </summary>
+    private List<string> LevelNames()
+    {
+        try
+        {
+            return Directory.GetFiles(_levelsDir, "*.txt")
+                .Select(Path.GetFileNameWithoutExtension)
+                .Where(n => n != null && !n.EndsWith("Dialogue", StringComparison.OrdinalIgnoreCase))
+                .Select(n => n!)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch { return new List<string> { _levelName }; }
+    }
 
     private List<Rectangle> MenuRects(string id)
     {
@@ -194,6 +232,7 @@ public class IsoEditorScreen : IScreen
     {
         switch (id)
         {
+            case "level": OpenLevel(MenuItems("level")[index]); break;
             case "block": _blockIndex = index; _tool = Tool.Block; break;
             case "deco": _decoIndex = index; _tool = Tool.Decoration; break;
             case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
@@ -206,6 +245,9 @@ public class IsoEditorScreen : IScreen
     {
         switch (id)
         {
+            case "level":
+                _openMenu = _openMenu == "level" ? null : "level";
+                return true;
             case "block" or "deco" or "enemy":
                 // the button both selects its tool and opens its palette
                 _tool = id == "block" ? Tool.Block : id == "deco" ? Tool.Decoration : Tool.Enemy;
@@ -219,6 +261,7 @@ public class IsoEditorScreen : IScreen
             case "height": return true;
             case "room": _typingRoom = true; _roomBuffer = _room; return true;
             case "dialogue": _typingTrigger = true; _roomBuffer = _trigger; return true;
+            case "problems": RecountProblems(); Status(ProblemText()); return true;
             case "undo": Undo(); return true;
             case "save": Save(); return true;
             case "saveas": _typingSaveAs = true; _roomBuffer = _levelName; return true;
@@ -232,8 +275,10 @@ public class IsoEditorScreen : IScreen
     public void Update(InputState input, float dt)
     {
         _pointer = input.PointerPos;
-        _camera += input.PanDelta;
+        _camera += input.PanDeltaNoLetters;   // WASD are tool keys here
         if (_statusTimer > 0) _statusTimer -= dt;
+        _problemTimer -= dt;
+        if (_problemTimer <= 0f) { RecountProblems(); _problemTimer = 0.4f; }
 
         if (_typingRoom || _typingTrigger || _typingSaveAs) { UpdateTyping(input); return; }
 
@@ -241,6 +286,11 @@ public class IsoEditorScreen : IScreen
 
         if (input.CtrlHeld && input.Delete) { _boxMode = true; _boxStart = _boxEnd = null; }
         if (input.Undo) Undo();
+        if (input.Copy) CopySelection();
+        if (input.Paste && !ToolbarBand.Contains(_pointer))
+            PasteAt(Target(_pointer.ToVector2(), origin).Tile);
+        if (input.MiddleTap is Point drop && !ToolbarBand.Contains(drop))
+            Eyedropper(PickTile(drop.ToVector2(), origin) ?? IsoMath.ToGrid(drop.ToVector2(), origin));
 
         // a dropdown swallows the next click wherever it lands
         if (_openMenu != null && UpdateMenu(input)) return;
@@ -257,6 +307,8 @@ public class IsoEditorScreen : IScreen
         _height = Math.Clamp(_height + input.ScrollDelta, 0, 12);
 
         if (_boxMode) { UpdateBox(input, origin); return; }
+        if (UpdateFill(input, origin)) return;
+        if (UpdateSelect(input, origin)) return;
 
         UpdatePaint(input, origin);
         UpdateErase(input, origin);
@@ -332,8 +384,15 @@ public class IsoEditorScreen : IScreen
                 case 'g': _tool = Tool.Trigger; break;
                 case 'r': _typingRoom = true; _roomBuffer = _room; break;
                 case 'n': _typingTrigger = true; _roomBuffer = _trigger; break;
-                case '+' or '=': _height = Math.Min(_height + 1, 12); break;
-                case '-': _height = Math.Max(_height - 1, 0); break;
+                // with a selection up, +/- move the ground rather than the cursor
+                case '+' or '=':
+                    if (_selA != null) RaiseSelection(1);
+                    else _height = Math.Min(_height + 1, 12);
+                    break;
+                case '-':
+                    if (_selA != null) RaiseSelection(-1);
+                    else _height = Math.Max(_height - 1, 0);
+                    break;
                 case 's': Save(); break;
                 case 'v': _typingSaveAs = true; _roomBuffer = _levelName; break;
                 case 't': PlayTest(); break;
@@ -386,6 +445,78 @@ public class IsoEditorScreen : IScreen
         if (!_strokeOpen) { BeginEdit(); _strokeOpen = true; }
         _erasedLast = tile;
         Delete(tile);
+    }
+
+    /// <summary>
+    /// Shift+drag fills a box with the current block at the placement height.
+    /// Returns true while it owns the pointer.
+    /// </summary>
+    private bool UpdateFill(InputState input, Vector2 origin)
+    {
+        if (!input.ShiftHeld)
+        {
+            if (_fillStart != null) { _fillStart = _fillEnd = null; }
+            return false;
+        }
+        if (ToolbarBand.Contains(_pointer)) return false;
+
+        var under = Target(_pointer.ToVector2(), origin).Tile;
+        if (input.Tap.HasValue) _fillStart = under;
+        if (_fillStart != null) _fillEnd = under;
+
+        if (input.Released.HasValue && _fillStart is Point a && _fillEnd is Point b)
+        {
+            FillBox(a, b);
+            _fillStart = _fillEnd = null;
+        }
+        return _fillStart != null || input.Tap.HasValue;
+    }
+
+    /// <summary>
+    /// Ctrl+drag marks out a selection that stays put once the button comes up:
+    /// +/- raise and lower the blocks in it, Ctrl+C copies, Del empties it.
+    /// </summary>
+    private bool UpdateSelect(InputState input, Vector2 origin)
+    {
+        if (_selA != null && (input.Cancel || input.AltTap.HasValue))
+        {
+            _selA = _selB = null;
+            Status("selection dropped");
+            return true;
+        }
+        // Delete with a selection up empties the selection instead of the tile
+        if (_selA is Point sa && _selB is Point sb && input.Delete && !input.CtrlHeld)
+        {
+            BeginEdit();
+            var (x0, y0, x1, y1) = Span(sa, sb);
+            int n = 0;
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                    n += DeleteAll(new Point(x, y));
+            Status($"emptied the selection ({n} thing(s))");
+            return true;
+        }
+
+        if (!input.CtrlHeld || input.Delete)
+        {
+            if (_selStart != null) _selStart = _selEnd = null;
+            return false;
+        }
+        if (ToolbarBand.Contains(_pointer)) return false;
+
+        var under = PickTile(_pointer.ToVector2(), origin)
+                    ?? IsoMath.ToGrid(_pointer.ToVector2(), origin);
+        if (input.Tap.HasValue) _selStart = under;
+        if (_selStart != null) _selEnd = under;
+
+        if (input.Released.HasValue && _selStart is Point a && _selEnd is Point b)
+        {
+            _selA = a; _selB = b;
+            _selStart = _selEnd = null;
+            var (x0, y0, x1, y1) = Span(a, b);
+            Status($"selected {(x1 - x0 + 1)}x{(y1 - y0 + 1)} — +/- raise, Ctrl+C copy, Del empty, Esc drop");
+        }
+        return _selStart != null || input.Tap.HasValue;
     }
 
     /// <summary>
@@ -510,6 +641,132 @@ public class IsoEditorScreen : IScreen
 
     // ---------------- files ----------------
 
+    /// <summary>Opens another level for editing, dropping undo and the clipboard.</summary>
+    private void OpenLevel(string name)
+    {
+        if (name.Equals(_levelName, StringComparison.OrdinalIgnoreCase)) return;
+        _level = LevelData.Load(name);
+        _levelName = name;
+        _level.Name = name;
+        _undo.Clear();
+        _selA = _selB = _selStart = _selEnd = null;
+        _boxMode = false;
+        RecountProblems();
+        Status($"opened {name}.txt ({_level.Blocks.Count} blocks)");
+    }
+
+    /// <summary>
+    /// The same things the startup validator complains about, counted for the
+    /// level in hand so a mistake shows while you are still building rather
+    /// than at the next launch.
+    /// </summary>
+    private void RecountProblems()
+    {
+        int n = 0;
+        foreach (var t in _level.Triggers)
+            if (_level.BlockAt(new Point(t.X, t.Y)) == null) n++;
+        foreach (var d in _level.Decorations)
+            if (_level.BlockAt(new Point(d.X, d.Y)) == null) n++;
+        foreach (var e in _level.Enemies)
+            if (_level.BlockAt(new Point(e.X, e.Y)) == null) n++;
+        foreach (var d in _level.Doors)
+            if (_level.BlockAt(new Point(d.X, d.Y)) == null) n++;
+        n += _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
+        if (_level.PlayerStarts.Count < 4) n++;
+        if (_level.Blocks.Count == 0) n++;
+        _problems = n;
+    }
+
+    /// <summary>A short account of what is wrong, for the toolbar button.</summary>
+    private string ProblemText()
+    {
+        var bits = new List<string>();
+        int orphans = _level.Triggers.Count(t => _level.BlockAt(new Point(t.X, t.Y)) == null)
+            + _level.Decorations.Count(d => _level.BlockAt(new Point(d.X, d.Y)) == null)
+            + _level.Enemies.Count(e => _level.BlockAt(new Point(e.X, e.Y)) == null)
+            + _level.Doors.Count(d => _level.BlockAt(new Point(d.X, d.Y)) == null)
+            + _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
+        if (orphans > 0) bits.Add($"{orphans} thing(s) floating with no block under them");
+        if (_level.PlayerStarts.Count < 4)
+            bits.Add($"only {_level.PlayerStarts.Count} player start(s) of 4");
+        if (_level.Blocks.Count == 0) bits.Add("no blocks at all");
+        return bits.Count == 0 ? "no problems" : string.Join("; ", bits);
+    }
+
+    /// <summary>Middle click: adopt the type, height and room of the square under it.</summary>
+    private void Eyedropper(Point tile)
+    {
+        if (_level.BlockAt(tile) is not LevelBlock b) { Status("nothing to sample there"); return; }
+        _height = b.Height;
+        _room = b.Room;
+        int idx = BlockCatalog.BlockTypes
+            .ToList().FindIndex(t => t.Equals(b.Type, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0) { _blockIndex = idx; _tool = Tool.Block; }
+        Status($"picked up {b.Type} at {b.Height} ft in room {b.Room}");
+    }
+
+    private static (int X0, int Y0, int X1, int Y1) Span(Point a, Point b) =>
+        (Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Max(a.X, b.X), Math.Max(a.Y, b.Y));
+
+    /// <summary>Shift+drag: fill the box with the current block at the placement height.</summary>
+    private void FillBox(Point a, Point b)
+    {
+        BeginEdit();
+        string type = BlockCatalog.BlockTypes.Count > 0
+            ? BlockCatalog.BlockTypes[_blockIndex] : "Grass";
+        var (x0, y0, x1, y1) = Span(a, b);
+        for (int x = x0; x <= x1; x++)
+            for (int y = y0; y <= y1; y++)
+                _level.Blocks[new Point(x, y)] = new LevelBlock
+                    { X = x, Y = y, Height = _height, Type = type, Room = _room };
+        Status($"filled {(x1 - x0 + 1) * (y1 - y0 + 1)} squares with {type} at {_height} ft");
+    }
+
+    /// <summary>+/- with a selection: shift every block inside it up or down.</summary>
+    private void RaiseSelection(int by)
+    {
+        if (_selA is not Point a || _selB is not Point b) return;
+        BeginEdit();
+        var (x0, y0, x1, y1) = Span(a, b);
+        int n = 0;
+        for (int x = x0; x <= x1; x++)
+            for (int y = y0; y <= y1; y++)
+                if (_level.Blocks.TryGetValue(new Point(x, y), out var blk))
+                {
+                    blk.Height = Math.Clamp(blk.Height + by, 0, 12);
+                    n++;
+                }
+        Status($"{(by > 0 ? "raised" : "lowered")} {n} block(s)");
+    }
+
+    private void CopySelection()
+    {
+        if (_selA is not Point a || _selB is not Point b) { Status("nothing selected"); return; }
+        var (x0, y0, x1, y1) = Span(a, b);
+        _clipOrigin = new Point(x0, y0);
+        _clipboard = new List<LevelBlock>();
+        for (int x = x0; x <= x1; x++)
+            for (int y = y0; y <= y1; y++)
+                if (_level.Blocks.TryGetValue(new Point(x, y), out var blk))
+                    _clipboard.Add(new LevelBlock
+                        { X = blk.X, Y = blk.Y, Height = blk.Height, Type = blk.Type, Room = blk.Room });
+        Status($"copied {_clipboard.Count} block(s)");
+    }
+
+    /// <summary>Pastes with the selection's top-left corner landing on the cursor.</summary>
+    private void PasteAt(Point tile)
+    {
+        if (_clipboard.Count == 0) { Status("clipboard is empty"); return; }
+        BeginEdit();
+        foreach (var b in _clipboard)
+        {
+            var at = new Point(tile.X + b.X - _clipOrigin.X, tile.Y + b.Y - _clipOrigin.Y);
+            _level.Blocks[at] = new LevelBlock
+                { X = at.X, Y = at.Y, Height = b.Height, Type = b.Type, Room = _room };
+        }
+        Status($"pasted {_clipboard.Count} block(s) into room {_room}");
+    }
+
     private void Save()
     {
         Directory.CreateDirectory(_levelsDir);
@@ -626,8 +883,23 @@ public class IsoEditorScreen : IScreen
                 batch.DrawString(_ctx.Font, trig.Dialogue, new Vector2(tc.X - 70, tc.Y - 40),
                     Color.Violet, 0f, Vector2.Zero, 0.26f, SpriteEffects.None, 0f);
             }
-            if (InBox(tile))
+            if (InSpan(_boxStart, _boxEnd, tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Red * 0.45f);
+            if (InSpan(_fillStart, _fillEnd, tile))
+                DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Orange * 0.45f);
+            if (InSpan(_selStart, _selEnd, tile) || InSpan(_selA, _selB, tile))
+                DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Cyan * 0.35f);
+        }
+
+        // a fill box covers squares that have no block yet, so it is painted
+        // over the bare grid as well as over what is already there
+        if (_fillStart is Point fa && _fillEnd is Point fb)
+        {
+            var (x0, y0, x1, y1) = Span(fa, fb);
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                    if (!_level.Blocks.ContainsKey(new Point(x, y)))
+                        DrawTop(batch, x, y, _height, origin, Color.Orange * 0.45f);
         }
 
         DrawCursor(batch, origin);
@@ -636,8 +908,8 @@ public class IsoEditorScreen : IScreen
         DrawRoomLabels(batch, origin);
     }
 
-    private bool InBox(Point tile) =>
-        _boxStart is Point a && _boxEnd is Point b &&
+    private static bool InSpan(Point? from, Point? to, Point tile) =>
+        from is Point a && to is Point b &&
         tile.X >= Math.Min(a.X, b.X) && tile.X <= Math.Max(a.X, b.X) &&
         tile.Y >= Math.Min(a.Y, b.Y) && tile.Y <= Math.Max(a.Y, b.Y);
 
@@ -673,9 +945,13 @@ public class IsoEditorScreen : IScreen
         foreach (var b in Buttons())
         {
             bool hot = b.Rect.Contains(_pointer);
+            bool alarm = b.Id == "problems" && _problems > 0;
             Ui.FillRect(batch, _ctx.Pixel, b.Rect,
-                b.Active ? new Color(120, 96, 20) : hot ? new Color(52, 52, 66) : new Color(32, 32, 42));
-            var edge = b.Active ? Color.Yellow : hot ? Color.White : Color.White * 0.35f;
+                alarm ? new Color(120, 30, 30)
+                : b.Active ? new Color(120, 96, 20)
+                : hot ? new Color(52, 52, 66) : new Color(32, 32, 42));
+            var edge = alarm ? Color.Red
+                : b.Active ? Color.Yellow : hot ? Color.White : Color.White * 0.35f;
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.X, b.Rect.Y, b.Rect.Width, 3), edge);
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.X, b.Rect.Bottom - 3, b.Rect.Width, 3), edge);
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.X, b.Rect.Y, 3, b.Rect.Height), edge);
@@ -738,14 +1014,17 @@ public class IsoEditorScreen : IScreen
     {
         // editor is a dev tool: literal strings, not Strings.txt
         int y = BarY + BarH + 26;
-        string mode = _boxMode ? "  BOX DELETE: drag a box, Esc to cancel" : "";
+        string mode = _boxMode ? "  BOX DELETE: drag a box, Esc to cancel"
+            : _selA != null ? "  SELECTION: +/- raise, Ctrl+C copy, Ctrl+V paste, Del empty, Esc drop"
+            : "";
         batch.DrawString(_ctx.Font,
             $"{_levelName}.txt   room: {_room}   blocks: {_level.Blocks.Count}{mode}",
             new Vector2(60, y), _boxMode ? Color.Red : Color.Yellow,
             0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
         batch.DrawString(_ctx.Font,
-            "hold left: paint   hold Del: erase   Ctrl+Del: box delete   Ctrl+Z: undo   " +
-            "right-click a trigger: open its dialogue file   scroll: height   WASD: pan",
+            "hold left: paint   hold Del: erase   Shift+drag: fill   Ctrl+Del: box delete   " +
+            "Ctrl+drag: select   middle click: eyedropper   Ctrl+Z: undo   " +
+            "right-click a trigger: its dialogue file   scroll: height   ARROWS: pan",
             new Vector2(60, y + 46), Color.White * 0.6f,
             0f, Vector2.Zero, 0.26f, SpriteEffects.None, 0f);
 

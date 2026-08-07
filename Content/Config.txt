@@ -22,9 +22,11 @@ Dirtbag scale: 0
 #   AoE      - purple, a blast card's explosion radius
 #   Cone     - purple, a cone card's wedge
 #   Trigger  - violet, an unfired dialogue square
+#   Hover    - yellow, the square under the cursor while Ctrl is held
 Movement opacity: 20%
 Range opacity: 18%
 Leap opacity: 10%
 AoE opacity: 30%
 Cone opacity: 30%
 Trigger opacity: 18%
+Hover opacity: 35%

@@ -84,6 +84,7 @@ iso_actions_left = {points} actions
 iso_no_actions = That card costs {cost}; you have {points}.
 iso_steal_pick = Take one card from {name}.
 iso_steal_pick_form = ...and one {form} card to go with it.
+iso_empty_square = Nothing is standing there.
 iso_needs_other = Pick somebody else - you cannot rob yourself.
 iso_nothing_to_steal = {name} has nothing worth taking.
 iso_no_cards = {name} has nothing to attack with, and wanders off.

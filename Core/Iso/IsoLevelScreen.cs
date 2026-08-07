@@ -43,6 +43,9 @@ public class IsoLevelScreen : IScreen
     private enum Act { Casting, Projectile, MeleeWait, Hits }
 
     private const int AggroTiles = 15;
+
+    /// <summary>How much of a sprite survives while Ctrl is held: 80% transparent.</summary>
+    private const float CtrlFade = 0.2f;
     private const float WalkTilesPerSec = 5f;
     private const int DoorReach = 2;
 
@@ -83,6 +86,7 @@ public class IsoLevelScreen : IScreen
     private Vector2 _baseOrigin;
     private Point _pointer;
     private Point? _tap;
+    private bool _ctrl;              // square-targeting mode: see ClickSquare
     private string _toast = "";
     private float _toastTimer;
 
@@ -325,6 +329,7 @@ public class IsoLevelScreen : IScreen
     {
         _pointer = input.PointerPos;
         _tap = input.Tap;
+        _ctrl = input.CtrlHeld;
         _camera += input.PanDelta;
         if (_toastTimer > 0) _toastTimer -= dt;
         Formation.UpdateShakes(_party.Concat(_enemies).ToList(), dt);
@@ -642,6 +647,15 @@ public class IsoLevelScreen : IScreen
         if (_mode is Mode.PlayerTurn or Mode.PlayerTarget && HandleCardClick(press)) return;
         if (HitButton(press)) return;
 
+        // Ctrl aims at the SQUARE rather than at whatever sprite happens to be
+        // over it, which is the only way to reach somebody standing behind a
+        // tree or under a taller neighbour
+        if (_ctrl)
+        {
+            if (FindTileAt(press.ToVector2()) is Point square) ClickSquare(square);
+            return;
+        }
+
         foreach (var c in Everyone.Reverse())
         {
             if (!c.Alive || !SpriteRect(c).Contains(press)) continue;
@@ -679,6 +693,47 @@ public class IsoLevelScreen : IScreen
             }
             HandleTileClick(tile);
         }
+    }
+
+    /// <summary>
+    /// A click resolved by square, under Ctrl. With a card up it plays exactly
+    /// as if whoever stands there had been clicked; without one it is a move,
+    /// or a selection when a party member is standing on the square.
+    /// </summary>
+    private void ClickSquare(Point tile)
+    {
+        var who = Everyone.FirstOrDefault(c => c.Alive && Tile(c) == tile);
+
+        if (_mode == Mode.PlayerTarget && _selectedCard is Card aiming)
+        {
+            if (aiming.TargetsGround) { TryTargetGround(tile); return; }
+            if (who == null) { Toast(_ctx.Strings.Get("iso_empty_square")); return; }
+            if (aiming.TargetsAnyone)
+            {
+                if (who != Current) TryTarget(who);
+                else Toast(_ctx.Strings.Get("iso_needs_other"));
+                return;
+            }
+            if (who.IsPlayer == aiming.TargetsAllies) TryTarget(who);
+            else Toast(_ctx.Strings.Get(aiming.TargetsAllies ? "iso_needs_ally" : "iso_needs_enemy"));
+            return;
+        }
+
+        if (who is { IsPlayer: true })
+        {
+            if (_mode == Mode.Explore) { _selected = who; _overlayKey = null; }
+            else if (_mode == Mode.FreeMove && _freeMovers.Contains(who))
+            { _selected = who; _overlayKey = null; }
+            return;
+        }
+
+        if (_level.DoorAt(tile) is LevelDoor d && !d.Open && _mode is Mode.Explore &&
+            LivingParty.Any(p => IsoMath.GridDistance(Tile(p), tile) <= DoorReach))
+        {
+            OpenDoor(d);
+            return;
+        }
+        HandleTileClick(tile);
     }
 
     private void OpenDoor(LevelDoor door)
@@ -1393,6 +1448,11 @@ public class IsoLevelScreen : IScreen
         }
 
         bool armed = _cardArmed;
+        // Ctrl fades everything standing on the ground so the grid reads
+        // clearly, and lights the square under the cursor
+        float alpha = _ctrl ? CtrlFade : 1f;
+        var hovered = _ctrl ? FindTileAt(_pointer.ToVector2()) : null;
+
         foreach (var block in _level.Blocks.Values
                      .Where(b => _revealed.Contains(b.Room))
                      .OrderBy(b => b.X + b.Y).ThenBy(b => b.X))
@@ -1421,15 +1481,22 @@ public class IsoLevelScreen : IScreen
                 Edge(batch, tile, block.Height, Color.Violet * 0.8f);
             }
 
+            if (hovered == tile)
+            {
+                Fill(batch, tile, block.Height, Color.Yellow * _ctx.Config.Opacity("Hover"));
+                Edge(batch, tile, block.Height, Color.Yellow);
+            }
+
             if (_level.DoorAt(tile) is LevelDoor door)
                 Billboard(batch, "Content/Images/Decorations/Door.png", tile, block.Height,
-                    door.Open ? Color.White * 0.35f : Color.White);
+                    (door.Open ? Color.White * 0.35f : Color.White) * alpha);
             if (_level.DecorationAt(tile) is LevelDecoration deco)
-                Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, block.Height, Color.White);
+                Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, block.Height,
+                    Color.White * alpha);
 
             if (byTile.TryGetValue(tile, out var standing))
                 foreach (var c in standing)
-                    DrawCharacter(batch, c);
+                    DrawCharacter(batch, c, alpha);
         }
 
         DrawProjectile(batch);
@@ -1520,10 +1587,15 @@ public class IsoLevelScreen : IScreen
         batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 30 - h), w, h), tint);
     }
 
-    private void DrawCharacter(SpriteBatch batch, CharacterInstance c)
+    /// <param name="alpha">
+    /// Faded right down while Ctrl is held, so the ground under everyone can be
+    /// seen and aimed at. The health bar above the head keeps full strength —
+    /// it is the information you are targeting with, not something in the way.
+    /// </param>
+    private void DrawCharacter(SpriteBatch batch, CharacterInstance c, float alpha = 1f)
     {
         var rect = SpriteRect(c);
-        batch.Draw(_ctx.Assets.LoadTexture(c.SpritePath), rect, Color.White);
+        batch.Draw(_ctx.Assets.LoadTexture(c.SpritePath), rect, Color.White * alpha);
 
         if (_targets.Contains(c))
             Ui.FillRect(batch, _ctx.Pixel,

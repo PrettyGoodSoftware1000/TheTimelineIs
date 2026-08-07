@@ -12,6 +12,13 @@ public struct InputState
     /// <summary>How far the view should pan this frame, in virtual pixels.</summary>
     public Vector2 PanDelta;
 
+    /// <summary>
+    /// The same pan with WASD left out — arrows and dragging only. The editor
+    /// uses this so those letters can be tool hotkeys there, while the game
+    /// keeps panning on them.
+    /// </summary>
+    public Vector2 PanDeltaNoLetters;
+
     /// <summary>Where the player tapped/clicked this frame, if anywhere.</summary>
     public Point? Tap;
 
@@ -65,4 +72,13 @@ public struct InputState
     /// characters, so the editor can never see it as a typed key.
     /// </summary>
     public bool Undo;
+
+    /// <summary>Ctrl+C / Ctrl+V this frame, for the same reason as Undo.</summary>
+    public bool Copy, Paste;
+
+    /// <summary>Either Shift down — the editor's box-place modifier.</summary>
+    public bool ShiftHeld;
+
+    /// <summary>Middle click this frame: the editor's eyedropper.</summary>
+    public Point? MiddleTap;
 }
