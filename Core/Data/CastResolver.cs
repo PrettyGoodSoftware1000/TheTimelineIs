@@ -33,7 +33,8 @@ public class CharacterInstance
 
     public int MaxHp = 20;
     public int Hp = 20;
-    public int AttackDmg;            // enemies auto-attack with this; players use cards
+    /// <summary>Old side-view battles only; isometric enemies attack with cards.</summary>
+    public int AttackDmg;
     public string AttackType = "Hit";
     /// <summary>0 = Back, 1 = Mid, 2 = Front. -1 = not yet placed.</summary>
     public int Row = -1;
@@ -52,9 +53,26 @@ public class CharacterInstance
     public int MoveMax = 5;
     /// <summary>Points left this turn.</summary>
     public int MovePoints;
-    /// <summary>Enemy basic attack reach in tiles; players attack via cards.</summary>
-    public int RangeTiles = 1;
-    public string? AttackSound;
+
+    /// <summary>
+    /// Action points left. Cards cost these; walking is free. Everyone is
+    /// topped up to ActionsPerTurn at the start of their turn, plus at most
+    /// ActionRollover carried over from what they didn't spend last time.
+    /// </summary>
+    public int ActionPoints;
+
+    /// <summary>Fresh points granted at the start of every turn.</summary>
+    public const int ActionsPerTurn = 2;
+
+    /// <summary>The most that can be carried into the next turn unspent.</summary>
+    public const int ActionRollover = 1;
+
+    /// <summary>
+    /// Turn start: keep up to one unspent point, then add this turn's two. A
+    /// character who did nothing last turn opens the next one with three.
+    /// </summary>
+    public void RefreshActionPoints() =>
+        ActionPoints = Math.Min(ActionPoints, ActionRollover) + ActionsPerTurn;
 
     // --- status effects ---
     /// <summary>
@@ -134,7 +152,6 @@ public class CastManifest
                 IsPlayer = false,
                 Variants = enemy.SpriteFiles.ToList(),
                 Hp = enemy.Hp,
-                AttackDmg = enemy.AttackDamage,
             };
         Diagnostics.Current.Error($"Cast/{name}", 0,
             $"'{name}' is in neither {ClassLibrary.Path} nor {EnemyLibrary.Path}");

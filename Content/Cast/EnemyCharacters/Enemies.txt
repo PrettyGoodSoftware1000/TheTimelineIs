@@ -1,11 +1,15 @@
-# One block per enemy kind. Enemies move toward the nearest player character
-# and use their basic attack. Range is "Melee" (the next square over) or a
-# number of tiles. Sprites default to {Name}.png; list variants to mix looks.
+# One block per enemy kind: who they are and what they look like. How hard
+# they hit, what it sounds like and how far they reach all live on their CARDS
+# now, in Content/Cards/EnemyCards.txt - an enemy holds the cards tagged with
+# its name (or with its "Card Tags:" line, if it has one).
+#
+# An enemy with no card of its own is dealt the default one, so it can still
+# swing. An enemy that has had its last card stolen cannot act at all and just
+# wanders.
+#
+# Sprites default to {Name}.png; list variants to mix looks.
 
 Enemy: Goblin
 HP: 30
 Movement: 3
-Basic Attack Damage: 5
-Sounds: hitbasic.wav
-Range: Melee
 Sprites: Goblin1.png, Goblin2.png, Goblin3.png

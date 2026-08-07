@@ -104,12 +104,18 @@ tactics test**: Title -> party select -> world map -> the destination opens
     tile underfoot, since the jump is part of the attack.
   - `Curse N` — the victim takes N extra damage from **melee** cards for 10 of
     their turns. Curses stack and each keeps its own clock.
-  - `Steal N` — takes one card off whoever it hits, **friend or foe**, and
-    hands it to the caster for N of the caster's own turns counting the one it
-    was stolen on. `Steal 3` is "play it now, or on either of your next two".
-    The owner cannot play it while it is gone, and it goes straight back the
-    moment the thief plays it or the clock runs out. An enemy robbed of its
-    only card has nothing to attack with.
+  - `Steal N` — takes a card off whoever it hits, **friend or foe**, and hands
+    it to the caster for N of the caster's own turns counting the one it was
+    stolen on. `Steal 3` is "play it now, or on either of your next two". The
+    thief is shown the victim's hand and **picks one card**; right-click or
+    Escape takes nothing. The owner cannot play it while it is gone, and it
+    goes straight back the moment the thief plays it or the clock runs out. An
+    enemy robbed of its only card has nothing to attack with.
+
+    **One exception to one-card-per-steal**: if the card taken is a shapeshift
+    card, the thief immediately gets a second pick from the hand of the shape it
+    would have turned them into. Steal `Witch Form` off a Werewitch in wolf
+    form and you may then take `Curse`, which the wolf's hand never offers.
   - `Form X` — the caster changes into their form X, swapping art and hand.
     **Changing shape is free**: it spends neither the turn's card nor its
     movement, so a shapeshifter can shift and then actually do something. The
@@ -142,20 +148,32 @@ tactics test**: Title -> party select -> world map -> the destination opens
   `EnemyCards.txt` for enemies. Identical format — the only difference is
   whether a card's `Tags:` match a class in `Classes.txt` or an enemy in
   `Enemies.txt`.
-- **Enemies act through cards**, exactly as the party does. Their turn:
+- **Action points.** Everyone gets **2 per turn** and may carry **at most 1**
+  unspent point into the next, so a turn that spent nothing opens the next with
+  three. **Walking costs nothing** — movement points and action points are
+  separate budgets. Every card costs `Action Points: N` (default 1, `0` = free),
+  set per card in `PlayerCards.txt` / `EnemyCards.txt`. At the default cost that
+  is two cards a turn. Cards you cannot currently afford grey out individually,
+  and the cost shows as orange pips on the card face.
+- **Enemies act through cards**, exactly as the party does — and are bound by
+  the same action points. Their turn:
   1. a **melee** card it can actually land this turn wins — it walks at the
      nearest player it can reach and swings;
   2. otherwise a **ranged** card — it closes only as far as it must to bring
      the nearest player inside that card's range, and no further;
   3. holding a weapon but out of reach of anyone, it advances and tries again
      next turn;
-  4. holding **no usable attack card** — none authored, or the Dirtbag has
-     lifted the only one — it cannot attack at all, so it walks to a random
-     square inside its movement range.
+  4. holding **no usable attack card** — its last one has been stolen — it
+     cannot attack at all, so it walks to a random square inside its movement
+     range.
 
-  `Basic Attack Damage`, `Sounds` and `Range` in `Enemies.txt` belong to the
-  older side-view battles; an isometric enemy needs a card in `EnemyCards.txt`,
-  and the validator warns when one has none.
+  An enemy in `Enemies.txt` with **no card tagged for it** is dealt the one
+  tagged `Default` — `Smack Something`, a 5-damage melee swing — so a newly
+  added enemy fights without you writing it a card first. The moment it has a
+  card of its own the default drops away, which is why the Goblin never smacks
+  anything. `Enemies.txt` no longer carries `Basic Attack Damage`, `Sounds` or
+  `Range`: how hard an enemy hits, what it sounds like and how far it reaches
+  all live on its cards. Those lines now warn and are ignored.
 - **Classes.txt** now holds all class stats (`Class:`/`HP:`/`Movement:`,
   optional `Sprites:` and `Card Tags:`) — the per-character `{Name}.txt`
   manifests are gone. **Enemies.txt** does the same for enemies
@@ -171,6 +189,68 @@ tactics test**: Title -> party select -> world map -> the destination opens
   for everything except the block tool it sits on top of the block under the
   pointer rather than on the ground plane beneath it.
 - Levels complete when every enemy is dead; a wiped party reloads.
+
+## Adding a level to the world map
+
+A destination is one row in `Content/Missions/Destinations.txt`:
+
+```
+# name              x     y     level
+Test Level          412   688   TestLevel
+```
+
+- **name** — what the player reads on the map. Spaces are fine.
+- **x, y** — where the pin sits, in the map image's own pixels (`Map.png` is
+  authored at 7680x4320). They scale with `Global scale` in `Config.txt`.
+- **level** — the level file's base name: `TestLevel` loads
+  `Content/Levels/TestLevel.txt`. No path, no `.txt`.
+
+Two ways to add one:
+
+1. **By hand** — make the level (`dotnet run --project Desktop -- --editor`,
+   build it, `V` to save it under a new name), then add a row here pointing at
+   that name.
+2. **In game** — open the map and use dev placement: click where the pin
+   should go, type the display name, Enter, type the level name, Enter. The row
+   is appended to the real `Destinations.txt` in the repo, so you get the
+   coordinates by clicking rather than guessing them.
+
+The validator checks nothing about destinations yet, so a row naming a level
+that doesn't exist fails when you click it, not at startup.
+
+## Adding dialogue to an isometric level
+
+Dialogue lives beside the level, in `Content/Levels/{Level}Dialogue.txt` — so
+`TestLevel.txt` reads `TestLevelDialogue.txt`. The file is a list of named
+blocks:
+
+```
+Dialogue: Intro
+Dirtbag: Goddamn if my balls ain't itching.
+Cyborg: SCANNING. THAT IS A PERSONAL PROBLEM.
+
+Dialogue: DoorWarning
+Gun-O-Mancer: Something's breathing on the other side of that door.
+```
+
+`Dialogue: Name` opens a block; every `Speaker: text` line after it belongs to
+that block until the next `Dialogue:` line. The speaker's name is matched
+against the characters on stage to pick the portrait, falling back to their
+full sprite when there's no `{Name}Thumb.png`.
+
+To fire one, paint a **trigger square** in the editor:
+
+1. Press `N`, type the block's name (`Intro`), Enter — that sets which block
+   new triggers will call.
+2. Press `G` for the trigger tool.
+3. Click the squares that should fire it. They show violet in the editor with
+   the block name written on them, and violet in-game until they fire.
+4. `S` to save.
+
+A trigger fires **once**, the first time any character steps on it, and it
+interrupts walking. Several squares can name the same block. The validator
+errors if a trigger names a block that doesn't exist, or one with no lines, so
+a typo is caught at startup rather than being silently skipped.
 
 ## Naming convention
 

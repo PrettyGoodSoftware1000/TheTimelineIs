@@ -39,7 +39,7 @@ namespace TheTimelineIs.Core.Iso;
 /// </summary>
 public class IsoLevelScreen : IScreen
 {
-    private enum Mode { Explore, FreeMove, PlayerTurn, PlayerTarget, EnemyTurn, Acting, Victory }
+    private enum Mode { Explore, FreeMove, PlayerTurn, PlayerTarget, StealPick, EnemyTurn, Acting, Victory }
     private enum Act { Casting, Projectile, MeleeWait, Hits }
 
     private const int AggroTiles = 15;
@@ -60,11 +60,16 @@ public class IsoLevelScreen : IScreen
     private int _turn = -1;
     private CharacterInstance? _selected;
     private readonly HashSet<CharacterInstance> _freeMovers = new();
-    private bool _playedCard;
     private List<Card> _hand = new();
     private Card? _selectedCard;
     private readonly List<CharacterInstance> _targets = new();  // chosen targets, in click order
     private HashSet<Point> _blastSet = new();    // purple: tiles the area would cover
+
+    // a steal waiting for the thief to choose what to take
+    private CharacterInstance? _stealVictim;
+    private int _stealTurns;
+    private List<Card> _stealOptions = new();
+    private string _stealForm = "";              // set on the shapeshift bonus pick
 
     // overlays, recomputed only when the mover, position, or card changes
     private Dictionary<Point, int> _moveSet = new();
@@ -186,9 +191,6 @@ public class IsoLevelScreen : IScreen
                 MaxHp = def.Hp,
                 Hp = def.Hp,
                 MoveMax = def.Movement,
-                AttackDmg = def.AttackDamage,
-                AttackSound = def.AttackSound,
-                RangeTiles = def.Range,
                 GX = spawn.X, GY = spawn.Y,
             });
         }
@@ -273,6 +275,11 @@ public class IsoLevelScreen : IScreen
             ? DeckOf(who).HandFor(tags, who.Form)
             : DeckOf(who).HandFor(tags);
 
+        // an enemy nobody wrote a card for is dealt the default one, so it can
+        // still swing. Once it has one of its own, the default drops away.
+        if (!who.IsPlayer && hand.Count == 0)
+            hand = DeckOf(who).DefaultHand();
+
         if (who.Lost.Count > 0)
             hand = hand.Where(c => !who.Lost.Any(l =>
                 l.CardName.Equals(c.Name, StringComparison.OrdinalIgnoreCase))).ToList();
@@ -350,6 +357,7 @@ public class IsoLevelScreen : IScreen
 
         switch (_mode)
         {
+            case Mode.StealPick: UpdateStealPick(input); break;
             case Mode.Acting: UpdateAction(dt); break;
             case Mode.EnemyTurn: EnemyAct(); break;
             case Mode.Explore:
@@ -497,11 +505,11 @@ public class IsoLevelScreen : IScreen
         }
         var current = Current!;
         current.MovePoints = current.MoveMax;
+        current.RefreshActionPoints();
         _overlayKey = null;
         if (!BurnAtTurnStart(current)) { NextTurn(); return; }
         if (current.IsPlayer)
         {
-            _playedCard = false;
             _hand = HandOf(current);
             _mode = Mode.PlayerTurn;
         }
@@ -721,7 +729,13 @@ public class IsoLevelScreen : IScreen
         for (int i = 0; i < _hand.Count; i++)
             if (rects[i].Contains(press))
             {
-                if (_playedCard) { Toast(_ctx.Strings.Get("iso_card_spent")); return true; }
+                if (Current is CharacterInstance holder && holder.ActionPoints < _hand[i].ActionCost)
+                {
+                    Toast(_ctx.Strings.Format("iso_no_actions",
+                        ("cost", _hand[i].ActionCost.ToString()),
+                        ("points", holder.ActionPoints.ToString())));
+                    return true;
+                }
                 _selectedCard = _hand[i];
                 _targets.Clear();
                 _overlayKey = null;
@@ -844,13 +858,11 @@ public class IsoLevelScreen : IScreen
                 ("card", spent.CardName), ("owner", spent.From?.Name ?? "?")));
         }
 
-        // changing shape is free: it costs neither the turn's card nor its
-        // movement, so a shapeshifter can shift and then actually do something
+        _actor!.ActionPoints = Math.Max(0, _actor.ActionPoints - card.ActionCost);
+        // changing shape is free of the movement penalty too: a shapeshifter can
+        // shift and then still walk, though the shift itself costs its points
         if (card.BecomesForm == null)
-        {
-            _playedCard = true;
-            _actor!.MovePoints = 0;  // a card ends this turn's movement, unless Nimble gives it back
-        }
+            _actor.MovePoints = 0;   // a card ends this turn's movement, unless Nimble gives it back
         _overlayKey = null;
 
         _ctx.Sounds.Play(card.CastingSound);
@@ -932,14 +944,25 @@ public class IsoLevelScreen : IScreen
     private void FinishAction()
     {
         _actingCard = null;
-        _actor = null;
         _victims.Clear();
         _overlayKey = null;
         if (LivingParty.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
-        // the turn carries on while there is anything left to do with it: a
-        // form change spends no card at all, and Nimble hands movement back
+
+        // a Steal held the thief's choice back until the card finished; make
+        // them pick now, before the turn moves on. _actor stays set for it.
+        if (_stealVictim != null) { BeginStealPick(); return; }
+
+        _actor = null;
+        ResumeAfterAction();
+    }
+
+    /// <summary>Back to the turn if anything is left to spend on it, else onward.</summary>
+    private void ResumeAfterAction()
+    {
+        _actor = null;
         var mover = Current;
-        if (mover != null && mover.IsPlayer && mover.Alive && (!_playedCard || mover.MovePoints > 0))
+        if (mover != null && mover.IsPlayer && mover.Alive &&
+            (mover.ActionPoints > 0 || mover.MovePoints > 0))
         {
             _mode = Mode.PlayerTurn;
             return;
@@ -1038,34 +1061,142 @@ public class IsoLevelScreen : IScreen
     private void StealFrom(CharacterInstance victim, int turns, StringBuilder report)
     {
         if (_actor == null || _actor == victim) return;
-
-        // only cards that are genuinely theirs: not ones they are themselves
-        // borrowing, and not the Steal card being played right now
-        var borrowed = victim.Stolen
-            .Select(st => st.CardName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var takeable = HandOf(victim)
-            .Where(c => !borrowed.Contains(c.Name))
-            .Where(c => c != _actingCard)
-            .ToList();
+        var takeable = StealableFrom(victim, _actor);
         if (takeable.Count == 0)
         {
             report.AppendLine(_ctx.Strings.Format("iso_nothing_to_steal", ("name", victim.Name)));
             return;
         }
+        // the thief chooses, so the pick waits until the card has finished
+        // resolving and FinishAction can hand over to the picker
+        _stealVictim = victim;
+        _stealTurns = Math.Max(1, turns);
+    }
 
-        var loot = takeable[Rng.Next(takeable.Count)];
+    /// <summary>
+    /// What can actually be lifted off somebody: cards that are genuinely
+    /// theirs, so not ones they are themselves borrowing, and not the card
+    /// being played to steal with.
+    /// </summary>
+    private List<Card> StealableFrom(CharacterInstance victim, CharacterInstance thief,
+        string? asForm = null)
+    {
+        var borrowed = victim.Stolen
+            .Select(st => st.CardName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var already = thief.Stolen
+            .Select(st => st.CardName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // asForm looks into a shape the victim is NOT currently wearing, which
+        // is how a stolen shapeshift card brings one of that shape's cards along
+        var pool = asForm == null
+            ? HandOf(victim)
+            : DeckOf(victim).HandFor(
+                victim.IsPlayer ? _ctx.Classes.CardTagsFor(victim.Name)
+                                : _ctx.Enemies.CardTagsFor(victim.Name), asForm);
+
+        return pool
+            .Where(c => !borrowed.Contains(c.Name))
+            .Where(c => !already.Contains(c.Name))
+            .Where(c => c != _actingCard)
+            .ToList();
+    }
+
+    /// <summary>Opens the picker, or closes the whole business if there is nothing to show.</summary>
+    private void BeginStealPick(string? followUpForm = null)
+    {
+        if (_stealVictim == null || _actor == null) { EndStealPick(); return; }
+        _stealOptions = StealableFrom(_stealVictim, _actor, followUpForm);
+        _stealForm = followUpForm ?? "";
+        if (_stealOptions.Count == 0) { EndStealPick(); return; }
+        _mode = Mode.StealPick;
+    }
+
+    /// <summary>Takes the chosen card, then offers the shapeshift bonus if it earned one.</summary>
+    private void TakeStolen(Card loot)
+    {
+        var victim = _stealVictim;
+        var thief = _actor;
+        if (victim == null || thief == null) { EndStealPick(); return; }
+
         var record = new StolenCard
         {
             CardName = loot.Name,
             From = victim,
             FromEnemyDeck = !victim.IsPlayer,
-            TurnsLeft = Math.Max(1, turns),
+            TurnsLeft = _stealTurns,
         };
-        _actor.Stolen.Add(record);
+        thief.Stolen.Add(record);
         victim.Lost.Add(record);
-        report.AppendLine(_ctx.Strings.Format("iso_stole",
-            ("thief", _actor.Name), ("card", loot.Name), ("victim", victim.Name),
+        Log(_ctx.Strings.Format("iso_stole",
+            ("thief", thief.Name), ("card", loot.Name), ("victim", victim.Name),
             ("turns", record.TurnsLeft.ToString())));
+
+        // the one exception to one-card-per-steal: taking a shapeshift card
+        // also lets you reach into the shape it would have turned them into
+        if (_stealForm.Length == 0 && loot.BecomesForm is string shape)
+        {
+            BeginStealPick(shape);
+            return;
+        }
+        EndStealPick();
+    }
+
+    private void EndStealPick()
+    {
+        _stealVictim = null;
+        _stealOptions = new List<Card>();
+        _stealForm = "";
+        _hand = Current != null ? HandOf(Current) : _hand;
+        ResumeAfterAction();
+    }
+
+    /// <summary>Picker clicks: one card, or right-click / Escape to take nothing.</summary>
+    private void UpdateStealPick(InputState input)
+    {
+        if (input.AltTap.HasValue || input.Cancel) { EndStealPick(); return; }
+        if (_tap is not Point press) return;
+        _tap = null;
+        var rects = StealRects();
+        for (int i = 0; i < _stealOptions.Count && i < rects.Count; i++)
+            if (rects[i].Contains(press))
+            {
+                TakeStolen(_stealOptions[i]);
+                return;
+            }
+    }
+
+    private List<Rectangle> StealRects()
+    {
+        int n = Math.Max(1, _stealOptions.Count);
+        int total = n * (CardW + CardGap) - CardGap;
+        // narrow the cards rather than run off the screen when a hand is large
+        int w = CardW, gap = CardGap;
+        if (total > VirtualViewport.Width - 200)
+        {
+            w = (VirtualViewport.Width - 200 - (n - 1) * gap) / n;
+            total = n * (w + gap) - gap;
+        }
+        int x0 = (VirtualViewport.Width - total) / 2;
+        int h = (int)(CardH * (w / (float)CardW));
+        var rects = new List<Rectangle>();
+        for (int i = 0; i < n; i++)
+            rects.Add(new Rectangle(x0 + i * (w + gap), (VirtualViewport.Height - h) / 2, w, h));
+        return rects;
+    }
+
+    private void DrawStealPick(SpriteBatch batch)
+    {
+        Ui.FillRect(batch, _ctx.Pixel,
+            new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height), Color.Black * 0.72f);
+        Ui.DrawTextCentered(batch, _ctx.Font,
+            _stealForm.Length > 0
+                ? _ctx.Strings.Format("iso_steal_pick_form", ("form", _stealForm))
+                : _ctx.Strings.Format("iso_steal_pick", ("name", _stealVictim?.Name ?? "?")),
+            new Rectangle(0, 320, VirtualViewport.Width, 120), Color.Gold, 0.56f);
+
+        var rects = StealRects();
+        for (int i = 0; i < _stealOptions.Count && i < rects.Count; i++)
+            DrawCard(batch, _stealOptions[i], rects[i], rects[i].Contains(_pointer));
     }
 
     /// <summary>Swaps a shapeshifter's shape, and with it the cards in its hand.</summary>
@@ -1141,7 +1272,9 @@ public class IsoLevelScreen : IScreen
         var players = LivingParty;
         if (players.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
 
-        var hand = HandOf(me).Where(c => !c.TargetsAllies).ToList();
+        // an enemy is bound by action points exactly as the party is
+        var hand = HandOf(me)
+            .Where(c => !c.TargetsAllies && c.ActionCost <= me.ActionPoints).ToList();
         var reach = Pathfinder.Reachable(_level, Tile(me), me.MovePoints, _revealed,
             OccupiedExcept(me)).Cost;
         var stands = reach.Keys.Append(Tile(me)).ToList();
@@ -1523,12 +1656,15 @@ public class IsoLevelScreen : IScreen
             case Mode.PlayerTarget:
                 DrawTurnStrip(batch);
                 if (Current is CharacterInstance me)
+                {
                     Ui.DrawTextCentered(batch, _ctx.Font,
                         me.MovePoints <= 0
                             ? _ctx.Strings.Get("iso_move_spent")
                             : _ctx.Strings.Format("iso_move_left", ("points", me.MovePoints.ToString())),
-                        new Rectangle(0, 230, VirtualViewport.Width, 80),
+                        new Rectangle(0, 300, VirtualViewport.Width, 80),
                         me.MovePoints <= 0 ? Color.Gray : Color.LightBlue, 0.36f);
+                    DrawActionPoints(batch, me);
+                }
                 if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, EndTurnRect, _ctx.Strings.Get("iso_end_turn"), _tap))
                     NextTurn();
                 if (_mode == Mode.PlayerTarget)
@@ -1546,6 +1682,10 @@ public class IsoLevelScreen : IScreen
             case Mode.EnemyTurn:
             case Mode.Acting:
                 DrawTurnStrip(batch);
+                break;
+            case Mode.StealPick:
+                DrawTurnStrip(batch);
+                DrawStealPick(batch);
                 break;
             case Mode.Victory:
                 Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("iso_victory"),
@@ -1668,6 +1808,36 @@ public class IsoLevelScreen : IScreen
                 0f, Vector2.Zero, 0.38f, SpriteEffects.None, 0f);
     }
 
+    /// <summary>
+    /// Action points as a row of pips: filled for what's left, hollow for what
+    /// has been spent this turn. A third pip appears only when a point was
+    /// carried over, which is the whole tell that rollover happened.
+    /// </summary>
+    private void DrawActionPoints(SpriteBatch batch, CharacterInstance who)
+    {
+        int slots = Math.Max(CharacterInstance.ActionsPerTurn, who.ActionPoints);
+        const int pip = 46, gap = 16;
+        int total = slots * pip + (slots - 1) * gap;
+        int x = (VirtualViewport.Width - total) / 2;
+        int y = 232;
+
+        for (int i = 0; i < slots; i++)
+        {
+            var box = new Rectangle(x + i * (pip + gap), y, pip, pip);
+            bool full = i < who.ActionPoints;
+            Ui.FillRect(batch, _ctx.Pixel, box, full ? Color.Orange : new Color(60, 45, 30));
+            if (full) continue;
+            // hollow: draw the frame only
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X + 5, box.Y + 5, pip - 10, pip - 10),
+                new Color(18, 18, 24));
+        }
+        var label = _ctx.Strings.Format("iso_actions_left",
+            ("points", who.ActionPoints.ToString()));
+        batch.DrawString(_ctx.Font, label, new Vector2(x + total + 28, y + 4),
+            who.ActionPoints > 0 ? Color.Orange : Color.Gray,
+            0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
+    }
+
     private void DrawHand(SpriteBatch batch)
     {
         var rects = HandRects();
@@ -1689,10 +1859,13 @@ public class IsoLevelScreen : IScreen
     private void DrawCard(SpriteBatch batch, Card card, Rectangle rect, bool hovered)
     {
         float s = hovered ? HoverScale : 1f;
+        // a card the holder cannot currently afford is greyed out card by card,
+        // so with 1 point left the cheap ones stay lit and the dear ones dim
+        bool spent = Current == null || Current.ActionPoints < card.ActionCost;
         Ui.FillRect(batch, _ctx.Pixel, rect,
-            _playedCard ? new Color(20, 20, 26, 250) : new Color(24, 24, 40, 250));
+            spent ? new Color(20, 20, 26, 250) : new Color(24, 24, 40, 250));
         var border = card == _selectedCard ? Color.Gold
-            : _playedCard ? Color.White * 0.25f
+            : spent ? Color.White * 0.25f
             : hovered ? Color.White : Color.White * 0.5f;
         int bw = (int)(6 * s);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Y, rect.Width, bw), border);
@@ -1700,7 +1873,7 @@ public class IsoLevelScreen : IScreen
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.X, rect.Y, bw, rect.Height), border);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.Right - bw, rect.Y, bw, rect.Height), border);
 
-        var ink = _playedCard ? Color.White * 0.4f : Color.White;
+        var ink = spent ? Color.White * 0.4f : Color.White;
         Ui.DrawTextCentered(batch, _ctx.Font, card.Name,
             new Rectangle(rect.X, rect.Y + (int)(18 * s), rect.Width, (int)(80 * s)), ink, 0.4f * s);
         batch.DrawString(_ctx.Font, Ui.Wrap(_ctx.Font, card.CardText, rect.Width - 56 * s, 0.3f * s),
@@ -1716,10 +1889,17 @@ public class IsoLevelScreen : IScreen
         var size = _ctx.Font.MeasureString(total) * (0.36f * s);
         batch.DrawString(_ctx.Font, total,
             new Vector2(rect.Right - 24 * s - size.X, rect.Bottom - 28 * s - size.Y),
-            _playedCard ? Color.Gold * 0.4f : Color.Gold, 0f, Vector2.Zero, 0.36f * s, SpriteEffects.None, 0f);
+            spent ? Color.Gold * 0.4f : Color.Gold, 0f, Vector2.Zero, 0.36f * s, SpriteEffects.None, 0f);
         batch.DrawString(_ctx.Font, _ctx.Strings.Format("iso_card_range", ("range", card.Range.ToString())),
             new Vector2(rect.X + 24 * s, rect.Bottom - 28 * s - size.Y),
-            _playedCard ? Color.LightBlue * 0.4f : Color.LightBlue,
+            spent ? Color.LightBlue * 0.4f : Color.LightBlue,
             0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
+
+        // the cost, top-right, as one pip per point
+        for (int i = 0; i < card.ActionCost; i++)
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle((int)(rect.Right - (28 + i * 34) * s), (int)(rect.Y + 22 * s),
+                    (int)(24 * s), (int)(24 * s)),
+                spent ? Color.Orange * 0.4f : Color.Orange);
     }
 }

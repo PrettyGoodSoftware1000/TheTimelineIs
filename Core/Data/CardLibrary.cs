@@ -38,6 +38,12 @@ public class Card
 
     /// <summary>The file this card was read from — PlayerCards.txt or EnemyCards.txt.</summary>
     public string Source = CardLibrary.PlayerPath;
+
+    /// <summary>
+    /// Action points this card costs to play. Everyone gets 2 a turn, so the
+    /// default of 1 means two cards a turn; 0 makes a card free.
+    /// </summary>
+    public int ActionCost = 1;
     public string EffectLine = "";
 
     // --- machine-read: matched case-insensitively ---
@@ -150,6 +156,12 @@ public class CardLibrary
     /// <summary>Cards enemies act with. Same format, different holders.</summary>
     public const string EnemyPath = "Content/Cards/EnemyCards.txt";
 
+    /// <summary>
+    /// Reserved tag: a card tagged with this is dealt to any enemy that has no
+    /// card of its own, so a newly added enemy can still fight.
+    /// </summary>
+    public const string DefaultTag = "Default";
+
     /// <summary>Which file this library was read from — for error messages.</summary>
     public string Source { get; private set; } = PlayerPath;
 
@@ -158,7 +170,8 @@ public class CardLibrary
     {
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
-        "explosion range", "effects", "effect", "speed", "range", "form", "tags", "type", "sounds",
+        "explosion range", "action points", "effects", "effect", "speed", "range",
+        "form", "tags", "type", "sounds",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
@@ -303,6 +316,13 @@ public class CardLibrary
 
             case "form":
                 card.Form = value;
+                break;
+
+            case "action points":
+                // 0 is a real value here: a free card that costs nothing to play
+                if (int.TryParse(value, out int ap) && ap >= 0) card.ActionCost = ap;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Action Points must be 0 or more, got '{value}'");
                 break;
 
             case "explosion range":
@@ -494,6 +514,10 @@ public class CardLibrary
     /// <summary>Cards a class can play: any tag the class carries appears in the card's Tags.</summary>
     public List<Card> HandFor(IReadOnlyList<string> classTags) =>
         All.Where(c => c.Tags.Intersect(classTags, StringComparer.OrdinalIgnoreCase).Any()).ToList();
+
+    /// <summary>The cards dealt to a holder that has none of its own.</summary>
+    public List<Card> DefaultHand() =>
+        All.Where(c => c.Tags.Contains(DefaultTag, StringComparer.OrdinalIgnoreCase)).ToList();
 
     /// <summary>
     /// The same, narrowed to a character's current form: a card with a Form

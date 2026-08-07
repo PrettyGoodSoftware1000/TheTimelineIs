@@ -11,9 +11,15 @@
 #   2. Otherwise, if it holds a RANGED card, it moves only as far as it must
 #      to bring the nearest player inside that card's range, then fires.
 #      It does not close any further than that.
-#   3. If it holds no attack card it can use - because it has none, or
-#      because the Dirtbag has stolen the only one - it cannot attack at all.
-#      It picks a random square inside its movement range and wanders there.
+#   3. If it holds no attack card it can use - because the Dirtbag has stolen
+#      the only one - it cannot attack at all. It picks a random square inside
+#      its movement range and wanders there.
+#
+# THE DEFAULT CARD
+# An enemy in Enemies.txt with no card tagged for it is dealt the one tagged
+# "Default" instead, so a newly added enemy can fight without you writing it a
+# card first. As soon as an enemy has a card of its own, it stops using the
+# default - the Goblin has Goblin Claw, so it never smacks anything.
 #
 # An enemy with several melee cards uses the longest-ranged one it can afford;
 # same for ranged. Enemies never play cards that target allies.
@@ -24,10 +30,26 @@
 # =====================================================================
 
 []
+Card Name: Smack Something
+Tags: Default
+Type: [melee] Single target, X hits.
+Range: 1
+Action Points: 1
+Melee Time: 0.35
+Casting Sound: [Blank.wav]
+Casting Time: 0.15
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 5 damage.
+Card Text: No technique whatsoever. Still hurts.
+Bottom Right: 5 Stabby
+[]
+
+[]
 Card Name: Goblin Claw
 Tags: Goblin
 Type: [melee] Single target, X hits.
 Range: 1
+Action Points: 1
 Melee Time: 0.35
 Casting Sound: [Blank.wav]
 Casting Time: 0.15

@@ -16,6 +16,11 @@
 #                                            player clicks (AoE still damages
 #                                            everyone; the click only aims it)
 #                    "Multiple Projectiles" - one shot per target (default))
+# Action Points:  (What the card costs to play. Everyone gets 2 action points
+#                  a turn and can carry at most 1 unspent point into the next
+#                  turn, so a 1-point card is "two a turn". 0 makes a card
+#                  free. Walking costs no action points at all. Missing line
+#                  means 1.)
 # Projectile Art: (File in Content/Images/Effects/. Art must point RIGHT;
 #                  it is rotated to match the shot's travel angle, so a shot
 #                  heading down-right appears rotated clockwise.)
@@ -73,6 +78,7 @@
 Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
+Action Points: 1
 Explosion Range: 3
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]
@@ -88,6 +94,7 @@ Bottom Right: 15 Fire
 Card Name: Shank
 Tags: Dirtbag
 Type: [melee] Single target, X hits.
+Action Points: 1
 Effects: Nimble 4
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -103,6 +110,7 @@ Bottom Right: 12 Stabby
 Card Name: Pew Pew
 Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
+Action Points: 1
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -117,6 +125,7 @@ Bottom Right: 10 Energy
 Card Name: Hot Lead
 Tags: Gun-O-Mancer
 Type: [cone] AoE damage
+Action Points: 1
 Range: 3
 Effects: Burning 1
 Casting Sound: [Blank.wav]
@@ -132,6 +141,7 @@ Bottom Right: 5 Stabby
 Card Name: Reinforce
 Tags: Cyborg
 Type: [ranged] Single target, X hits.
+Action Points: 1
 Range: 5
 Effects: Armor 5
 Projectile Art: Placeholder.png
@@ -148,6 +158,7 @@ Bottom Right: 0 Armor
 Card Name: Toss-A-Knife
 Tags: Dirtbag
 Type: [ranged] Single target, X hits.
+Action Points: 1
 Range: 5
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
@@ -164,6 +175,7 @@ Card Name: Claw 'Em
 Tags: Werewitch
 Form: Werewolf
 Type: [melee] Single target, X hits.
+Action Points: 1
 Effects: Leap 5
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -180,6 +192,7 @@ Card Name: Witch Form
 Tags: Werewitch
 Form: Werewolf
 Type: [ranged] Single target, X hits.
+Action Points: 1
 Effects: Form Witch
 Range: 1
 Projectile Art: Placeholder.png
@@ -197,6 +210,7 @@ Card Name: Wolf Form
 Tags: Werewitch
 Form: Witch
 Type: [ranged] Single target, X hits.
+Action Points: 1
 Effects: Form Werewolf, Nimble 5
 Range: 1
 Projectile Art: Placeholder.png
@@ -214,6 +228,7 @@ Card Name: Curse
 Tags: Werewitch
 Form: Witch
 Type: [ranged] Single target, X hits.
+Action Points: 1
 Effects: Curse 3
 Range: 6
 Projectile Art: Placeholder.png
@@ -230,6 +245,7 @@ Bottom Right: 0 Cursed
 Card Name: Beg, Borrow, but Mostly Steal
 Tags: Dirtbag
 Type: [ranged] Single target, X hits.
+Action Points: 1
 Effects: Steal 3
 Range: 4
 Projectile Art: Placeholder.png

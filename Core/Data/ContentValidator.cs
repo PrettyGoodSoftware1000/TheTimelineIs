@@ -38,7 +38,8 @@ public static class ContentValidator
         foreach (var card in cards.All)
         {
             foreach (var tag in card.Tags)
-                if (!holderTags.Contains(tag))
+                if (!holderTags.Contains(tag) &&
+                    !tag.Equals(CardLibrary.DefaultTag, StringComparison.OrdinalIgnoreCase))
                     diag.Error(card.Source, card.Line,
                         $"'{card.Name}': nothing declares the tag '{tag}', " +
                         "so nobody can ever hold this card");
@@ -151,12 +152,14 @@ public static class ContentValidator
         foreach (var name in enemies.EnemyNames)
         {
             var def = enemies.Get(name)!;
-            // an isometric enemy acts entirely through its cards
+            // an isometric enemy acts entirely through its cards; one with none
+            // of its own is dealt the Default-tagged card instead
             var hand = enemyCards.HandFor(enemies.CardTagsFor(name));
+            if (hand.Count == 0) hand = enemyCards.DefaultHand();
             if (hand.Count == 0)
-                diag.Warn(EnemyLibrary.Path, def.Line,
-                    $"enemy '{name}': no cards in {CardLibrary.EnemyPath} carry its tags, so it " +
-                    "cannot attack in an isometric level — it will just wander");
+                diag.Error(CardLibrary.EnemyPath, 0,
+                    $"enemy '{name}' has no cards of its own and there is no card tagged " +
+                    $"'{CardLibrary.DefaultTag}' to fall back on, so it can never act");
             else if (hand.All(c => c.TargetsAllies))
                 diag.Warn(EnemyLibrary.Path, def.Line,
                     $"enemy '{name}': every one of its cards targets allies, so it never attacks");
@@ -164,10 +167,6 @@ public static class ContentValidator
                 if (!AssetLoader.Exists($"{def.Folder}/{sprite}"))
                     diag.Error(EnemyLibrary.Path, def.Line,
                         $"enemy '{name}': sprite '{sprite}' not found at {def.Folder}/{sprite}");
-            if (def.AttackSound != null &&
-                !AssetLoader.Exists($"{Audio.SoundBank.Folder}/{def.AttackSound}"))
-                diag.Error(EnemyLibrary.Path, def.Line,
-                    $"enemy '{name}': sound '{def.AttackSound}' not found in {Audio.SoundBank.Folder}/");
         }
     }
 
@@ -273,14 +272,15 @@ public static class ContentValidator
             "devmap_hint", "devmap_name_prompt", "devmap_mission_prompt", "devmap_saved",
             "error_title", "error_continue", "error_more", "error_log", "error_counts",
             "iso_enter", "iso_explore_hint", "iso_spotted", "iso_done", "iso_clear",
-            "iso_end_turn", "iso_move_left", "iso_out_of_range", "iso_card_spent",
+            "iso_end_turn", "iso_move_left", "iso_out_of_range",
             "iso_door_open", "iso_victory", "iso_card_range",
             "iso_move_spent", "iso_pick_target", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
             "iso_cursed", "iso_form",
             "iso_stole", "iso_steal_over", "iso_nothing_to_steal", "iso_no_cards", "iso_needs_other",
-            "iso_log_empty", "iso_log_more",
+            "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_no_actions",
+            "iso_steal_pick", "iso_steal_pick_form",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

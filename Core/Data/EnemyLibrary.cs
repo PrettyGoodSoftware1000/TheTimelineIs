@@ -10,10 +10,6 @@ public class EnemyDef
     public string Name = "";
     public int Hp = 10;
     public int Movement = 3;
-    public int AttackDamage = 3;
-    public string? AttackSound;
-    /// <summary>Attack reach in tiles; 1 = melee ("Range: Melee").</summary>
-    public int Range = 1;
     public List<string> Sprites = new();
     /// <summary>Which cards in EnemyCards.txt this enemy holds; its own name by default.</summary>
     public List<string> CardTags = new();
@@ -31,10 +27,12 @@ public class EnemyDef
 ///   Enemy: Goblin
 ///   HP: 30
 ///   Movement: 3
-///   Basic Attack Damage: 5
-///   Sounds: hitbasic.wav
-///   Range: Melee                     (or a number of tiles)
 ///   Sprites: Goblin1.png, Goblin2.png, Goblin3.png
+///   Card Tags: Goblin                (optional; defaults to the enemy's name)
+///
+/// How hard an enemy hits, what it sounds like and how far it reaches all live
+/// on its CARDS now, in Content/Cards/EnemyCards.txt. An enemy with no card of
+/// its own is dealt the default one so it can still swing.
 /// </summary>
 public class EnemyLibrary
 {
@@ -104,18 +102,12 @@ public class EnemyLibrary
                     else diag.Error(Path, lineNo, $"'{current.Name}': Movement must be a positive number, got '{value}'");
                     break;
                 case "basic attack damage":
-                    if (int.TryParse(value, out int dmg) && dmg > 0) current.AttackDamage = dmg;
-                    else diag.Error(Path, lineNo, $"'{current.Name}': Basic Attack Damage must be a positive number, got '{value}'");
-                    break;
                 case "sounds":
                 case "sound":
-                    current.AttackSound = value.Trim('[', ']').Trim();
-                    if (current.AttackSound.Length == 0) current.AttackSound = null;
-                    break;
                 case "range":
-                    if (value.Equals("melee", StringComparison.OrdinalIgnoreCase)) current.Range = 1;
-                    else if (int.TryParse(value, out int r) && r > 0) current.Range = r;
-                    else diag.Error(Path, lineNo, $"'{current.Name}': Range must be 'Melee' or a number of tiles, got '{value}'");
+                    diag.Warn(Path, lineNo,
+                        $"'{current.Name}': '{key}' moved onto the enemy's cards in " +
+                        $"{CardLibrary.EnemyPath} and is ignored here — delete the line");
                     break;
                 case "sprites":
                     current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
