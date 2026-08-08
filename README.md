@@ -297,6 +297,28 @@ interrupts walking. Several squares can name the same block. The validator
 errors if a trigger names a block that doesn't exist, or one with no lines, so
 a typo is caught at startup rather than being silently skipped.
 
+## spritetool: video to sprite sheets
+
+`Tools/SpriteTool` turns an mp4 into numbered PNGs, assembles chosen PNGs into
+a sprite sheet, and slices a sheet back apart.
+
+```
+dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
+dotnet run --project Tools/SpriteTool -- extract wolf.mp4 -n werewolf_attack --odd -o out
+dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
+dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attack -o frames
+```
+
+Extraction is lossless — PNG out, `-fps_mode passthrough` so no frame is
+duplicated or dropped, and an accurate YUV→RGB conversion. `--odd` keeps source
+frames 1, 3, 5, … and renumbers the output 1..N with no gaps. Every sheet is
+written with a `.txt` beside it giving the cell size and grid, so it can be cut
+up again without remembering the numbers.
+
+`extract` needs **ffmpeg** on the PATH (`winget install Gyan.FFmpeg`); `sheet`
+and `slice` need nothing beyond the repo. Full details in
+[`Tools/SpriteTool/README.md`](Tools/SpriteTool/README.md).
+
 ## Naming convention
 
 Folders and files use initial caps with no underscores; multi-word names run
