@@ -19,6 +19,13 @@ namespace TheTimelineIs.SpriteTool;
 /// </summary>
 public static class Extract
 {
+    /// <summary>
+    /// Frame numbers are padded to at least three digits — name001.png. Fixed
+    /// width keeps them in order in every file browser and every tool that
+    /// sorts as text, which is most of them.
+    /// </summary>
+    public const int MinPad = 3;
+
     public static int Run(Options o)
     {
         if (!Ffmpeg.Available())
@@ -85,7 +92,7 @@ public static class Extract
             kept.Add(frames[i]);
         }
 
-        int pad = Math.Max(o.Pad, kept.Count.ToString().Length);
+        int pad = Math.Max(Math.Max(o.Pad, MinPad), kept.Count.ToString().Length);
         int written = 0;
         foreach (var src in kept)
         {
@@ -119,8 +126,11 @@ public static class Extract
         public int Every = 1;
         /// <summary>The first source frame to keep, 1-based.</summary>
         public int First = 1;
-        /// <summary>Minimum digits in the number. Grows if the count needs more.</summary>
-        public int Pad = 1;
+        /// <summary>
+        /// Minimum digits in the number, so frames come out as name001.png.
+        /// Grows past this when there are more frames than it can hold.
+        /// </summary>
+        public int Pad = MinPad;
         /// <summary>Write RGBA rather than RGB. Only useful for sources that carry alpha.</summary>
         public bool Rgba;
     }

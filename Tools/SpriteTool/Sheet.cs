@@ -136,7 +136,7 @@ public static class Sheet
         if (count <= 0) count = columns * rows;
 
         Directory.CreateDirectory(o.OutDir);
-        int pad = count.ToString().Length;
+        int pad = Math.Max(Extract.MinPad, count.ToString().Length);
         for (int i = 0; i < count; i++)
         {
             int x = i % columns * cw, y = i / columns * ch;

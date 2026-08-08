@@ -2,9 +2,43 @@
 
 mp4 → numbered PNGs → sprite sheet → numbered PNGs again.
 
+## Just run it
+
+**Double-click `Tools/SpriteTool/spritetool.bat`**, or from anywhere in the
+repo:
+
+```
+dotnet run --project Tools/SpriteTool
+```
+
+With no arguments it opens a menu. Pick a number, answer a few questions,
+done — every question offers a default in `[brackets]` that Enter accepts, and
+you can **drag a file from Explorer onto the window** instead of typing its
+path. The folder you last worked in is remembered, so the second job in a
+session is mostly Enter.
+
+```
+   1   Extract frames from a video
+   2   Build a sprite sheet from pngs
+   3   Slice a sprite sheet back into pngs
+   4   Check that ffmpeg is installed
+   5   Show the command-line options
+   0   Quit
+```
+
+The command line below still works, for scripting or for repeating a run you
+have already worked out.
+
 ```
 dotnet run --project Tools/SpriteTool -- --help
 ```
+
+## Filenames
+
+Frames are numbered with **at least three digits** — `werewolf_attack001.png`,
+`werewolf_attack002.png`. Fixed width keeps them in order in Explorer and in
+every tool that sorts filenames as text, which is most of them. Past 999 the
+padding grows to fit.
 
 ## extract — every frame of a video as its own PNG
 
@@ -12,7 +46,7 @@ dotnet run --project Tools/SpriteTool -- --help
 dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
 ```
 
-writes `out/werewolf_attack01.png` … `werewolf_attack37.png`.
+writes `out/werewolf_attack001.png` … `werewolf_attack037.png`.
 
 | option | what it does |
 |---|---|
@@ -22,12 +56,12 @@ writes `out/werewolf_attack01.png` … `werewolf_attack37.png`.
 | `--even` | keep source frames 2, 4, 6, … |
 | `--every N` | keep one frame in N |
 | `--first N` | start counting from source frame N |
-| `--pad N` | pad the numbers to at least N digits |
+| `--pad N` | pad the numbers to at least N digits (default 3) |
 | `--rgba` | keep an alpha channel (only if the source has one — mp4 usually doesn't) |
 
 **Output is always renumbered 1..N with no gaps**, whatever was skipped. `--odd`
-on a 12-frame clip gives you six files numbered 1–6, holding source frames 1,
-3, 5, 7, 9, 11.
+on a 12-frame clip gives you `name001.png` … `name006.png`, holding source
+frames 1, 3, 5, 7, 9, 11.
 
 ### How lossless it is
 
@@ -48,14 +82,43 @@ anywhere) extracts **bit-identical** to the PNGs it was built from. Against a
 normal YUV mp4 the difference is ±1 per channel, and that comes from the
 encoder's own RGB→YUV step, which happened before this tool ever saw the file.
 
-**Needs ffmpeg on the PATH.** It is the only way to decode H.264; nothing else
-in this tool touches it.
+### Why extract needs ffmpeg
+
+An `.mp4` is not a folder of pictures. It is a **compressed video stream**,
+almost always H.264: instead of storing each frame, it stores a few whole
+frames and then, for everything in between, only the *differences* — "this
+block moved four pixels left, that one got slightly darker". Turning that back
+into pictures means running the H.264 decoder, which is a large, patent-encumbered
+piece of engineering that nobody reimplements for fun. ffmpeg is the standard
+one. Every video tool you have ever used is either ffmpeg or something like it
+underneath.
+
+There is no way around it: no .NET library, and no amount of code in this repo,
+can decode an mp4 without it. Sheet building and slicing are pure managed code
+and need nothing.
+
+**"On the PATH"** means Windows can find `ffmpeg.exe` when a program just says
+"run ffmpeg", without being told which folder it lives in. PATH is a list of
+folders Windows searches for programs. Installing ffmpeg properly adds its
+folder to that list; unzipping it to your Desktop does not.
 
 ```
-winget install Gyan.FFmpeg      # then reopen the terminal
+winget install Gyan.FFmpeg
 ```
 
-or set `SPRITETOOL_FFMPEG` to the full path of `ffmpeg.exe`.
+Then **close and reopen the terminal** — PATH is read when a window opens, so
+an already-open one won't see the change. Menu option **4** checks whether it
+worked.
+
+If you would rather not touch PATH, put `ffmpeg.exe` anywhere you like and set
+one environment variable to its full path:
+
+```
+setx SPRITETOOL_FFMPEG "C:\tools\ffmpeg\bin\ffmpeg.exe"
+```
+
+(also needs a fresh terminal). If ffmpeg is missing, the tool says so with
+these instructions instead of failing with a stack trace.
 
 ## sheet — PNGs into one sprite sheet
 

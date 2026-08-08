@@ -302,7 +302,12 @@ a typo is caught at startup rather than being silently skipped.
 `Tools/SpriteTool` turns an mp4 into numbered PNGs, assembles chosen PNGs into
 a sprite sheet, and slices a sheet back apart.
 
+Double-click `Tools/SpriteTool/spritetool.bat`, or run it with no arguments,
+for a menu — pick a number and answer a few questions, dragging files onto the
+window instead of typing paths. The command line is still there for scripting:
+
 ```
+dotnet run --project Tools/SpriteTool                                   # menu
 dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
 dotnet run --project Tools/SpriteTool -- extract wolf.mp4 -n werewolf_attack --odd -o out
 dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
@@ -311,7 +316,9 @@ dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attac
 
 Extraction is lossless — PNG out, `-fps_mode passthrough` so no frame is
 duplicated or dropped, and an accurate YUV→RGB conversion. `--odd` keeps source
-frames 1, 3, 5, … and renumbers the output 1..N with no gaps. Every sheet is
+frames 1, 3, 5, … and renumbers the output 1..N with no gaps. Frames are
+numbered to at least three digits — `werewolf_attack001.png` — so they stay in
+order in anything that sorts filenames as text. Every sheet is
 written with a `.txt` beside it giving the cell size and grid, so it can be cut
 up again without remembering the numbers.
 
