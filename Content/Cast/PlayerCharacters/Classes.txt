@@ -19,8 +19,12 @@ Movement: 5
 # where she starts. Cards carrying a matching "Form:" line only appear while
 # she wears that shape, so the wolf's claws and the witch's curses never share
 # a hand.
+#
+# A third field on a Form line is that shape's casting animation, played over
+# the sprite from the moment a card is played. Each shape casts its own way:
+# the wolf has no sheet yet, so it just stands there and swings as before.
 Class: Werewitch
 HP: 18
 Movement: 6
 Form: Werewolf, WerewitchWerewolf.png
-Form: Witch, WerewitchWitch.png
+Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png

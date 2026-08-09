@@ -68,7 +68,8 @@ public class TimelineGame : Game
             DevWriter = _platform.DevWriter,
         };
 
-        ContentValidator.Run(_ctx.Cards, _ctx.EnemyCards, _ctx.Classes, _ctx.Enemies, _ctx.Strings);
+        ContentValidator.Run(_ctx.Cards, _ctx.EnemyCards, _ctx.Classes, _ctx.Enemies, _ctx.Strings,
+            _ctx.Assets);
         _platform.LogStore.Write(Diagnostics.Current.RenderLog());
 
         IScreen home = _platform.CreateEditorScreen(_ctx) ?? new TitleScreen(_ctx);

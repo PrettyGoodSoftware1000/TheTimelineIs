@@ -333,6 +333,7 @@ public class IsoLevelScreen : IScreen
         _camera += input.PanDelta;
         if (_toastTimer > 0) _toastTimer -= dt;
         Formation.UpdateShakes(_party.Concat(_enemies).ToList(), dt);
+        UpdateCastAnimations(dt);
 
         if (_tap is Point logTap && LogToggleRect.Contains(logTap))
         {
@@ -373,6 +374,44 @@ public class IsoLevelScreen : IScreen
                 HandleClicks();
                 break;
         }
+    }
+
+    /// <summary>
+    /// Casting animations run on their own clock, at their own frame rate, and
+    /// stop when their last frame has been shown — the casting time never
+    /// stretches or trims them. A cast shorter than its animation therefore
+    /// launches the projectile with the caster still mid-swing, which is what
+    /// the art is drawn to do.
+    ///
+    /// This is ticked before every early return in Update so a cast that
+    /// outlives its own phase keeps running through dialogue and walking.
+    /// </summary>
+    private void UpdateCastAnimations(float dt)
+    {
+        foreach (var c in Everyone)
+        {
+            if (c.CastAnim == null) continue;
+            c.CastAnimTime += dt;
+            if (c.CastAnimTime >= c.CastAnim.Duration)
+            {
+                c.CastAnim = null;
+                c.CastAnimTime = 0f;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Swaps the caster's sprite for its casting sheet, from the first frame.
+    /// A shapeshifter picks up the sheet for the shape it is wearing right now,
+    /// so a card that changes form still casts in the form it started in.
+    /// Anyone with no animation declared simply stands there as before.
+    /// </summary>
+    private void StartCastAnimation(CharacterInstance actor)
+    {
+        actor.CastAnim = actor.CastAnimationPath is string path
+            ? SpriteAnimation.Load(_ctx.Assets, path)
+            : null;
+        actor.CastAnimTime = 0f;
     }
 
     private void CancelCard()
@@ -921,6 +960,7 @@ public class IsoLevelScreen : IScreen
         _overlayKey = null;
 
         _ctx.Sounds.Play(card.CastingSound);
+        StartCastAnimation(_actor!);
         _mode = Mode.Acting;
         EnterAct(Act.Casting, card.CastingTime ?? _ctx.Sounds.Duration(card.CastingSound));
     }
@@ -1595,7 +1635,16 @@ public class IsoLevelScreen : IScreen
     private void DrawCharacter(SpriteBatch batch, CharacterInstance c, float alpha = 1f)
     {
         var rect = SpriteRect(c);
-        batch.Draw(_ctx.Assets.LoadTexture(c.SpritePath), rect, Color.White * alpha);
+
+        // While a cast is running its sheet stands in for the sprite, matched
+        // foot to foot and height to height so nothing jumps when it starts or
+        // stops. Everything below still hangs off the sprite's own rect, so a
+        // wide frame overflows sideways without dragging the health bar with it.
+        if (c.CastAnim is SpriteAnimation anim)
+            batch.Draw(anim.Sheet, anim.RectFor(rect),
+                anim.SourceRect(anim.FrameAt(c.CastAnimTime)), Color.White * alpha);
+        else
+            batch.Draw(_ctx.Assets.LoadTexture(c.SpritePath), rect, Color.White * alpha);
 
         if (_targets.Contains(c))
             Ui.FillRect(batch, _ctx.Pixel,

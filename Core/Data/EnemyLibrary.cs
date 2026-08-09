@@ -13,11 +13,17 @@ public class EnemyDef
     public List<string> Sprites = new();
     /// <summary>Which cards in EnemyCards.txt this enemy holds; its own name by default.</summary>
     public List<string> CardTags = new();
+    /// <summary>Sheet played while this enemy casts, relative to its own folder.</summary>
+    public string CastAnimation = "";
     public int Line;
 
     public string Folder => $"Content/Cast/EnemyCharacters/{Name}";
     public IReadOnlyList<string> SpriteFiles =>
         Sprites.Count > 0 ? Sprites : new List<string> { $"{Name}.png" };
+
+    /// <summary>The casting sheet as a full content path, or null when it has none.</summary>
+    public string? CastAnimationPath =>
+        CastAnimation.Length > 0 ? $"{Folder}/{CastAnimation}" : null;
 }
 
 /// <summary>
@@ -29,6 +35,8 @@ public class EnemyDef
 ///   Movement: 3
 ///   Sprites: Goblin1.png, Goblin2.png, Goblin3.png
 ///   Card Tags: Goblin                (optional; defaults to the enemy's name)
+///   Cast Animation: Swing/Swing.png  (optional; the sheet played while this
+///                                     enemy casts, relative to its own folder)
 ///
 /// How hard an enemy hits, what it sounds like and how far it reaches all live
 /// on its CARDS now, in Content/Cards/EnemyCards.txt. An enemy with no card of
@@ -114,6 +122,9 @@ public class EnemyLibrary
                     break;
                 case "card tags":
                     current.CardTags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                    break;
+                case "cast animation":
+                    current.CastAnimation = value;
                     break;
                 default:
                     diag.Warn(Path, lineNo, $"'{current.Name}': unknown line '{line}' ignored");

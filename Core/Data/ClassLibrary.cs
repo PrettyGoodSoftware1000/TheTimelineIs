@@ -4,8 +4,11 @@ using System.Linq;
 
 namespace TheTimelineIs.Core.Data;
 
-/// <summary>A shape a class can wear: its own name and its own art.</summary>
-public record ClassForm(string Name, string Sprite);
+/// <summary>
+/// A shape a class can wear: its own name, its own art, and optionally its own
+/// casting animation. A blank animation falls back to the class's own line.
+/// </summary>
+public record ClassForm(string Name, string Sprite, string Animation = "");
 
 /// <summary>One playable class: stats, sprites and forms in a Classes.txt block.</summary>
 public class PlayerClass
@@ -17,6 +20,12 @@ public class PlayerClass
     public List<string> CardTags = new();  // defaults to the class's own name
     /// <summary>Declared with "Form: Name, Art.png". The first one is where the class starts.</summary>
     public List<ClassForm> Forms = new();
+    /// <summary>
+    /// Sheet played while this class casts a card, relative to its own folder.
+    /// A form carrying its own animation overrides it — the wolf never plays
+    /// the witch's spell.
+    /// </summary>
+    public string CastAnimation = "";
     public int Line;
 
     public string Folder => $"Content/Cast/PlayerCharacters/{Name}";
@@ -35,6 +44,25 @@ public class PlayerClass
     /// <summary>Art for a form, falling back to the class's first sprite.</summary>
     public string SpriteForForm(string form) =>
         FindForm(form)?.Sprite ?? SpriteFiles[0];
+
+    /// <summary>
+    /// The casting sheet to play in a given shape, as a full content path, or
+    /// null when neither the form nor the class declares one. Most specific
+    /// wins, the same rule Config.txt scales follow.
+    /// </summary>
+    public string? CastAnimationPath(string form)
+    {
+        string file = FindForm(form)?.Animation is { Length: > 0 } own ? own : CastAnimation;
+        return file.Length > 0 ? $"{Folder}/{file}" : null;
+    }
+
+    /// <summary>Every animation this class can ever play, for the startup check.</summary>
+    public IEnumerable<string> AllCastAnimationPaths()
+    {
+        if (CastAnimation.Length > 0) yield return $"{Folder}/{CastAnimation}";
+        foreach (var form in Forms)
+            if (form.Animation.Length > 0) yield return $"{Folder}/{form.Animation}";
+    }
 }
 
 /// <summary>
@@ -46,9 +74,14 @@ public class PlayerClass
 ///   Movement: 8
 ///   Sprites: Dirtbag.png            (optional; defaults to {Name}.png)
 ///   Card Tags: Dirtbag, 'Mancer     (optional; defaults to the class name)
+///   Cast Animation: Spell/Spell.png (optional; the sheet played while this
+///                                    class casts, relative to its own folder)
 ///   Form: Werewolf, Wolf.png        (optional, repeatable; the first is the
 ///                                    starting form. Cards with a matching
 ///                                    "Form:" line only appear in that form.)
+///   Form: Witch, Witch.png, Cast/Cast.png
+///                                   (a third field gives that shape its own
+///                                    casting animation, beating the class's)
 /// </summary>
 public class ClassLibrary
 {
@@ -115,7 +148,8 @@ public class ClassLibrary
                     current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
                     break;
                 case "form":
-                    // "Form: Werewolf, WerewitchWerewolf.png"
+                    // "Form: Werewolf, WerewitchWerewolf.png" — and optionally a
+                    // third field, the casting sheet this shape plays
                     var bits = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                     if (bits.Length < 2)
                         diag.Error(Path, lineNo,
@@ -123,7 +157,11 @@ public class ClassLibrary
                     else if (current.Forms.Exists(f => f.Name.Equals(bits[0], StringComparison.OrdinalIgnoreCase)))
                         diag.Warn(Path, lineNo, $"'{current.Name}': form '{bits[0]}' is declared twice");
                     else
-                        current.Forms.Add(new ClassForm(bits[0], bits[1]));
+                        current.Forms.Add(new ClassForm(bits[0], bits[1],
+                            bits.Length > 2 ? bits[2] : ""));
+                    break;
+                case "cast animation":
+                    current.CastAnimation = value;
                     break;
                 case "card tags":
                     current.CardTags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();

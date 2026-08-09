@@ -17,7 +17,7 @@ namespace TheTimelineIs.Core.Data;
 public static class ContentValidator
 {
     public static void Run(CardLibrary cards, CardLibrary enemyCards, ClassLibrary classes,
-        EnemyLibrary enemies, Strings strings)
+        EnemyLibrary enemies, Strings strings, AssetLoader assets)
     {
         var diag = Diagnostics.Current;
         ValidateCards(cards, classes.AllPlayableTags(), diag);
@@ -27,6 +27,28 @@ public static class ContentValidator
         ValidateEnemies(enemies, enemyCards, diag);
         ValidateLevels(enemies, diag);
         ValidateStrings(strings, diag);
+        ValidateCastAnimations(classes, enemies, assets);
+    }
+
+    /// <summary>
+    /// Loads every declared casting sheet up front. A broken one reports itself
+    /// through the same startup popup as everything else instead of surfacing
+    /// three hours into a playtest, and the ones that work are in the cache
+    /// before the first card is played, so nothing stutters on frame one.
+    /// </summary>
+    private static void ValidateCastAnimations(ClassLibrary classes, EnemyLibrary enemies,
+        AssetLoader assets)
+    {
+        var paths = new List<string>();
+        foreach (var name in classes.ClassNames)
+            paths.AddRange(classes.Get(name)!.AllCastAnimationPaths());
+        foreach (var name in enemies.EnemyNames)
+            if (enemies.Get(name)!.CastAnimationPath is string path)
+                paths.Add(path);
+
+        // Load reports anything wrong itself, in the terms the author needs
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+            SpriteAnimation.Load(assets, path);
     }
 
     /// <summary>Checks that hold for any deck: art, sounds, shapes, effects.</summary>

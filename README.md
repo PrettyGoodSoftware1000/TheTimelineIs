@@ -312,6 +312,7 @@ dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
 dotnet run --project Tools/SpriteTool -- extract wolf.mp4 -n werewolf_attack --odd -o out
 dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
 dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attack -o frames
+dotnet run --project Tools/SpriteTool -- detect WerewitchSpell1.png
 ```
 
 Extraction is lossless — PNG out, `-fps_mode passthrough` so no frame is
@@ -322,9 +323,61 @@ order in anything that sorts filenames as text. Every sheet is
 written with a `.txt` beside it giving the cell size and grid, so it can be cut
 up again without remembering the numbers.
 
-`extract` needs **ffmpeg** on the PATH (`winget install Gyan.FFmpeg`); `sheet`
-and `slice` need nothing beyond the repo. Full details in
+**`detect` measures a sheet somebody else made** and writes that `.txt` for it.
+A sheet built here tiles the whole PNG from its top-left corner; one that came
+out of an image generator routinely sits in the middle of a much larger canvas
+with wide transparent margins, and its cell size divides nothing in particular
+— guessing "width ÷ columns" on one of those cuts every frame in half. `detect`
+reads the grid off the art instead: transparent gutters give the rows and
+columns, and the cell pitch and starting offset are then the ones that hold
+every frame clear of a boundary. Pass `--columns`/`--rows` if it miscounts.
+
+`extract` needs **ffmpeg** on the PATH (`winget install Gyan.FFmpeg`); `sheet`,
+`slice` and `detect` need nothing beyond the repo. Full details in
 [`Tools/SpriteTool/README.md`](Tools/SpriteTool/README.md).
+
+## Casting animations
+
+When a card is played, the caster's sprite is replaced by an animation for as
+long as that animation runs, then the sprite comes back. Declare one on a class
+in `Classes.txt`, as a path inside that character's own folder:
+
+```
+Class: Werewitch
+Form: Werewolf, WerewitchWerewolf.png
+Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png
+```
+
+A third field on a `Form:` line is that shape's own animation and beats the
+class's `Cast Animation:` line, so the wolf never plays the witch's spell. A
+class with no forms uses `Cast Animation: Spell/Spell.png` on its own; enemies
+take the same line in `Enemies.txt`. Anyone who declares nothing keeps standing
+still, exactly as before.
+
+The sheet needs the `.txt` beside it that spritetool writes (`detect` will
+write one for art from elsewhere). Two keys in it are the ones worth turning:
+
+| Key | Meaning |
+|---|---|
+| `FPS: 30` | Constant playback rate. **The animation is as long as its frame count makes it** — 48 frames at 30fps is 1.6 seconds — and casting time never stretches or trims it |
+| `Scale: 100` | 100 draws a frame exactly as tall as the character it replaces, whatever the art's own resolution, so undersized frames are scaled up. Raise it when the character sits small inside its cell |
+
+**Casting time and the animation are independent clocks.** `Casting Time:` still
+decides when the projectile launches or the walk begins, so a short cast fires
+with the caster still mid-swing, and a long one finishes the animation and
+stands there. That is deliberate: it lets the art be timed to the art and the
+combat be timed to the combat.
+
+Frames are anchored at the feet and keep their own aspect ratio, so a frame
+wider than the sprite overflows sideways rather than squashing the character.
+The health bar, the turn arrow and click targeting all stay on the sprite's own
+rectangle, so a wide frame doesn't drag the interface around with it.
+
+A missing sheet, a missing `.txt`, or numbers that describe a grid running off
+the edge of the art are all reported in the startup popup, and the character
+falls back to its static sprite rather than the battle breaking. Every declared
+sheet is loaded during that startup check, so nothing stutters the first time a
+card is played.
 
 ## Naming convention
 

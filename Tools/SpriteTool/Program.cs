@@ -19,6 +19,7 @@ public static class Program
                 "extract" => Extract.Run(ParseExtract(args)),
                 "sheet" or "build" => Sheet.Build(ParseSheet(args)),
                 "slice" => Sheet.Slice(ParseSlice(args)),
+                "detect" or "measure" => Detect.Run(ParseDetect(args)),
                 "menu" or "ui" => Menu.Run(),
                 _ => Unknown(args[0]),
             };
@@ -115,6 +116,31 @@ public static class Program
         return o;
     }
 
+    private static Detect.Options ParseDetect(string[] a)
+    {
+        var o = new Detect.Options();
+        var loose = new List<string>();
+        for (int i = 1; i < a.Length; i++)
+        {
+            switch (a[i].ToLowerInvariant())
+            {
+                case "--columns" or "-c": o.Columns = Int(Next(a, ref i, "--columns"), "--columns", 1); break;
+                case "--rows" or "-r": o.Rows = Int(Next(a, ref i, "--rows"), "--rows", 1); break;
+                case "--frames": o.Frames = Int(Next(a, ref i, "--frames"), "--frames", 1); break;
+                case "--fps": o.Fps = Number(Next(a, ref i, "--fps"), "--fps"); break;
+                case "--scale": o.ScalePercent = Number(Next(a, ref i, "--scale"), "--scale"); break;
+                case "--dry-run": o.DryRun = true; break;
+                default:
+                    if (a[i].StartsWith('-')) throw new ArgumentException($"unknown option '{a[i]}'");
+                    loose.Add(a[i]);
+                    break;
+            }
+        }
+        if (loose.Count == 0) throw new ArgumentException("detect needs a sheet .png");
+        o.SheetPath = loose[0];
+        return o;
+    }
+
     private static string Next(string[] a, ref int i, string flag)
     {
         if (i + 1 >= a.Length) throw new ArgumentException($"{flag} needs a value after it");
@@ -125,6 +151,13 @@ public static class Program
     {
         if (!int.TryParse(s, out int v) || v < min)
             throw new ArgumentException($"{flag} must be a whole number of at least {min}, got '{s}'");
+        return v;
+    }
+
+    private static float Number(string s, string flag)
+    {
+        if (!float.TryParse(s.TrimEnd('%', ' '), out float v) || v <= 0f)
+            throw new ArgumentException($"{flag} must be a number above zero, got '{s}'");
         return v;
     }
 
@@ -166,11 +199,25 @@ SLICE     a sheet back into numbered PNGs
     --frame-width N    cell width, if there is no .txt beside the sheet
     --frame-height N   cell height, likewise
 
+DETECT    measure a sheet somebody else made, and write its .txt
+  detect <sheet.png> [options]
+    --columns, -c N    force the column count instead of counting the art
+    --rows, -r N       force the row count
+    --frames N         force the frame count (default: cells that aren't empty)
+    --fps N            playback rate to record (default 30)
+    --scale N          draw size percent to record (default 100)
+    --dry-run          print the numbers without writing the .txt
+
+  For sheets that came from an image generator or an artist's canvas, where
+  the frames sit somewhere in the middle of a much bigger transparent image.
+  Sheets built by 'sheet' above already have their .txt and need none of this.
+
 EXAMPLES
   dotnet run --project Tools/SpriteTool
   dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
   dotnet run --project Tools/SpriteTool -- extract wolf.mp4 -n werewolf_attack --odd -o out
   dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
   dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attack -o frames
+  dotnet run --project Tools/SpriteTool -- detect Content/Cast/PlayerCharacters/Werewitch/WerewitchSpell1/WerewitchSpell1.png
 """);
 }

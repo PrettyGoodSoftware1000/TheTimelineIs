@@ -103,6 +103,27 @@ public class CharacterInstance
     /// <summary>The same records, seen from the victim's side: cards they can't play.</summary>
     public List<StolenCard> Lost = new();
 
+    // --- transient render state: never saved, and cleared when the cast ends ---
+
+    /// <summary>
+    /// The casting animation now playing over this character's sprite, or null
+    /// when it is standing still. Set when a card is played and cleared when
+    /// the last frame has been shown.
+    /// </summary>
+    public SpriteAnimation? CastAnim;
+
+    /// <summary>Seconds into <see cref="CastAnim"/>.</summary>
+    public float CastAnimTime;
+
+    /// <summary>
+    /// The sheet this character plays while casting — a shapeshifter's current
+    /// form picks its own. Null when nobody declared one, which is the normal
+    /// case: the static sprite simply stays put.
+    /// </summary>
+    public string? CastAnimationPath => IsPlayer
+        ? ClassLibrary.Current.Get(Name)?.CastAnimationPath(Form)
+        : EnemyLibrary.Current.Get(Name)?.CastAnimationPath;
+
     public string Folder => IsPlayer
         ? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";
@@ -113,6 +134,8 @@ public class CharacterInstance
     public CharacterInstance Clone()
     {
         var copy = (CharacterInstance)MemberwiseClone();
+        copy.CastAnim = null;               // a snapshot is of somebody standing still
+        copy.CastAnimTime = 0f;
         copy.Burns = new List<int>(Burns);   // don't share the stack lists with the original
         copy.Curses = new List<(int, int)>(Curses);
         copy.Stolen = new List<StolenCard>(Stolen);

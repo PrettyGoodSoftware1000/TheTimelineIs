@@ -37,8 +37,9 @@ public static class Menu
             Console.WriteLine("   1   Extract frames from a video");
             Console.WriteLine("   2   Build a sprite sheet from pngs");
             Console.WriteLine("   3   Slice a sprite sheet back into pngs");
-            Console.WriteLine("   4   Check that ffmpeg is installed");
-            Console.WriteLine("   5   Show the command-line options");
+            Console.WriteLine("   4   Measure a sheet made somewhere else");
+            Console.WriteLine("   5   Check that ffmpeg is installed");
+            Console.WriteLine("   6   Show the command-line options");
             Console.WriteLine("   0   Quit");
             Console.WriteLine("  ------------------------------------------------");
             string choice = Ask("choose", "1");
@@ -50,8 +51,9 @@ public static class Menu
                 case "1": DoExtract(); break;
                 case "2": DoSheet(); break;
                 case "3": DoSlice(); break;
-                case "4": CheckFfmpeg(); break;
-                case "5": Program.Usage(); break;
+                case "4": DoDetect(); break;
+                case "5": CheckFfmpeg(); break;
+                case "6": Program.Usage(); break;
                 case "0" or "q" or "quit" or "exit": return 0;
                 default: Console.WriteLine($"  '{choice}' isn't on the menu."); break;
             }
@@ -162,12 +164,22 @@ public static class Menu
         _lastFolder = Path.GetDirectoryName(Path.GetFullPath(sheet)) ?? _lastFolder;
 
         var o = new Sheet.SliceOptions { Sheet = sheet };
-        bool hasMeta = File.Exists(Path.ChangeExtension(sheet, ".txt"));
-        if (!hasMeta)
+        if (!File.Exists(Path.ChangeExtension(sheet, ".txt")))
         {
-            Console.WriteLine("  no .txt beside that sheet, so the cell size has to be given.");
-            o.FrameWidth = AskInt("frame width in px", 0, 1);
-            o.FrameHeight = AskInt("frame height in px", 0, 1);
+            Console.WriteLine("  no .txt beside that sheet, so the cell size has to come from");
+            Console.WriteLine("  somewhere. Measuring the art works whenever the frames have a");
+            Console.WriteLine("  transparent gap between them.");
+            if (AskYes("measure it now", true))
+            {
+                Console.WriteLine();
+                if (Detect.Run(new Detect.Options { SheetPath = sheet }) != 0) return;
+                Console.WriteLine();
+            }
+            else
+            {
+                o.FrameWidth = AskInt("frame width in px", 0, 1);
+                o.FrameHeight = AskInt("frame height in px", 0, 1);
+            }
         }
 
         string suggested = Slug(Path.GetFileNameWithoutExtension(sheet));
@@ -178,6 +190,38 @@ public static class Menu
 
         Console.WriteLine();
         Sheet.Slice(o);
+    }
+
+    /// <summary>
+    /// Measures a sheet that came from somewhere else and writes its .txt. The
+    /// counts are offered rather than demanded: the art usually says how many
+    /// rows and columns it has, and answering "no" to both is the normal case.
+    /// </summary>
+    private static void DoDetect()
+    {
+        string sheet = AskExistingFile("sheet .png");
+        if (sheet.Length == 0) return;
+        _lastFolder = Path.GetDirectoryName(Path.GetFullPath(sheet)) ?? _lastFolder;
+
+        var o = new Detect.Options { SheetPath = sheet };
+        if (AskYes("say how many columns and rows it has yourself", false))
+        {
+            o.Columns = AskInt("columns", 1, 1);
+            o.Rows = AskInt("rows", 1, 1);
+        }
+        o.Fps = AskInt("frames per second", (int)Sheet.DefaultFps, 1);
+        o.ScalePercent = AskInt("draw size, as a percent of the character's height",
+            (int)Sheet.DefaultScalePercent, 1);
+
+        string meta = Path.ChangeExtension(sheet, ".txt");
+        if (File.Exists(meta) && !AskYes($"{Path.GetFileName(meta)} already exists — overwrite it", false))
+        {
+            o.DryRun = true;
+            Console.WriteLine("  measuring only, nothing will be written.");
+        }
+
+        Console.WriteLine();
+        Detect.Run(o);
     }
 
     private static void CheckFfmpeg()

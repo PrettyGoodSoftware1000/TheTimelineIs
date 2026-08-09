@@ -64,30 +64,55 @@ public static class Sheet
         sheet.SaveAsPng(outPng);
 
         string meta = Path.ChangeExtension(outPng, ".txt");
-        File.WriteAllText(meta, Metadata(Path.GetFileName(outPng), cw, ch, columns, rows, files));
+        File.WriteAllText(meta, Metadata(Path.GetFileName(outPng), cw, ch, columns, rows,
+            files.Count, offsetX: 0, offsetY: 0, DefaultFps, DefaultScalePercent,
+            sourceFrames: files, note: "written by spritetool"));
         Console.WriteLine($"wrote {Path.GetFullPath(outPng)}");
         Console.WriteLine($"wrote {Path.GetFullPath(meta)}");
         return 0;
     }
 
+    /// <summary>Frames per second the game plays a sheet at unless the .txt says otherwise.</summary>
+    public const float DefaultFps = 30f;
+
+    /// <summary>100% draws a frame exactly as tall as the character it stands in for.</summary>
+    public const float DefaultScalePercent = 100f;
+
     /// <summary>
     /// A sheet's companion file. Keys match the style of the game's other
     /// content files: "Key: value", '#' comments, case-insensitive in practice.
+    ///
+    /// OffsetX/OffsetY are zero for sheets built here, which tile the whole PNG
+    /// from its top-left corner. They matter for sheets measured out of somebody
+    /// else's canvas, where the grid can start a long way in — see Detect.
     /// </summary>
-    private static string Metadata(string png, int cw, int ch, int cols, int rows,
-        List<string> files) =>
-        $"# Sprite sheet written by spritetool. One frame per cell, left to right,\n" +
-        $"# top to bottom. Cells are uniform, so frame N sits at\n" +
-        $"#   x = (N % Columns) * FrameWidth,  y = (N / Columns) * FrameHeight\n" +
+    public static string Metadata(string png, int cw, int ch, int cols, int rows, int frames,
+        int offsetX, int offsetY, float fps, float scalePercent,
+        List<string>? sourceFrames, string note) =>
+        $"# Sprite sheet {note}. One frame per cell, left to right, top to\n" +
+        $"# bottom. Cells are uniform, so frame N sits at\n" +
+        $"#   x = OffsetX + (N % Columns) * FrameWidth\n" +
+        $"#   y = OffsetY + (N / Columns) * FrameHeight\n" +
         $"# counting N from 0.\n" +
         $"Sheet: {png}\n" +
         $"FrameWidth: {cw}\n" +
         $"FrameHeight: {ch}\n" +
         $"Columns: {cols}\n" +
         $"Rows: {rows}\n" +
-        $"Frames: {files.Count}\n" +
-        $"# source frames, in order:\n" +
-        string.Join("\n", files.Select((f, i) => $"#   {i}: {Path.GetFileName(f)}")) + "\n";
+        $"Frames: {frames}\n" +
+        $"# where the grid starts inside the image; 0,0 fills it from the corner\n" +
+        $"OffsetX: {offsetX}\n" +
+        $"OffsetY: {offsetY}\n" +
+        $"# Playback is a constant rate, so the animation is as long as its frame\n" +
+        $"# count makes it: {frames} frames at {fps:0.###} fps runs " +
+        $"{(fps > 0 ? frames / fps : 0f):0.##} seconds.\n" +
+        $"FPS: {fps:0.###}\n" +
+        $"# 100 draws a frame as tall as the character it replaces, whatever the\n" +
+        $"# art's own resolution. Raise it when the character sits small in its cell.\n" +
+        $"Scale: {scalePercent:0.###}\n" +
+        (sourceFrames == null ? "" :
+            "# source frames, in order:\n" +
+            string.Join("\n", sourceFrames.Select((f, i) => $"#   {i}: {Path.GetFileName(f)}")) + "\n");
 
     /// <summary>
     /// Cuts a sheet back into numbered PNGs. Reads the companion .txt when it
@@ -101,7 +126,7 @@ public static class Sheet
             return 2;
         }
 
-        int cw = o.FrameWidth, ch = o.FrameHeight, count = 0, columns = 0;
+        int cw = o.FrameWidth, ch = o.FrameHeight, count = 0, columns = 0, ox = 0, oy = 0;
         string meta = Path.ChangeExtension(o.Sheet, ".txt");
         if (File.Exists(meta))
         {
@@ -117,6 +142,9 @@ public static class Sheet
                     case "frameheight": if (ch <= 0) ch = v; break;
                     case "columns": columns = v; break;
                     case "frames": count = v; break;
+                    // a grid measured out of a bigger canvas doesn't start at 0,0
+                    case "offsetx": ox = v; break;
+                    case "offsety": oy = v; break;
                 }
             }
             Console.WriteLine($"read cell size from {Path.GetFileName(meta)}");
@@ -131,15 +159,15 @@ public static class Sheet
         }
 
         using var sheet = Image.Load<Rgba32>(o.Sheet);
-        if (columns <= 0) columns = sheet.Width / cw;
-        int rows = sheet.Height / ch;
+        if (columns <= 0) columns = Math.Max(1, (sheet.Width - ox) / cw);
+        int rows = Math.Max(1, (sheet.Height - oy) / ch);
         if (count <= 0) count = columns * rows;
 
         Directory.CreateDirectory(o.OutDir);
         int pad = Math.Max(Extract.MinPad, count.ToString().Length);
         for (int i = 0; i < count; i++)
         {
-            int x = i % columns * cw, y = i / columns * ch;
+            int x = ox + i % columns * cw, y = oy + i / columns * ch;
             if (x + cw > sheet.Width || y + ch > sheet.Height) break;
             using var frame = sheet.Clone(ctx => ctx.Crop(new Rectangle(x, y, cw, ch)));
             frame.SaveAsPng(Path.Combine(o.OutDir,

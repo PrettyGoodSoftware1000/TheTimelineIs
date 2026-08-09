@@ -21,8 +21,9 @@ session is mostly Enter.
    1   Extract frames from a video
    2   Build a sprite sheet from pngs
    3   Slice a sprite sheet back into pngs
-   4   Check that ffmpeg is installed
-   5   Show the command-line options
+   4   Measure a sheet made somewhere else
+   5   Check that ffmpeg is installed
+   6   Show the command-line options
    0   Quit
 ```
 
@@ -149,10 +150,19 @@ FrameHeight: 120
 Columns: 4
 Rows: 3
 Frames: 12
+OffsetX: 0
+OffsetY: 0
+FPS: 30
+Scale: 100
 ```
 
 Frame *N* (counting from 0) sits at
-`x = (N % Columns) * FrameWidth`, `y = (N / Columns) * FrameHeight`.
+`x = OffsetX + (N % Columns) * FrameWidth`, `y = OffsetY + (N / Columns) * FrameHeight`.
+
+`OffsetX`/`OffsetY` are 0 for anything built here — the cells fill the PNG from
+its top-left corner. They exist for `detect` below. `FPS` and `Scale` are for
+the game, which reads the same file: the playback rate, and how tall to draw a
+frame as a percentage of the character it replaces.
 
 ## slice — a sheet back into numbered PNGs
 
@@ -160,8 +170,55 @@ Frame *N* (counting from 0) sits at
 dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attack -o frames
 ```
 
-Reads the cell size from the companion `.txt` when it's there. For a sheet from
-somewhere else, pass `--frame-width` and `--frame-height`.
+Reads the cell size and offset from the companion `.txt` when it's there. When
+there isn't one it offers to measure the sheet for you (see `detect`), or takes
+`--frame-width` and `--frame-height`.
+
+## detect — measure a sheet somebody else made
+
+```
+dotnet run --project Tools/SpriteTool -- detect WerewitchSpell1.png
+```
+
+| option | what it does |
+|---|---|
+| `--columns`, `-c` | force the column count instead of counting the art |
+| `--rows`, `-r` | force the row count |
+| `--frames N` | force the frame count (default: however many cells aren't empty) |
+| `--fps N` | playback rate to record (default 30) |
+| `--scale N` | draw size percent to record (default 100) |
+| `--dry-run` | print the numbers without writing the `.txt` |
+
+A sheet built by `sheet` above needs none of this. This is for the ones that
+arrive from an image generator or an artist's canvas, where the frames sit
+somewhere in the middle of a much bigger transparent image and the cell size
+divides nothing in particular. `WerewitchSpell1.png` is 3840x8000 with its 3x16
+grid of 666x375 cells starting at (982, 1002) — over 900px of dead margin down
+each side. Slicing that as "width ÷ 3" cuts every frame in half.
+
+### How it measures
+
+The art is allowed to say where the frames are.
+
+1. A row of pixels that is entirely transparent is a **gutter**; a run of rows
+   that isn't is a **band**. One band per row of frames, and the same across for
+   columns. That gives the grid's shape without assuming anything.
+2. A frame's own art can have thin transparent slivers running clean across it
+   — a trailing wisp of spell effect does exactly that — and those would read as
+   extra frames. So instead of picking a pixel threshold, the gaps are sorted
+   and the one place where the next gap is several times the last is taken as
+   the line between slivers and real gutters. An evenly spaced sheet has no such
+   step and nothing is merged.
+3. The pitch and starting offset then have to satisfy every band at once: band
+   *i* falls inside cell *i* and touches neither edge. For a fixed pitch that is
+   just a range of allowed offsets, so the pitch is swept across a few pixels
+   either side of the spacing the bands imply, and whichever leaves the widest
+   range wins. The offset taken is the middle of it — the one furthest from
+   clipping anything.
+
+If no pitch satisfies every band, it says so rather than guessing. Frames of
+different sizes, or frames that touch with no gutter at all, cannot be measured
+this way; `--columns` and `--rows` are the way through.
 
 ## Getting a transparent background
 
