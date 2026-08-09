@@ -368,8 +368,14 @@ with the caster still mid-swing, and a long one finishes the animation and
 stands there. That is deliberate: it lets the art be timed to the art and the
 combat be timed to the combat.
 
-Frames are anchored at the feet and keep their own aspect ratio, so a frame
-wider than the sprite overflows sideways rather than squashing the character.
+**Sprites are tall (around 9:16); animation frames are wide (around 16:9)**, to
+leave room around the character for the effect. The two are matched by *height*
+and centred on each other: a frame is scaled until it is as tall as the sprite
+it replaces — up or down, whatever the art's own resolution happens to be —
+keeps its own aspect ratio, and is centred on the sprite's centre. The extra
+width falls evenly either side rather than squashing the character. `Scale:`
+nudges that, growing the frame about its centre.
+
 The health bar, the turn arrow and click targeting all stay on the sprite's own
 rectangle, so a wide frame doesn't drag the interface around with it.
 

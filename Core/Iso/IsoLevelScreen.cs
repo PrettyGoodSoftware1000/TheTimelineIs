@@ -1636,10 +1636,11 @@ public class IsoLevelScreen : IScreen
     {
         var rect = SpriteRect(c);
 
-        // While a cast is running its sheet stands in for the sprite, matched
-        // foot to foot and height to height so nothing jumps when it starts or
-        // stops. Everything below still hangs off the sprite's own rect, so a
-        // wide frame overflows sideways without dragging the health bar with it.
+        // While a cast is running its sheet stands in for the sprite, scaled to
+        // the same height and centred on the same point, so nothing jumps when
+        // it starts or stops. Everything below still hangs off the sprite's own
+        // rect, so a wide frame overflows sideways without dragging the health
+        // bar out with it.
         if (c.CastAnim is SpriteAnimation anim)
             batch.Draw(anim.Sheet, anim.RectFor(rect),
                 anim.SourceRect(anim.FrameAt(c.CastAnimTime)), Color.White * alpha);

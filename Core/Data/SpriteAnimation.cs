@@ -74,10 +74,19 @@ public class SpriteAnimation
     }
 
     /// <summary>
-    /// Where to draw a frame so it stands in for a sprite: the same feet, the
-    /// same height, centred on the same spot. The frame keeps its own aspect
-    /// ratio, so a wide cell overflows sideways rather than squashing the
-    /// character inside it.
+    /// Where to draw a frame so it stands in for a sprite.
+    ///
+    /// Sprites are drawn tall — around 9:16 — while animation frames are wide,
+    /// around 16:9, to leave room around the character for the effect. So the
+    /// two are matched by HEIGHT and centred on each other: the frame is scaled
+    /// until it is as tall as the sprite it replaces (up or down, whatever the
+    /// art's own resolution happens to be), keeps its own aspect ratio, and is
+    /// then centred on the sprite's centre in both directions. The extra width
+    /// falls evenly either side instead of squashing the character inside it.
+    ///
+    /// Scale nudges that: 100% is exactly the sprite's height, and raising it
+    /// grows the frame about its centre, for art where the character sits small
+    /// inside its cell.
     /// </summary>
     public Rectangle RectFor(Rectangle spriteRect)
     {
@@ -85,7 +94,7 @@ public class SpriteAnimation
         int w = FrameHeight <= 0 ? h : Math.Max(1, (int)(h * FrameWidth / (float)FrameHeight));
         return new Rectangle(
             spriteRect.Center.X - w / 2,
-            spriteRect.Bottom - h,
+            spriteRect.Center.Y - h / 2,
             w, h);
     }
 
