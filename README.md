@@ -324,13 +324,14 @@ written with a `.txt` beside it giving the cell size and grid, so it can be cut
 up again without remembering the numbers.
 
 **`detect` measures a sheet somebody else made** and writes that `.txt` for it.
-A sheet built here tiles the whole PNG from its top-left corner; one that came
-out of an image generator routinely sits in the middle of a much larger canvas
-with wide transparent margins, and its cell size divides nothing in particular
-— guessing "width ÷ columns" on one of those cuts every frame in half. `detect`
-reads the grid off the art instead: transparent gutters give the rows and
-columns, and the cell pitch and starting offset are then the ones that hold
-every frame clear of a boundary. Pass `--columns`/`--rows` if it miscounts.
+A sheet built here tiles the whole PNG from its top-left corner. One that came
+out of an image generator might do the same, or might sit in the middle of a
+much larger canvas with wide transparent margins and a cell size that divides
+nothing in particular — and guessing "width ÷ columns" on one of those cuts
+every frame in half. `detect` reads the grid off the art instead: transparent
+gutters mark where cells can begin, and the winning grid is the one with the
+most cells such that no run of art straddles a boundary and no cell is left
+empty. Pass `--columns`/`--rows` if it miscounts.
 
 `extract` needs **ffmpeg** on the PATH (`winget install Gyan.FFmpeg`); `sheet`,
 `slice` and `detect` need nothing beyond the repo. Full details in

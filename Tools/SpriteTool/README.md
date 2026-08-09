@@ -189,36 +189,42 @@ dotnet run --project Tools/SpriteTool -- detect WerewitchSpell1.png
 | `--scale N` | draw size percent to record (default 100) |
 | `--dry-run` | print the numbers without writing the `.txt` |
 
-A sheet built by `sheet` above needs none of this. This is for the ones that
-arrive from an image generator or an artist's canvas, where the frames sit
-somewhere in the middle of a much bigger transparent image and the cell size
-divides nothing in particular. `WerewitchSpell1.png` is 3840x8000 with its 3x16
-grid of 666x375 cells starting at (982, 1002) — over 900px of dead margin down
-each side. Slicing that as "width ÷ 3" cuts every frame in half.
+A sheet built by `sheet` above needs none of this — it already has its `.txt`.
+This is for the ones that arrive from an image generator or an artist's canvas.
+Some of those tile their canvas neatly, like `WerewitchSpell1.png`, which is
+3840x11520 holding a 3x16 grid of 1280x720 cells from the corner. Others sit in
+the middle of a much larger image with wide transparent margins and a cell size
+that divides nothing in particular — an earlier version of that same sheet was
+3840x8000 with its cells 666x375 starting at (982, 1002), over 900px of dead
+margin down each side. `detect` reads both without being told which it is
+looking at; slicing the second as "width ÷ 3" would cut every frame in half.
 
 ### How it measures
 
 The art is allowed to say where the frames are.
 
 1. A row of pixels that is entirely transparent is a **gutter**; a run of rows
-   that isn't is a **band**. One band per row of frames, and the same across for
-   columns. That gives the grid's shape without assuming anything.
-2. A frame's own art can have thin transparent slivers running clean across it
-   — a trailing wisp of spell effect does exactly that — and those would read as
-   extra frames. So instead of picking a pixel threshold, the gaps are sorted
-   and the one place where the next gap is several times the last is taken as
-   the line between slivers and real gutters. An evenly spaced sheet has no such
-   step and nothing is merged.
-3. The pitch and starting offset then have to satisfy every band at once: band
-   *i* falls inside cell *i* and touches neither edge. For a fixed pitch that is
-   just a range of allowed offsets, so the pitch is swept across a few pixels
-   either side of the spacing the bands imply, and whichever leaves the widest
-   range wins. The offset taken is the middle of it — the one furthest from
-   clipping anything.
+   that isn't is a **band**. Same across for columns.
+2. Bands are **not** assumed to be one per frame. A frame's own art often has
+   thin transparent slivers running clean across it — a trailing wisp of spell
+   effect does exactly that — so any number of bands may share a cell. The only
+   rule is that a band must not straddle a cell boundary.
+3. A candidate grid is valid when no band straddles one of its boundaries **and
+   every one of its cells holds something**. That second half is what stops the
+   search padding the answer out with blank cells and calling four columns of
+   art three.
+4. The most cells that can be fitted that way wins, because a coarser grid
+   always fits too: sixteen rows of art can always be read as eight rows of two.
 
-If no pitch satisfies every band, it says so rather than guessing. Frames of
-different sizes, or frames that touch with no gutter at all, cannot be measured
-this way; `--columns` and `--rows` are the way through.
+At each count the tiling case is tried first, since it is both the common one
+and exact — there is nothing to search when the cells are the image divided by
+a whole number. Only sheets that aren't laid out that way pay for the general
+search over cell size and offset, and there the grid whose boundaries sit
+furthest from any art wins.
+
+If nothing fits, it says so rather than guessing. Frames of different sizes, or
+frames that run together with no transparent gap at all, cannot be measured this
+way; `--columns` and `--rows` are the way through.
 
 ## Getting a transparent background
 

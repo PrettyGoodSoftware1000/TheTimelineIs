@@ -8,29 +8,33 @@ namespace TheTimelineIs.SpriteTool;
 /// companion .txt for it.
 ///
 /// A sheet this tool built needs none of this: its cells tile the whole PNG
-/// from (0,0), and the .txt was written alongside it. Sheets from anywhere else
-/// — an AI image generator, an artist's canvas, a screenshot — routinely sit in
-/// the middle of a much larger image with wide transparent margins all round,
-/// and their cell size divides nothing in particular. Guessing "width divided
-/// by columns" on one of those slices every frame through the middle.
+/// from (0,0) and the .txt was written alongside it. Sheets from anywhere else
+/// — an image generator, an artist's canvas, a screenshot — may or may not do
+/// the same. Some tile the canvas neatly; others sit in the middle of a much
+/// larger image with wide transparent margins and a cell size that divides
+/// nothing in particular, and guessing "width divided by columns" on one of
+/// those slices every frame through the middle.
 ///
-/// The method is to let the art say where the frames are:
+/// So the art is allowed to say where the frames are:
 ///
 ///   1. A row of pixels that is entirely transparent is a GUTTER; a run of rows
-///      that isn't is a BAND. One band per row of frames, and the same down the
-///      other axis for columns. That already gives the grid's shape.
-///   2. The pitch and the starting offset then have to satisfy every band at
-///      once: band i must fall inside cell i and touch neither edge. Written
-///      out, that is
-///          offset + i * pitch      &lt;= band[i].Start
-///          offset + (i+1) * pitch  &gt;= band[i].End + 1
-///      which for a fixed pitch is just a range of allowed offsets. Sweep pitch
-///      across a few pixels either side of the spacing the bands imply, keep
-///      whichever leaves the widest range, and take the middle of it — the
-///      offset furthest from clipping anything.
+///      that isn't is a BAND. Bands are NOT assumed to be one per frame — a
+///      frame's own art often has thin transparent slivers running clean across
+///      it, and a trailing wisp of spell effect does exactly that. The rule is
+///      only that a band must not straddle a cell boundary, so any number of
+///      bands may share a cell.
+///   2. A candidate grid is valid when no band straddles one of its boundaries
+///      AND every one of its cells holds something. That second half is what
+///      stops the search from padding the answer with blank cells and calling
+///      four columns of art three.
+///   3. The most cells that can be fitted that way wins, because a coarser grid
+///      always also fits — sixteen rows of art can always be read as eight rows
+///      of two.
 ///
-/// If the bands don't agree on any pitch, that is said plainly rather than
-/// guessed at, and --columns / --rows are there to force the issue.
+/// The tiling case is tried first and separately, both because it is the common
+/// one and because it is exact: there is nothing to search when the cells are
+/// the image divided by a whole number. Only sheets that aren't laid out that
+/// way pay for the general search.
 /// </summary>
 public static class Detect
 {
@@ -47,43 +51,40 @@ public static class Detect
 
         using var sheet = Image.Load<Rgba32>(o.SheetPath);
         var (rowHas, colHas) = Occupancy(sheet);
-        var rowBands = MergeSlivers(Bands(rowHas));
-        var colBands = MergeSlivers(Bands(colHas));
+        var rowBands = Bands(rowHas);
+        var colBands = Bands(colHas);
+        string name = Path.GetFileName(o.SheetPath);
 
         if (rowBands.Count == 0 || colBands.Count == 0)
         {
-            Console.Error.WriteLine(
-                $"{Path.GetFileName(o.SheetPath)} is entirely transparent — there is nothing to measure");
+            Console.Error.WriteLine($"{name} is entirely transparent — there is nothing to measure");
             return 2;
         }
 
-        int columns = o.Columns > 0 ? o.Columns : colBands.Count;
-        int rows = o.Rows > 0 ? o.Rows : rowBands.Count;
-        Console.WriteLine($"{Path.GetFileName(o.SheetPath)} is {sheet.Width}x{sheet.Height}, " +
-                          $"holding {colBands.Count} column(s) and {rowBands.Count} row(s) of art");
-
-        var across = FitAxis(colBands, columns, sheet.Width);
-        var down = FitAxis(rowBands, rows, sheet.Height);
+        var across = FitAxis(colBands, sheet.Width, o.Columns);
+        var down = FitAxis(rowBands, sheet.Height, o.Rows);
         if (across == null || down == null)
         {
             Console.Error.WriteLine(
-                $"could not fit {columns} x {rows} evenly spaced cells over the art in " +
-                $"{Path.GetFileName(o.SheetPath)}. Frames of different sizes, or frames that touch, " +
-                "cannot be measured this way — pass --columns and --rows if the count is wrong, " +
-                "or --frame-width and --frame-height to slice it by hand.");
+                $"could not fit an even grid over the art in {name}. Frames of different sizes, " +
+                "or frames that run together with no transparent gap at all, cannot be measured " +
+                "this way — pass --columns and --rows to say what the grid is, or " +
+                "--frame-width and --frame-height to slice it by hand.");
             return 2;
         }
 
-        var (cw, ox) = across.Value;
-        var (ch, oy) = down.Value;
-        int frames = o.Frames > 0
-            ? o.Frames
-            : CountFrames(sheet, columns, rows, cw, ch, ox, oy);
+        var (cw, ox, columns) = across.Value;
+        var (ch, oy, rows) = down.Value;
+        int frames = o.Frames > 0 ? o.Frames : CountFrames(sheet, columns, rows, cw, ch, ox, oy);
 
-        Console.WriteLine($"cells are {cw}x{ch} starting at ({ox},{oy}) — " +
-                          $"{columns} x {rows} = {columns * rows} cells, {frames} of them used");
+        Console.WriteLine($"{name} is {sheet.Width}x{sheet.Height}");
+        Console.WriteLine($"cells are {cw}x{ch} — {columns} x {rows} = {columns * rows} cells, " +
+                          $"{frames} of them used");
         if (ox > 0 || oy > 0)
-            Console.WriteLine($"the grid is inset: {ox}px of margin on the left, {oy}px on top");
+            Console.WriteLine($"the grid is inset, starting at ({ox},{oy}): {ox}px of dead margin " +
+                              $"on the left, {oy}px on top");
+        else if (columns * cw == sheet.Width && rows * ch == sheet.Height)
+            Console.WriteLine("the cells tile the whole image, the same as a sheet built here");
 
         string meta = Path.ChangeExtension(o.SheetPath, ".txt");
         if (o.DryRun)
@@ -91,8 +92,8 @@ public static class Detect
             Console.WriteLine($"--dry-run, so {Path.GetFileName(meta)} was not written");
             return 0;
         }
-        File.WriteAllText(meta, Sheet.Metadata(Path.GetFileName(o.SheetPath), cw, ch, columns, rows,
-            frames, ox, oy, o.Fps, o.ScalePercent, sourceFrames: null,
+        File.WriteAllText(meta, Sheet.Metadata(name, cw, ch, columns, rows, frames, ox, oy,
+            o.Fps, o.ScalePercent, sourceFrames: null,
             note: "measured from the art by 'spritetool detect'"));
         Console.WriteLine($"wrote {Path.GetFullPath(meta)}");
         return 0;
@@ -137,99 +138,79 @@ public static class Detect
     }
 
     /// <summary>
-    /// A gap this many times wider than the one below it is taken to be where
-    /// slivers stop and real gutters begin.
+    /// The cell size, starting offset and count along one axis, or null when no
+    /// even grid holds the art. <paramref name="forced"/> above zero pins the
+    /// count and only the size and offset are looked for.
     /// </summary>
-    private const double SliverStep = 3.0;
-
-    /// <summary>
-    /// Frames are separated by wide transparent gutters — but a frame's own art
-    /// can have thin transparent slivers running clean across it too, and a
-    /// trailing wisp of spell effect does exactly that. Left alone those read as
-    /// extra frames.
-    ///
-    /// Both kinds of gap sit in the same list, so rather than guess a pixel
-    /// threshold, the split between them is found: sort the gaps and look for
-    /// the one place where the next is several times the last. On a sheet whose
-    /// frames are evenly spaced there is no such step and nothing is merged.
-    /// </summary>
-    private static List<(int Start, int End)> MergeSlivers(List<(int Start, int End)> bands)
+    private static (int Pitch, int Offset, int Count)? FitAxis(
+        List<(int Start, int End)> bands, int size, int forced)
     {
-        if (bands.Count < 3) return bands;
+        int first = bands[0].Start, last = bands[^1].End;
+        // no cell can be shorter than the tallest band, or that band straddles
+        int tallest = bands.Max(b => b.End - b.Start + 1);
+        int highest = forced > 0 ? forced : bands.Count;   // a cell needs a band, so this is the ceiling
+        int lowest = forced > 0 ? forced : 1;
 
-        var gaps = new List<int>();
-        for (int i = 1; i < bands.Count; i++) gaps.Add(bands[i].Start - bands[i - 1].End - 1);
-
-        var sorted = gaps.OrderBy(g => g).ToList();
-        int sliverMax = 0;
-        double biggestStep = SliverStep;
-        for (int i = 0; i + 1 < sorted.Count; i++)
+        // Most cells first, so a coarse grid never wins over the real one: any
+        // sheet of sixteen rows can also be read as eight rows of two.
+        for (int count = highest; count >= lowest; count--)
         {
-            double step = sorted[i + 1] / (double)Math.Max(1, sorted[i]);
-            if (step > biggestStep) { biggestStep = step; sliverMax = sorted[i]; }
-        }
-        if (sliverMax == 0) return bands;
+            // The common case, and exact: cells tiling the whole image from its
+            // corner. There is nothing to search — the size is the image
+            // divided by the count — so it is tried first at every count.
+            if (size % count == 0 && size / count >= tallest &&
+                Clearance(bands, count, size / count, 0) >= 0)
+                return (size / count, 0, count);
 
-        var merged = new List<(int Start, int End)> { bands[0] };
-        for (int i = 1; i < bands.Count; i++)
-        {
-            if (gaps[i - 1] <= sliverMax) merged[^1] = (merged[^1].Start, bands[i].End);
-            else merged.Add(bands[i]);
-        }
-        return merged;
-    }
+            // Otherwise the grid may be inset somewhere in a bigger canvas.
+            // Among the grids of this count, take the one whose boundaries sit
+            // furthest from any art.
+            int widest = size / count;
+            int narrowest = Math.Max(tallest, (last + 1 - first + count - 1) / count);
+            (int Pitch, int Offset, int Clear)? best = null;
 
-    /// <summary>
-    /// The cell pitch and starting offset along one axis, or null when no
-    /// uniform grid holds every band. See the class comment for the inequality
-    /// being solved; the search runs over a handful of integer pitches because
-    /// the true one is rarely a whole number and the art has margin to spare.
-    /// </summary>
-    private static (int Pitch, int Offset)? FitAxis(
-        List<(int Start, int End)> bands, int count, int size)
-    {
-        if (count <= 0 || bands.Count != count) return null;
-        // a single frame on this axis: the cell is simply the whole image
-        if (count == 1) return (size, 0);
-
-        int estimate = (int)Math.Round(Spacing(bands));
-        (int Pitch, int Offset, int Slack)? best = null;
-
-        for (int pitch = Math.Max(1, estimate - 6); pitch <= estimate + 6; pitch++)
-        {
-            if ((long)pitch * count > size) continue;
-            int lo = 0, hi = size - pitch * count;
-            for (int i = 0; i < count; i++)
+            for (int pitch = narrowest; pitch <= widest; pitch++)
             {
-                // cell i has to start at or before its band and end after it
-                lo = Math.Max(lo, bands[i].End + 1 - (i + 1) * pitch);
-                hi = Math.Min(hi, bands[i].Start - i * pitch);
+                // the grid has to start at or before the art and end at or after it
+                int lo = Math.Max(0, last + 1 - count * pitch);
+                int hi = Math.Min(first, size - count * pitch);
+                for (int offset = lo; offset <= hi; offset++)
+                {
+                    int clear = Clearance(bands, count, pitch, offset);
+                    if (clear >= 0 && (best == null || clear > best.Value.Clear))
+                        best = (pitch, offset, clear);
+                }
             }
-            if (lo > hi) continue;
-            int slack = hi - lo;
-            if (best == null || slack > best.Value.Slack)
-                best = (pitch, (lo + hi) / 2, slack);
+            if (best is { } b) return (b.Pitch, b.Offset, count);
         }
-        return best is { } b ? (b.Pitch, b.Offset) : null;
+        return null;
     }
 
     /// <summary>
-    /// Least-squares spacing of the band starts. Fitting the whole line beats
-    /// measuring first to last, which lets one badly drawn end frame drag the
-    /// estimate off.
+    /// How much room this grid leaves: the smallest distance from any band to
+    /// the boundary of the cell holding it. Negative means the grid is invalid
+    /// — a band straddles a boundary, or a cell has nothing in it at all.
     /// </summary>
-    private static double Spacing(List<(int Start, int End)> bands)
+    private static int Clearance(List<(int Start, int End)> bands, int count, int pitch, int offset)
     {
-        double meanIndex = (bands.Count - 1) / 2.0;
-        double meanStart = bands.Average(b => (double)b.Start);
-        double top = 0, bottom = 0;
-        for (int i = 0; i < bands.Count; i++)
+        var used = new bool[count];
+        int clear = int.MaxValue;
+
+        foreach (var (start, end) in bands)
         {
-            double di = i - meanIndex;
-            top += di * (bands[i].Start - meanStart);
-            bottom += di * di;
+            int cell = (start - offset) / pitch;
+            if (cell < 0 || cell >= count) return -1;
+            // both ends in the same cell, or the band is cut in half
+            if ((end - offset) / pitch != cell) return -1;
+            used[cell] = true;
+
+            int cellStart = offset + cell * pitch;
+            clear = Math.Min(clear, Math.Min(start - cellStart, cellStart + pitch - 1 - end));
         }
-        return bottom == 0 ? 0 : top / bottom;
+
+        // a grid with an empty cell is a grid with one cell too many
+        foreach (bool u in used) if (!u) return -1;
+        return clear == int.MaxValue ? 0 : clear;
     }
 
     /// <summary>
@@ -266,7 +247,7 @@ public static class Detect
     public sealed class Options
     {
         public string SheetPath = "";
-        /// <summary>0 = count the bands in the art.</summary>
+        /// <summary>0 = take the most cells the art will support.</summary>
         public int Columns, Rows;
         /// <summary>0 = count the cells that have something drawn in them.</summary>
         public int Frames;
