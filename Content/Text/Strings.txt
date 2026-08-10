@@ -12,11 +12,9 @@ menu_continue = Continue
 
 # --- Map & room ---
 map_save = Save
-room_save = Save
 saved = Game saved.
 
 # --- Battle (placeholder) ---
-battle_placeholder = Battle Begins! 
 battle_win = Fine!
 
 # --- Death ---
@@ -38,12 +36,8 @@ party_slot_empty = (empty)
 # --- Battle ---
 # {name}, {target}, {attacker}, {dmg}, {type}, {count} are filled in by the game.
 battle_turn = {name}'s turn
-battle_pick_target = Pick a target.
-battle_pick_targets = Pick {count} targets.
 battle_hit = {target} takes {dmg} {type} damage.
-battle_enemy_hit = {attacker} hits {target} for {dmg} {type}.
 battle_down = {name} goes down!
-battle_victory = Victory!
 
 # --- Content problem popup (shown at startup when a file has mistakes) ---
 error_title = Content problems found
@@ -66,7 +60,6 @@ iso_victory = Area cleared!
 iso_card_range = Range {range}
 iso_move_spent = Card played - no movement left this turn.
 iso_pick_target = Pick a target.
-iso_confirm_strike = Move the mouse to aim, click the target again to strike.
 iso_dialogue_next = click to continue
 iso_pick_more = Pick {count} more target(s).
 iso_needs_enemy = That card wants an enemy.

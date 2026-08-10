@@ -5,19 +5,20 @@ using Microsoft.Xna.Framework;
 
 namespace TheTimelineIs.Core.Data;
 
-public record Destination(string Name, int X, int Y, string Mission) { public int Line; }
+public record Destination(string Name, int X, int Y, string Level) { public int Line; }
 
 /// <summary>
-/// Parses Content/Missions/Destinations.txt. Columns are whitespace-separated;
-/// the LAST three tokens are x, y, mission, and everything before them is the
-/// destination name — so names may contain spaces. '#' lines are comments.
+/// Parses Content/Levels/Destinations.txt. Columns are whitespace-separated;
+/// the LAST three tokens are x, y and the level to load, and everything before
+/// them is the destination name — so names may contain spaces. '#' lines are
+/// comments.
 /// Coordinates are in map-image pixel space, not screen space.
 /// </summary>
 public class DestinationTable
 {
     public List<Destination> All { get; } = new();
 
-    public const string Path = "Content/Missions/Destinations.txt";
+    public const string Path = "Content/Levels/Destinations.txt";
 
     public static DestinationTable Load()
     {
@@ -32,7 +33,7 @@ public class DestinationTable
                     !int.TryParse(tokens[^2], out int y))
                 {
                     Diagnostics.Current.Error(Path, lineNo,
-                        $"malformed destination '{line}' — expected 'Name  x  y  MissionFolder'");
+                        $"malformed destination '{line}' — expected 'Name  x  y  Level'");
                     continue;
                 }
                 string name = string.Join(' ', tokens[..^3]);

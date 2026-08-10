@@ -1,6 +1,0 @@
-Room 1:
-Background: RuinedBridge.png
-Cast: Dirtbag, Goblin
-Dirtbag: This bridge has seen better days.
-Goblin: Bridge toll! Pay toll or SWIM!
-[Battle!]

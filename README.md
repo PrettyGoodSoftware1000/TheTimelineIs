@@ -1,9 +1,9 @@
 # The Timeline Is
 
-A story-driven game: pick a destination on a scrolling world map, play through
-that mission's rooms of dialogue and battles, return to the map.
+A story-driven tactics game: pick a destination on a scrolling world map, fight
+the isometric level it opens, return to the map.
 
-MonoGame (DesktopGL) on .NET 9. Desktop now; structured so tablet heads
+MonoGame (DesktopGL) on .NET 10. Desktop now; structured so tablet heads
 (Android/iOS) can be added later without rewriting game logic.
 
 ## Building and running
@@ -14,7 +14,7 @@ dotnet run --project Desktop
 ```
 
 Dev map mode (click the map to place destinations, rows are appended to
-`Content/Missions/Destinations.txt` in the repo):
+`Content/Levels/Destinations.txt` in the repo):
 
 ```
 dotnet run --project Desktop -- --devmap
@@ -39,10 +39,9 @@ dotnet run --project Desktop -- --devmap
   pipeline rebuild needed when art or text changes). The one exception is the
   font, which MonoGame must bake at build time via `Content/Content.mgcb`.
 
-## THIS BRANCH: isometric test mode
+## Isometric tactics
 
-This branch replaces missions and side-view rooms with an **isometric
-tactics test**: Title -> party select -> world map -> the destination opens
+The game is an **isometric tactics** game: Title -> party select -> world map -> the destination opens
 `Content/Levels/TestLevel.txt` over a black void.
 
 - **Decorations** (`Content/Images/Decorations/`, listed in `Decorations.txt`)
@@ -237,7 +236,7 @@ tactics test**: Title -> party select -> world map -> the destination opens
 
 ## Adding a level to the world map
 
-A destination is one row in `Content/Missions/Destinations.txt`:
+A destination is one row in `Content/Levels/Destinations.txt`:
 
 ```
 # name              x     y     level
@@ -391,8 +390,8 @@ card is played.
 Folders and files use initial caps with no underscores; multi-word names run
 together with each word capitalized — `EnemyCharacters`, `ForestMission1`,
 `RuinedBridge.png`. Character names follow the same rule (`Dirtbag`, not
-`Joe_dirtbag`), and a character's folder, sprite, manifest, and the speaker
-name in mission scripts must all match exactly.
+`Joe_dirtbag`), and a character's folder, its sprite files, and the name it is
+declared under in `Classes.txt` or `Enemies.txt` must all match exactly.
 
 ## How to refer to files
 
@@ -407,8 +406,6 @@ The game is authored at **3840x2160** and letterboxes to any window or screen.
 | Asset | Path | Optimal size |
 |---|---|---|
 | World map | `Content/Images/Map/Map.png` | 7680x4320 (bigger than the view so it scrolls) |
-| Room backgrounds | `Content/Images/Backgrounds/*.png` | 3840x2160 |
-| Ground | `Content/Images/Grounds/Ground1.png` | 3840x720 |
 | Character sprites | `Content/Cast/.../{Name}/{Name}N.png` | 1200x1800, transparent background |
 | Dialogue thumbnails | same folder, `{Name}NThumb.png` | 512x512 (optional) |
 
@@ -422,7 +419,7 @@ Nothing is ever stretched to fit; images are centered in their slot instead.
 Thumbnails are optional: if `Goblin1Thumb.png` doesn't exist, the dialogue box
 falls back to the full `Goblin1.png` sprite.
 
-### Destinations — `Content/Missions/Destinations.txt`
+### Destinations — `Content/Levels/Destinations.txt`
 
 ```
 # name              x     y     mission
@@ -433,36 +430,12 @@ The last three columns are x, y (in **map-image pixels**), and the mission
 folder name; everything before them is the display name (spaces allowed).
 Easiest way to add one: run with `--devmap` and click the map.
 
-### Missions — `Content/Missions/{Mission}/{Mission}.txt`
-
-```
-Room 1:
-Background: ForestClearing.png
-Cast: Dirtbag, Goblin
-Dirtbag: Goddamn if my balls ain't itching.
-[Battle!]
-Room 2:
-Cast: Dirtbag, Goblin, Goblin
-```
-
-- `Background:` names a file in `Content/Images/Backgrounds/`. Omit it in a
-  later room to keep the previous room's background.
-- `Cast:` lists who's on stage. The Nth mention of a name is the same
-  individual across rooms — it keeps its sprite. Anyone who died in an
-  earlier room is silently omitted. New mentions spawn with an unused sprite
-  variant when one is available.
-- `Speaker: text` is dialogue; `[Battle!]` starts a turn-based card battle
-  (win continues the room; a wiped party reloads the last save).
-- `Cast: Player characters, Goblin` — the literal token `Player characters`
-  expands to the party chosen at New Game.
-- After the last room, the mission completes and the map returns.
-
 ### Characters — `Content/Cast/{PlayerCharacters|EnemyCharacters}/{Name}/`
 
-Each folder holds sprite variants (`Goblin1.png`, `Goblin2.png`, ...), optional
-thumbnails (`Goblin1Thumb.png`, ...), and a manifest `{Name}.txt` listing the
-variant file names one per line. The manifest exists because mobile app bundles
-can't list directory contents — when you add `Goblin4.png`, add a line for it.
+Each folder holds sprite variants (`Goblin1.png`, `Goblin2.png`, ...) and
+optional thumbnails (`Goblin1Thumb.png`, ...). The per-character `{Name}.txt`
+manifests are gone: sprites and stats are declared in `Classes.txt` for the
+party and `Enemies.txt` for everyone else, one block each.
 
 ### Player-facing text — `Content/Text/Strings.txt`
 
@@ -478,8 +451,9 @@ the same folder) is baked at build time via `Content/Fonts/Courier.spritefont`.
 ## Saves
 
 `%AppData%/TheTimelineIs/save.json` on Windows (platform equivalent elsewhere).
-Saving on the map resumes on the map; saving in a room restarts that room's
-dialogue from the top on reload. Dying reloads the last save.
+Progress is recorded on the world map between levels, so a save always resumes
+there and a level that was underway is played again from its start. Dying
+reloads the last save.
 
 ## Config — `Content/Config.txt`
 
@@ -502,18 +476,7 @@ size, so the screen is 12 feet tall and (at 16:9) 21.3 feet wide. Whole-foot
 ticks are yellow and labeled; half-foot ticks are teal. The ruler ignores all
 Config scaling — it's a fixed yardstick.
 
-## Backdrop
-
-A room's background is drawn **4 feet (720 px) higher than the screen**, and
-`Content/Images/Grounds/Ground1.png` fills the 3840x720 strip that leaves bare
-along the bottom — the band the characters stand on. Both the room and battle
-screens go through `Backdrop.Draw`, so they can't drift apart, and the ground
-stretches to close the gap even if the background is scaled or off-ratio.
-
-The ground is currently the same for every room. Making it per-room is a
-`Ground:` line in the mission file, mirroring `Background:`.
-
-## Party and formation
+## Party
 
 New Game leads to a party picker: choose 4 from the playable classes
 (duplicates allowed). `Classes.txt` is the authoritative roster — one
@@ -524,23 +487,9 @@ A card's `Tags:` are **labels, not class names**. A class plays every card
 carrying a tag it holds; with no `Card Tags:` line, a class holds one tag —
 its own name. Adding `Card Tags: 'Mancer, Gun-O-Mancer` to a class lets it
 play cards tagged either way, so several classes can share a card pool without
-the tag having to be anybody's name. Each side of a room has
-three rows: player Back/Mid/Front left-to-right, enemies mirrored. A row
-holds up to 3 characters, stacked. Drag a player sprite between rows with
-the mouse (or a finger, later). Rows are cosmetic for now; combat will use
-them later.
+the tag having to be anybody's name.
 
-## Battle
-
-Turn order is rolled once per battle: each side shuffled, sides alternating,
-random side first, leftovers appended. On a player character's turn their
-cards appear — every card carrying a tag their class holds (see `Classes.txt`);
-click a card, pick targets if needed, and it resolves. Enemies hit a random player
-character with their manifest `Attack`. All enemies dead = victory; all
-player characters dead = death screen and reload. A character killed
-mid-mission stays dead for later rooms of that mission.
-
-## Cards — `Content/Cast/PlayerCharacters/Cards.txt`
+## Cards — `Content/Cards/PlayerCards.txt` and `EnemyCards.txt`
 
 Card definitions; the format legend is commented at the top of the file.
 `Effect:` is the machine-readable line (keep the wording pattern per Type);
@@ -572,20 +521,6 @@ file is logged once and then ignored, so timing still works silently.
 **Speed is in feet per second and the screen is 12 feet tall.** Front row to
 front row is about 4.4 feet; back row to back row is about 17. At `Speed: 0.5`
 that second case takes 35 seconds. Values around 6–12 feel like a game.
-
-## Battle presentation
-
-The hand rests half below the bottom edge; hovering a card lifts it into full
-view at 130% size, and cards may overlap the characters. Characters stand in
-their formation rows, staggered down and across so nobody is fully hidden,
-with a compact HP bar under each one's feet. Anything struck recoils
-side-to-side once over a quarter second.
-
-## Character stats
-
-Character manifests (`Dirtbag.txt`, `Goblin.txt`, ...) now hold stats along
-with sprite lists: `HP: 12`, and for enemies `Attack: 3 Smash` (damage and
-damage type). Defaults if omitted: players 25 HP, enemies 12 HP / 3 attack.
 
 ## Content checking
 

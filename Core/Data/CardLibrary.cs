@@ -140,7 +140,8 @@ public class Card
 }
 
 /// <summary>
-/// Parses Content/Cast/PlayerCharacters/Cards.txt. Keys are matched
+/// Parses a deck: Content/Cards/PlayerCards.txt or EnemyCards.txt, which share
+/// this one format. Keys are matched
 /// case-insensitively and tolerate sloppy punctuation ("Speed: 2", "Speed 2",
 /// "Speed 2:" all work). Only Card Name, Card Text, and Bottom Right keep
 /// their authored capitalization, since those reach the player. "[]" lines

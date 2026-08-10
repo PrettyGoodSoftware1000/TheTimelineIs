@@ -213,14 +213,14 @@ public static class ContentValidator
 
         foreach (var dest in destinations.All)
         {
-            string path = LevelData.PathFor(dest.Mission);
+            string path = LevelData.PathFor(dest.Level);
             if (!AssetLoader.Exists(path))
             {
                 diag.Error(DestinationTable.Path, dest.Line,
-                    $"'{dest.Name}' points at level '{dest.Mission}' but {path} does not exist");
+                    $"'{dest.Name}' points at level '{dest.Level}' but {path} does not exist");
                 continue;
             }
-            var level = LevelData.Load(dest.Mission);
+            var level = LevelData.Load(dest.Level);
             var rooms = new HashSet<string>(level.RoomNames, StringComparer.OrdinalIgnoreCase);
 
             if (level.Blocks.Count == 0)
@@ -260,7 +260,7 @@ public static class ContentValidator
                     diag.Error(path, 0, $"PlayerStart at {start.X},{start.Y} has no block under it");
 
             // trigger squares must name a dialogue block that exists and has lines
-            var dialogue = DialogueLibrary.Load(dest.Mission);
+            var dialogue = DialogueLibrary.Load(dest.Level);
             foreach (var trigger in level.Triggers)
             {
                 if (level.BlockAt(new Microsoft.Xna.Framework.Point(trigger.X, trigger.Y)) == null)
@@ -268,9 +268,9 @@ public static class ContentValidator
                 if (!dialogue.Has(trigger.Dialogue))
                     diag.Error(path, 0,
                         $"trigger at {trigger.X},{trigger.Y} calls dialogue '{trigger.Dialogue}', " +
-                        $"which is not in {DialogueLibrary.PathFor(dest.Mission)}");
+                        $"which is not in {DialogueLibrary.PathFor(dest.Level)}");
                 else if (dialogue.Get(trigger.Dialogue)!.Count == 0)
-                    diag.Error(DialogueLibrary.PathFor(dest.Mission), 0,
+                    diag.Error(DialogueLibrary.PathFor(dest.Level), 0,
                         $"dialogue '{trigger.Dialogue}' has no lines");
             }
 
@@ -285,11 +285,9 @@ public static class ContentValidator
         string[] required =
         {
             "title", "title_scramble_word", "menu_new_game", "menu_continue",
-            "map_save", "room_save", "saved",
+            "map_save", "saved",
             "party_title", "party_start", "party_slot_empty",
-            "battle_placeholder", "battle_win", "battle_turn", "battle_victory",
-            "battle_pick_target", "battle_pick_targets",
-            "battle_hit", "battle_enemy_hit", "battle_down",
+            "battle_win", "battle_turn", "battle_hit", "battle_down",
             "death_title", "death_reload", "death_no_save",
             "devmap_hint", "devmap_name_prompt", "devmap_mission_prompt", "devmap_saved",
             "error_title", "error_continue", "error_more", "error_log", "error_counts",

@@ -121,7 +121,7 @@ public class MapScreen : IScreen
         foreach (var dest in _destinations.All)
         {
             var screen = new Point((int)(dest.X * _scale - _camera.X), (int)(dest.Y * _scale - _camera.Y));
-            bool done = _ctx.State.CompletedMissions.Contains(dest.Mission);
+            bool done = _ctx.State.CompletedMissions.Contains(dest.Level);
             var rect = new Rectangle(screen.X - MarkerRadius, screen.Y - MarkerRadius,
                 MarkerRadius * 2, MarkerRadius * 2);
             Ui.FillRect(batch, _ctx.Pixel, rect, done ? new Color(60, 160, 60) : new Color(190, 40, 40));
@@ -134,7 +134,7 @@ public class MapScreen : IScreen
 
         if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveRect, _ctx.Strings.Get("map_save"), _tap))
         {
-            _ctx.SaveStore.Save(_ctx.State.ToJson("map"));
+            _ctx.SaveStore.Save(_ctx.State.ToJson());
             Toast(_ctx.Strings.Get("saved"));
         }
 
@@ -157,8 +157,8 @@ public class MapScreen : IScreen
             int dx = world.X - (int)(dest.X * _scale), dy = world.Y - (int)(dest.Y * _scale);
             if (dx * dx + dy * dy <= TapRadius * TapRadius)
             {
-                _ctx.State.StartMission(dest.Mission);
-                _ctx.SwitchTo(new IsoLevelScreen(_ctx, dest.Mission));
+                _ctx.State.StartMission(dest.Level);
+                _ctx.SwitchTo(new IsoLevelScreen(_ctx, dest.Level));
                 return;
             }
         }

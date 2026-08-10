@@ -320,7 +320,7 @@ public class IsoLevelScreen : IScreen
             var to = IsoMath.ToScreen(next.X, next.Y, HeightAt(next), Origin);
             at = Vector2.Lerp(from, to, _walkT);
         }
-        return at + new Vector2(0, 26) + Formation.ShakeOffset(c);
+        return at + new Vector2(0, 26) + Recoil.Offset(c);
     }
 
     // ---------------- update ----------------
@@ -332,7 +332,7 @@ public class IsoLevelScreen : IScreen
         _ctrl = input.CtrlHeld;
         _camera += input.PanDelta;
         if (_toastTimer > 0) _toastTimer -= dt;
-        Formation.UpdateShakes(_party.Concat(_enemies).ToList(), dt);
+        Recoil.Update(Everyone, dt);
         UpdateCastAnimations(dt);
 
         if (_tap is Point logTap && LogToggleRect.Contains(logTap))
@@ -1073,7 +1073,7 @@ public class IsoLevelScreen : IScreen
     private void ApplyHit(CharacterInstance target, int dmg, string type, StringBuilder report)
     {
         if (dmg <= 0 || !target.Alive) return;
-        target.ShakeTimer = Formation.ShakeDuration;
+        target.ShakeTimer = Recoil.Duration;
 
         int soaked = Math.Min(target.Armor, dmg);
         target.Armor -= soaked;

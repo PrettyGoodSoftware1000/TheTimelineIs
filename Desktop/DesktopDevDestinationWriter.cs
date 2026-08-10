@@ -33,11 +33,11 @@ public class DesktopDevDestinationWriter : IDevDestinationWriter
         while (dir != null)
         {
             if (File.Exists(Path.Combine(dir.FullName, "TheTimelineIs.sln")))
-                return Path.Combine(dir.FullName, "Content", "Missions", "Destinations.txt");
+                return Path.Combine(dir.FullName, "Content", "Levels", "Destinations.txt");
             dir = dir.Parent;
         }
         Console.WriteLine("[devmap] WARNING: repo root not found; writing next to the executable. " +
             "This copy is overwritten on the next build.");
-        return Path.Combine(AppContext.BaseDirectory, "Content", "Missions", "Destinations.txt");
+        return Path.Combine(AppContext.BaseDirectory, "Content", "Levels", "Destinations.txt");
     }
 }

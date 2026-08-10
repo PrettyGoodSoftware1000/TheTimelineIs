@@ -49,22 +49,16 @@ public class GameContext
     }
 
     /// <summary>
-    /// Death and the Continue button share this: load the last save and go
-    /// where it says. A room save restarts its room from the first line.
+    /// Death and the Continue button share this. Progress is only ever recorded
+    /// on the world map, so a save always resumes there — a level that was
+    /// underway is simply played again from its start.
     /// </summary>
     public void LoadLastSave()
     {
-        string? json = SaveStore.Exists ? SaveStore.Load() : null;
-        if (json == null)
-        {
-            State.EndMission(completed: false);
-            SwitchTo(new MapScreen(this));
-            return;
-        }
-        var data = State.ApplyJson(json);
-        if (data.Location == "room" && State.CurrentMission != null)
-            SwitchTo(new RoomScreen(this, MissionScript.Load(State.CurrentMission)));
+        if ((SaveStore.Exists ? SaveStore.Load() : null) is string json)
+            State.ApplyJson(json);
         else
-            SwitchTo(new MapScreen(this));
+            State.EndMission(completed: false);
+        SwitchTo(new MapScreen(this));
     }
 }
