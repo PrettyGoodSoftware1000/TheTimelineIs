@@ -1546,20 +1546,9 @@ public class IsoLevelScreen : IScreen
         _tap = null;
     }
 
-    private void DrawBlock(SpriteBatch batch, LevelBlock block)
-    {
-        var top = IsoMath.ToScreen(block.X, block.Y, block.Height, Origin);
-        var side = _ctx.Assets.LoadTexture(BlockCatalog.SidePath(block.Type));
-        for (int f = 0; f < block.Height; f++)
-            batch.Draw(side, new Rectangle((int)(top.X - IsoMath.TileW / 2f),
-                (int)(top.Y + f * IsoMath.FootPx), IsoMath.TileW, IsoMath.FootPx), Color.White);
-        if (block.Height == 0)
-            batch.Draw(side, new Rectangle((int)(top.X - IsoMath.TileW / 2f),
-                (int)top.Y, IsoMath.TileW, IsoMath.FootPx / 2), Color.White * 0.8f);
-        batch.Draw(_ctx.Assets.LoadTexture(BlockCatalog.TopPath(block.Type)),
-            new Rectangle((int)(top.X - IsoMath.TileW / 2f), (int)(top.Y - IsoMath.TileH / 2f),
-                IsoMath.TileW, IsoMath.TileH), Color.White);
-    }
+    private void DrawBlock(SpriteBatch batch, LevelBlock block) =>
+        BlockCatalog.Draw(batch, _ctx.Assets, block.Type,
+            IsoMath.ToScreen(block.X, block.Y, block.Height, Origin), Color.White);
 
     private Rectangle DiamondRect(Point tile, int height)
     {

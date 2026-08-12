@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Xna.Framework;
 using TheTimelineIs.Core.Iso;
 using TheTimelineIs.Core.Screens;
 
@@ -194,13 +195,18 @@ public static class ContentValidator
 
     private static void ValidateLevels(EnemyLibrary enemies, Diagnostics diag)
     {
-        // block palette art must exist before any level can draw
-        foreach (var type in BlockCatalog.BlockTypes)
+        // ground art must exist before any level can draw
+        foreach (var piece in BlockCatalog.Pieces)
         {
-            if (!AssetLoader.Exists(BlockCatalog.TopPath(type)))
-                diag.Error(BlockCatalog.BlocksIndex, 0, $"block '{type}': missing {BlockCatalog.TopPath(type)}");
-            if (!AssetLoader.Exists(BlockCatalog.SidePath(type)))
-                diag.Error(BlockCatalog.BlocksIndex, 0, $"block '{type}': missing {BlockCatalog.SidePath(type)}");
+            if (!AssetLoader.Exists(piece.Path))
+                diag.Error(BlockCatalog.BlocksIndex, piece.Line,
+                    $"piece '{piece.File}' not found at {piece.Path}");
+            // an unset anchor puts the art's top-left corner on the square's
+            // centre, which reads as "everything is shoved down and right"
+            if (piece.Anchor == Point.Zero)
+                diag.Warn(BlockCatalog.BlocksIndex, piece.Line,
+                    $"piece '{piece.File}' has no Anchor, so it will draw off the grid — " +
+                    "set one with the editor's Anchor button");
         }
         foreach (var deco in BlockCatalog.Decorations)
             if (!AssetLoader.Exists(BlockCatalog.DecorationPath(deco)))

@@ -39,7 +39,7 @@ namespace TheTimelineIs.Desktop;
 ///   V then typing            save as a new level name, and keep editing it
 ///   ARROWS ONLY pan here, so WASD stay free as tool keys. S save, T test.
 /// </summary>
-public class IsoEditorScreen : IScreen
+public partial class IsoEditorScreen : IScreen
 {
     private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger }
 
@@ -53,7 +53,13 @@ public class IsoEditorScreen : IScreen
     private string _levelName = "TestLevel";
 
     private Tool _tool = Tool.Block;
-    private int _blockIndex, _decoIndex, _enemyIndex;
+    private int _decoIndex, _enemyIndex;
+
+    // the block brush: which family, and which piece inside it. -1 = Random,
+    // which is settled per square as it is painted.
+    private int _familyIndex;
+    private int _pieceIndex;
+    private static readonly Random Rng = new();
     private int _height;
     private string _room = "Main";
     private string _trigger = "Intro";      // dialogue block a placed trigger calls
@@ -141,8 +147,43 @@ public class IsoEditorScreen : IScreen
 
     private readonly record struct Btn(Rectangle Rect, string Label, string Id, bool Active, bool Menu);
 
-    private string BlockName => BlockCatalog.BlockTypes.Count > 0
-        ? BlockCatalog.BlockTypes[Math.Clamp(_blockIndex, 0, BlockCatalog.BlockTypes.Count - 1)] : "-";
+    private string FamilyName => BlockCatalog.Families.Count > 0
+        ? BlockCatalog.Families[Math.Clamp(_familyIndex, 0, BlockCatalog.Families.Count - 1)] : "-";
+
+    private IReadOnlyList<GroundPiece> FamilyPieces => BlockCatalog.PiecesIn(FamilyName);
+
+    private bool RandomBrush => _pieceIndex < 0;
+
+    private string PieceLabel =>
+        RandomBrush ? "Random"
+        : FamilyPieces.Count > 0
+            ? Strip(FamilyPieces[Math.Clamp(_pieceIndex, 0, FamilyPieces.Count - 1)].File)
+            : "-";
+
+    /// <summary>The piece currently under the brush, or null when the family is empty.</summary>
+    private GroundPiece? SelectedPiece
+    {
+        get
+        {
+            var pieces = FamilyPieces;
+            if (pieces.Count == 0) return null;
+            return pieces[RandomBrush ? 0 : Math.Clamp(_pieceIndex, 0, pieces.Count - 1)];
+        }
+    }
+
+    /// <summary>
+    /// Which piece to paint this square with. Random settles HERE, as the
+    /// square is painted, and only ever inside the chosen family — grass never
+    /// comes out stone, a block never comes out a surface. The choice is then
+    /// written into the level, so a level looks the same every time it loads.
+    /// </summary>
+    private string BrushPiece()
+    {
+        var pieces = FamilyPieces;
+        if (pieces.Count == 0) return "";
+        return (RandomBrush ? pieces[Rng.Next(pieces.Count)]
+                            : pieces[Math.Clamp(_pieceIndex, 0, pieces.Count - 1)]).File;
+    }
     private string DecoName => BlockCatalog.Decorations.Count > 0
         ? BlockCatalog.Decorations[Math.Clamp(_decoIndex, 0, BlockCatalog.Decorations.Count - 1)] : "-";
     private string EnemyName => _ctx.Enemies.EnemyNames.Count > 0
@@ -165,7 +206,9 @@ public class IsoEditorScreen : IScreen
         }
 
         Add($"Level: {_levelName}", "level", false, menu: true);
-        Add($"Block: {BlockName}", "block", _tool == Tool.Block, menu: true);
+        Add($"Ground: {FamilyName}", "family", _tool == Tool.Block, menu: true);
+        Add($"Piece: {PieceLabel}", "piece", _tool == Tool.Block, menu: true);
+        Add("Anchor", "anchor", _anchoring);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
         Add("Door", "door", _tool == Tool.Door);
         Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
@@ -190,7 +233,10 @@ public class IsoEditorScreen : IScreen
     /// <summary>The entries a dropdown shows, and what picking one does.</summary>
     private List<string> MenuItems(string id) => id switch
     {
-        "block" => BlockCatalog.BlockTypes.ToList(),
+        "family" => BlockCatalog.Families.ToList(),
+        // Random heads the list so it is one click away whatever the family holds
+        "piece" => new List<string> { "Random" }
+            .Concat(FamilyPieces.Select(gp => Strip(gp.File))).ToList(),
         "deco" => BlockCatalog.Decorations.Select(Strip).ToList(),
         "enemy" => _ctx.Enemies.EnemyNames.ToList(),
         "level" => LevelNames(),
@@ -233,7 +279,8 @@ public class IsoEditorScreen : IScreen
         switch (id)
         {
             case "level": OpenLevel(MenuItems("level")[index]); break;
-            case "block": _blockIndex = index; _tool = Tool.Block; break;
+            case "family": _familyIndex = index; _pieceIndex = 0; _tool = Tool.Block; break;
+            case "piece": _pieceIndex = index - 1; _tool = Tool.Block; break;
             case "deco": _decoIndex = index; _tool = Tool.Decoration; break;
             case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
         }
@@ -248,11 +295,13 @@ public class IsoEditorScreen : IScreen
             case "level":
                 _openMenu = _openMenu == "level" ? null : "level";
                 return true;
-            case "block" or "deco" or "enemy":
+            case "family" or "piece" or "deco" or "enemy":
                 // the button both selects its tool and opens its palette
-                _tool = id == "block" ? Tool.Block : id == "deco" ? Tool.Decoration : Tool.Enemy;
+                _tool = id is "family" or "piece" ? Tool.Block
+                    : id == "deco" ? Tool.Decoration : Tool.Enemy;
                 _openMenu = _openMenu == id ? null : id;
                 return true;
+            case "anchor": ToggleAnchorTool(); return true;
             case "door": _tool = Tool.Door; return true;
             case "start": _tool = Tool.PlayerStart; return true;
             case "trigger": _tool = Tool.Trigger; return true;
@@ -281,6 +330,10 @@ public class IsoEditorScreen : IScreen
         if (_problemTimer <= 0f) { RecountProblems(); _problemTimer = 0.4f; }
 
         if (_typingRoom || _typingTrigger || _typingSaveAs) { UpdateTyping(input); return; }
+
+        // the anchor tool takes over the ground entirely; only the toolbar
+        // above it keeps working, so its own button can close it again
+        if (UpdateAnchorTool(input)) return;
 
         var origin = _origin - _camera;
 
@@ -362,12 +415,14 @@ public class IsoEditorScreen : IScreen
             {
                 case '1' or '2' or '3':
                     _tool = Tool.Block;
-                    _blockIndex = Math.Min(c - '1', Math.Max(0, BlockCatalog.BlockTypes.Count - 1));
+                    _familyIndex = Math.Min(c - '1', Math.Max(0, BlockCatalog.Families.Count - 1));
+                    _pieceIndex = 0;
                     break;
                 case 'b':
                     _tool = Tool.Block;
-                    if (BlockCatalog.BlockTypes.Count > 0)
-                        _blockIndex = (_blockIndex + 1) % BlockCatalog.BlockTypes.Count;
+                    // B walks the pieces of the current family and then Random
+                    if (FamilyPieces.Count > 0)
+                        _pieceIndex = _pieceIndex + 1 >= FamilyPieces.Count ? -1 : _pieceIndex + 1;
                     break;
                 case 'd':
                     _tool = Tool.Decoration;
@@ -581,8 +636,7 @@ public class IsoEditorScreen : IScreen
         switch (_tool)
         {
             case Tool.Block:
-                string type = BlockCatalog.BlockTypes.Count > 0
-                    ? BlockCatalog.BlockTypes[_blockIndex] : "Grass";
+                string type = BrushPiece();
                 _level.Blocks[tile] = new LevelBlock
                     { X = tile.X, Y = tile.Y, Height = _height, Type = type, Room = _room };
                 break;
@@ -699,9 +753,19 @@ public class IsoEditorScreen : IScreen
         if (_level.BlockAt(tile) is not LevelBlock b) { Status("nothing to sample there"); return; }
         _height = b.Height;
         _room = b.Room;
-        int idx = BlockCatalog.BlockTypes
-            .ToList().FindIndex(t => t.Equals(b.Type, StringComparison.OrdinalIgnoreCase));
-        if (idx >= 0) { _blockIndex = idx; _tool = Tool.Block; }
+        // adopt the sampled square's family AND its exact piece, not Random
+        if (BlockCatalog.Find(b.Type) is GroundPiece sampled)
+        {
+            int fam = BlockCatalog.Families
+                .ToList().FindIndex(f => f.Equals(sampled.Family, StringComparison.OrdinalIgnoreCase));
+            if (fam >= 0)
+            {
+                _familyIndex = fam;
+                _pieceIndex = Math.Max(0, BlockCatalog.PiecesIn(sampled.Family)
+                    .ToList().FindIndex(gp => gp.File.Equals(sampled.File, StringComparison.OrdinalIgnoreCase)));
+                _tool = Tool.Block;
+            }
+        }
         Status($"picked up {b.Type} at {b.Height} ft in room {b.Room}");
     }
 
@@ -712,14 +776,15 @@ public class IsoEditorScreen : IScreen
     private void FillBox(Point a, Point b)
     {
         BeginEdit();
-        string type = BlockCatalog.BlockTypes.Count > 0
-            ? BlockCatalog.BlockTypes[_blockIndex] : "Grass";
         var (x0, y0, x1, y1) = Span(a, b);
+        // BrushPiece() is called per square, so a Random brush scatters the
+        // family across the box instead of stamping one piece over all of it
         for (int x = x0; x <= x1; x++)
             for (int y = y0; y <= y1; y++)
                 _level.Blocks[new Point(x, y)] = new LevelBlock
-                    { X = x, Y = y, Height = _height, Type = type, Room = _room };
-        Status($"filled {(x1 - x0 + 1) * (y1 - y0 + 1)} squares with {type} at {_height} ft");
+                    { X = x, Y = y, Height = _height, Type = BrushPiece(), Room = _room };
+        Status($"filled {(x1 - x0 + 1) * (y1 - y0 + 1)} squares with " +
+               $"{(RandomBrush ? $"random {FamilyName}" : PieceLabel)} at {_height} ft");
     }
 
     /// <summary>+/- with a selection: shift every block inside it up or down.</summary>
@@ -857,14 +922,8 @@ public class IsoEditorScreen : IScreen
 
         foreach (var b in _level.Blocks.Values.OrderBy(b => b.X + b.Y).ThenBy(b => b.X))
         {
-            var top = IsoMath.ToScreen(b.X, b.Y, b.Height, origin);
-            var side = _ctx.Assets.LoadTexture(BlockCatalog.SidePath(b.Type));
-            for (int f = 0; f < b.Height; f++)
-                batch.Draw(side, new Rectangle((int)(top.X - IsoMath.TileW / 2f),
-                    (int)(top.Y + f * IsoMath.FootPx), IsoMath.TileW, IsoMath.FootPx), Color.White);
-            batch.Draw(_ctx.Assets.LoadTexture(BlockCatalog.TopPath(b.Type)),
-                new Rectangle((int)(top.X - IsoMath.TileW / 2f), (int)(top.Y - IsoMath.TileH / 2f),
-                    IsoMath.TileW, IsoMath.TileH), Color.White);
+            BlockCatalog.Draw(batch, _ctx.Assets, b.Type,
+                IsoMath.ToScreen(b.X, b.Y, b.Height, origin), Color.White);
 
             var tile = new Point(b.X, b.Y);
             if (_level.DoorAt(tile) != null)
@@ -903,6 +962,9 @@ public class IsoEditorScreen : IScreen
         }
 
         DrawCursor(batch, origin);
+        // the anchor tool covers the level but sits under the toolbar, so its
+        // own button stays reachable to close it
+        DrawAnchorTool(batch);
         DrawToolbar(batch);
         DrawHudText(batch);
         DrawRoomLabels(batch, origin);
