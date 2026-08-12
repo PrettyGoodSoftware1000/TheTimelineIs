@@ -239,8 +239,10 @@ public static class ContentValidator
                     $"{PartySelectScreen.PartySize} will stack the rest nearby");
 
             foreach (var block in level.Blocks.Values)
-                if (!BlockCatalog.IsBlockType(block.Type))
-                    diag.Error(path, 0, $"block at {block.X},{block.Y} uses unknown type '{block.Type}'");
+                if (!BlockCatalog.IsPiece(block.Type))
+                    diag.Error(path, 0,
+                        $"block at {block.X},{block.Y} uses '{block.Type}', which is not a piece in " +
+                        $"{BlockCatalog.BlocksIndex} — that square will draw nothing");
             foreach (var deco in level.Decorations)
                 if (!BlockCatalog.Decorations.Contains(deco.File, StringComparer.OrdinalIgnoreCase))
                     diag.Error(path, 0, $"decoration at {deco.X},{deco.Y} uses unknown file '{deco.File}'");
