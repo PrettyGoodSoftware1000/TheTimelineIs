@@ -30,22 +30,35 @@
 # The .png files below are PLACEHOLDERS, built out of the old tile art so the
 # levels still draw. Replace them with the real pieces and delete these.
 
+Family: GrassSurface
+Piece: GrassSurface1.png
+Anchor: 180, 90
+Scale: 100
+
 Family: GrassBlock
-Piece: Grass.png
+Piece: GrassBlock1.png
+Piece: GrassBlock2.png
+Anchor: 180, 90
+Scale: 100
+
+Family: GrassBlockTall
+Piece: GrassBlockTall.png
+Anchor: 180, 90
+Scale: 100
+
+Family: GrassBlockDetails
+Piece: GrassBlockRoots.png
 Anchor: 180, 90
 Scale: 100
 
 Family: DirtBlock
-Piece: Dirt.png
+Piece: GrassBlock1.png
 Anchor: 180, 90
 Scale: 100
 
 Family: StoneBlock
-Piece: Stone.png
+Piece: GrassBlock1.png
 Anchor: 180, 90
 Scale: 100
 
-Family: GrassSurface
-Piece: GrassSurface.png
-Anchor: 180, 90
-Scale: 100
+
