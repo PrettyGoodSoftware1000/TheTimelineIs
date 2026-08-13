@@ -127,11 +127,6 @@ public static class BlockCatalog
         var pieces = new List<GroundPiece>();
         string family = "";
         GroundPiece? current = null;
-        // Anchor/Scale written before a family's first Piece are that family's
-        // default, which its pieces inherit unless they say otherwise. Same
-        // "most specific wins" rule Config.txt uses for scales.
-        Point familyAnchor = Point.Zero;
-        float familyScale = 1f;
 
         foreach (var (lineNo, raw) in AssetLoader.ReadNumbered(BlocksIndex, BlocksIndex))
         {
@@ -152,8 +147,6 @@ public static class BlockCatalog
                         diag.Error(BlocksIndex, lineNo, "'Family:' has no name after it");
                     family = value;
                     current = null;
-                    familyAnchor = Point.Zero;
-                    familyScale = 1f;
                     break;
 
                 case "piece":
@@ -168,42 +161,42 @@ public static class BlockCatalog
                             $"piece '{value}' appears before any 'Family:' line, so nothing can select it");
                         break;
                     }
-                    // the same art may stand in for several families while a
-                    // set is being built. Harmless — a level records the piece,
-                    // not the family — but the eyedropper can only adopt one of
-                    // them, so say so.
-                    if (pieces.FirstOrDefault(p =>
-                            p.File.Equals(value, StringComparison.OrdinalIgnoreCase)) is GroundPiece twin)
-                        diag.Warn(BlocksIndex, lineNo,
-                            $"'{value}' is also in family '{twin.Family}'. That works, but the " +
-                            $"eyedropper will call it '{twin.Family}' wherever it is used.");
-                    current = new GroundPiece
-                    {
-                        File = value, Family = family, Line = lineNo,
-                        Anchor = familyAnchor, Scale = familyScale,
-                    };
+                    // One .png may stand in for several families, and often
+                    // does while a set is half drawn — one block covering dirt
+                    // and stone until their own art exists. It is deliberate
+                    // and harmless, since a level records the piece and never
+                    // the family, so it is not reported: every diagnostic
+                    // raises the startup popup, and a placeholder that lives
+                    // for weeks would raise it every single launch.
+                    current = new GroundPiece { File = value, Family = family, Line = lineNo };
                     pieces.Add(current);
                     break;
 
+                // Anchor and Scale belong to the piece above them and to
+                // nothing else. Every .png needs its own: pieces differ in size
+                // and in how far their art hangs below the square, so there is
+                // no such thing as an anchor a family could share.
                 case "anchor":
-                    if (ParsePair(value) is not Point anchor)
+                    if (current == null)
                         diag.Error(BlocksIndex, lineNo,
-                            $"Anchor must be two numbers like '180, 90', got '{value}'");
-                    else if (current != null) current.Anchor = anchor;
-                    else if (family.Length > 0) familyAnchor = anchor;
-                    else diag.Error(BlocksIndex, lineNo,
-                        "'Anchor:' appears before any 'Family:' line");
+                            "'Anchor:' appears before any 'Piece:' line, and an anchor " +
+                            "belongs to one piece");
+                    else if (ParsePair(value) is Point anchor)
+                        current.Anchor = anchor;
+                    else
+                        diag.Error(BlocksIndex, lineNo,
+                            $"'{current.File}': Anchor must be two numbers like '180, 90', got '{value}'");
                     break;
 
                 case "scale":
-                    if (!float.TryParse(value.TrimEnd('%', ' '), NumberStyles.Float,
-                            CultureInfo.InvariantCulture, out float pct) || pct <= 0f)
+                    if (current == null)
+                        diag.Error(BlocksIndex, lineNo, "'Scale:' appears before any 'Piece:' line");
+                    else if (float.TryParse(value.TrimEnd('%', ' '), NumberStyles.Float,
+                                 CultureInfo.InvariantCulture, out float pct) && pct > 0f)
+                        current.Scale = pct / 100f;
+                    else
                         diag.Error(BlocksIndex, lineNo,
-                            $"Scale must be a percent above 0, got '{value}'");
-                    else if (current != null) current.Scale = pct / 100f;
-                    else if (family.Length > 0) familyScale = pct / 100f;
-                    else diag.Error(BlocksIndex, lineNo,
-                        "'Scale:' appears before any 'Family:' line");
+                            $"'{current.File}': Scale must be a percent above 0, got '{value}'");
                     break;
 
                 default:

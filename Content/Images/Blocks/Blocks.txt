@@ -24,14 +24,12 @@
 #         pixel. The Anchor tool sets this too, by sizing the art against the
 #         grid square drawn under it.
 #
-# WHERE Anchor and Scale go decides who they belong to, most specific winning,
-# the same way Config.txt handles scales:
-#   BEFORE a family's first Piece, they are that family's default and every
-#     piece in it inherits them.
-#   AFTER a Piece, they belong to THAT PIECE ALONE and override the default.
-# So two pieces with one Anchor line under them do NOT share it — only the
-# second one gets it. Put the shared line above both, or better, anchor each
-# piece with the editor, since pieces drawn at different sizes need their own.
+# EVERY PIECE NEEDS ITS OWN Anchor AND Scale. They belong to the Piece line
+# above them and to nothing else — there is no family-wide default, because
+# pieces differ in size and in how far their art hangs below the square, so
+# there is no anchor a family could meaningfully share. Two Piece lines with
+# one Anchor under them leaves the FIRST one unanchored, and it will draw well
+# off its square. Give each piece its own pair of lines, set by the editor.
 #
 # For reference while authoring: a square's top face is a 360x180 diamond, and
 # one foot of height lifts a piece by 90px.
