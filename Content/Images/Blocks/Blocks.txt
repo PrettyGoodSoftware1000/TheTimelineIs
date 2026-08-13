@@ -1,41 +1,5 @@
 # Ground art for the isometric levels.
-#
-# Every piece is ONE whole .png — its top surface, whatever body hangs below
-# it, and anything overhanging the square. It is drawn in a single draw:
-# nothing is composited from parts and nothing is ever stretched. A block's
-# body is therefore however deep it was drawn, and raising it just lifts the
-# whole picture, so raised blocks float. That is intended.
-#
-# A surface piece is simply a block whose art has no body — the same thing to
-# the game, and the difference is only what the artist drew.
-#
-# Family: groups pieces that stand in for each other. The editor offers the
-#         family, then a piece inside it, or Random. Random never leaves its
-#         family, so a GrassBlock is never a StoneBlock and never a
-#         GrassSurface.
-# Piece:  one .png in this folder. Starts a new piece; the lines under it
-#         belong to it.
-# Anchor: the pixel of that image which sits at the exact centre of a grid
-#         square's top face. For a surface it is the middle of the surface;
-#         for a block it is the middle of the surface sitting on top of the
-#         block. Same rule for every piece, so everything lands on the grid the
-#         same way. Set it with the editor's Anchor button rather than by hand.
-# Scale:  percent the image is drawn at. 100 is one image pixel per virtual
-#         pixel. The Anchor tool sets this too, by sizing the art against the
-#         grid square drawn under it.
-#
-# EVERY PIECE NEEDS ITS OWN Anchor AND Scale. They belong to the Piece line
-# above them and to nothing else — there is no family-wide default, because
-# pieces differ in size and in how far their art hangs below the square, so
-# there is no anchor a family could meaningfully share. Two Piece lines with
-# one Anchor under them leaves the FIRST one unanchored, and it will draw well
-# off its square. Give each piece its own pair of lines, set by the editor.
-#
-# For reference while authoring: a square's top face is a 360x180 diamond, and
-# one foot of height lifts a piece by 90px.
-#
-# The .png files below are PLACEHOLDERS, built out of the old tile art so the
-# levels still draw. Replace them with the real pieces and delete these.
+
 
 Family: GrassSurface
 Piece: GrassSurface1.png
