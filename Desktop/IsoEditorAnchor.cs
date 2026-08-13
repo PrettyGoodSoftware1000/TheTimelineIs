@@ -17,16 +17,15 @@ namespace TheTimelineIs.Desktop;
 /// art sits on its square, and how big it is drawn.
 ///
 /// It shows the selected .png over a crosshair — one vertical and one
-/// horizontal line, one pixel wide — with the real 360x180 grid diamond drawn
-/// where the two cross. Drag the art to move it under the crosshair; the pixel
-/// left under the crossing point is the anchor. Scroll to size the art until
-/// its top face matches the diamond.
+/// horizontal line, one pixel wide — with the real grid diamond drawn where the
+/// two cross. Drag the art to move it under the crosshair; the pixel left under
+/// the crossing point is the anchor. Size it against the diamond by scrolling,
+/// or by typing a percentage.
 ///
-/// The preview is drawn with exactly the arithmetic the game uses, so what is
-/// lined up here is what appears in the level. Both numbers are written back
-/// into Blocks.txt in the source tree, and only the Anchor and Scale lines of
-/// the piece being edited are touched — every comment and every other piece in
-/// that file is left exactly as it was.
+/// Everything here is drawn at <see cref="PreviewZoom"/>x, art and diamond
+/// alike, so a few pixels of misalignment are visible. Because both are
+/// magnified by the same factor what is lined up here is still exactly what
+/// appears in the level; the zoom never reaches the numbers that are saved.
 /// </summary>
 public partial class IsoEditorScreen
 {
@@ -35,16 +34,24 @@ public partial class IsoEditorScreen
     private Vector2 _anchorPoint;      // in IMAGE pixels: what lands on the crosshair
     private float _anchorScale = 1f;
     private Point? _anchorDragFrom;    // pointer position the current drag started at
+    private string? _scaleBuffer;      // non-null while a scale is being typed
 
     /// <summary>Where the crosshair sits, and therefore the square's top-face centre.</summary>
     private static readonly Vector2 AnchorOrigin =
-        new(VirtualViewport.Width / 2f, VirtualViewport.Height / 2f + 120);
+        new(VirtualViewport.Width / 2f, VirtualViewport.Height / 2f + 60);
+
+    /// <summary>Preview magnification. Affects nothing that is written to disk.</summary>
+    private const float PreviewZoom = 2f;
 
     private const float MinScale = 0.02f, MaxScale = 4f;
 
+    /// <summary>One notch of the wheel, as a multiplier. Ctrl takes a third of it.</summary>
+    private const float ScaleStep = 1.08f;
+    private const float FineFraction = 1f / 3f;
+
     private void ToggleAnchorTool()
     {
-        if (_anchoring) { _anchoring = false; Status("anchor tool closed"); return; }
+        if (_anchoring) { _anchoring = false; _scaleBuffer = null; Status("anchor tool closed"); return; }
 
         if (SelectedPiece is not GroundPiece piece)
         {
@@ -58,7 +65,9 @@ public partial class IsoEditorScreen
         _anchorPoint = new Vector2(piece.Anchor.X, piece.Anchor.Y);
         _anchorScale = piece.Scale;
         _anchorDragFrom = null;
-        Status($"anchoring {piece.File} — drag to place, scroll to size, Enter saves, Esc cancels");
+        _scaleBuffer = null;
+        Status($"anchoring {piece.File} — drag to place, scroll to size (Ctrl = fine), " +
+               "type a number to set the scale, Enter saves, Esc cancels");
     }
 
     /// <summary>
@@ -69,31 +78,75 @@ public partial class IsoEditorScreen
     {
         if (!_anchoring || _anchorPiece == null) return false;
 
-        // the toolbar keeps working, so Anchor can be clicked again to close
+        // the toolbar keeps working, so Anchor and Reload can still be clicked
         if (input.Tap is Point tap && ToolbarBand.Contains(tap)) return false;
+
+        // Typing a scale takes the keyboard while it is happening: Enter then
+        // commits the number rather than saving, and Esc abandons the number
+        // rather than the tool. The buffer is on screen throughout, so which
+        // one Enter means is never a guess.
+        if (TypingScale(input)) return true;
 
         if (input.Cancel) { _anchoring = false; Status("anchor cancelled, nothing written"); return true; }
         if (input.Confirm) { SaveAnchor(); return true; }
 
-        // scroll sizes the art about the crosshair, so the anchor stays put
+        // scroll sizes the art about the crosshair, so the anchor stays put.
+        // Ctrl takes a third of a notch for the last pixel or two.
         if (input.ScrollDelta != 0)
-            _anchorScale = Math.Clamp(_anchorScale * MathF.Pow(1.08f, input.ScrollDelta),
+        {
+            float step = input.CtrlHeld ? MathF.Pow(ScaleStep, FineFraction) : ScaleStep;
+            _anchorScale = Math.Clamp(_anchorScale * MathF.Pow(step, input.ScrollDelta),
                 MinScale, MaxScale);
+        }
 
         // drag moves the ART under a fixed crosshair, so the anchor is whatever
         // pixel ends up beneath it. Screen movement converts back into image
-        // pixels through the current scale.
+        // pixels through the scale AND the preview zoom, so dragging tracks the
+        // cursor exactly however far the preview is magnified.
         if (input.PointerHeld)
         {
             if (_anchorDragFrom is Point from)
             {
                 var delta = (_pointer - from).ToVector2();
-                if (_anchorScale > 0f) _anchorPoint -= delta / _anchorScale;
+                float perPixel = _anchorScale * PreviewZoom;
+                if (perPixel > 0f) _anchorPoint -= delta / perPixel;
             }
             _anchorDragFrom = _pointer;
         }
         else _anchorDragFrom = null;
 
+        return true;
+    }
+
+    /// <summary>
+    /// Scale entry by keyboard. Typing a digit or a dot starts it; Enter takes
+    /// the number, Esc drops it. Returns true while it owns the keyboard.
+    /// </summary>
+    private bool TypingScale(InputState input)
+    {
+        if (_scaleBuffer == null)
+        {
+            string start = new(input.TypedChars.Where(c => char.IsDigit(c) || c == '.').ToArray());
+            if (start.Length == 0) return false;
+            _scaleBuffer = start;
+            return true;
+        }
+
+        _scaleBuffer += new string(input.TypedChars.Where(c => char.IsDigit(c) || c == '.').ToArray());
+        if (input.Backspace && _scaleBuffer.Length > 0) _scaleBuffer = _scaleBuffer[..^1];
+        if (input.Cancel) { _scaleBuffer = null; Status("scale unchanged"); return true; }
+
+        if (input.Submit || input.Confirm)
+        {
+            if (float.TryParse(_scaleBuffer, NumberStyles.Float, CultureInfo.InvariantCulture,
+                    out float pct) && pct > 0f)
+            {
+                _anchorScale = Math.Clamp(pct / 100f, MinScale, MaxScale);
+                Status($"scale {_anchorScale * 100f:0.##}% — Enter again to save");
+            }
+            else Status($"'{_scaleBuffer}' is not a percentage");
+            _scaleBuffer = null;
+        }
         return true;
     }
 
@@ -154,10 +207,56 @@ public partial class IsoEditorScreen
 
         File.WriteAllText(path, string.Join(Environment.NewLine, lines) + Environment.NewLine);
 
-        // re-read so the level behind the tool redraws with the new numbers
-        BlockCatalog.Reset();
+        // Every square on the level redraws from the catalog each frame, so
+        // reloading it is all that is needed for the blocks already placed to
+        // take the new anchor and scale.
+        ReloadGroundArt();
         _anchoring = false;
-        Status($"{piece.File}: anchor {anchor.X}, {anchor.Y} at {_anchorScale * 100f:0.#}% -> Blocks.txt");
+        _scaleBuffer = null;
+        Status($"{piece.File}: anchor {anchor.X}, {anchor.Y} at {_anchorScale * 100f:0.##}% " +
+               "— saved, and every placed block redrawn");
+    }
+
+    /// <summary>
+    /// Re-reads Blocks.txt, so hand edits and anything the Anchor tool just
+    /// wrote show up without restarting.
+    ///
+    /// The copy step is the awkward part. Content is read through
+    /// TitleContainer, which resolves against the built output next to the
+    /// executable, while the editor writes to the source tree — so a plain
+    /// re-read would faithfully reload the stale copy that was there at build
+    /// time. Copying source over output first is what makes the reload mean
+    /// what it says.
+    /// </summary>
+    private void ReloadGroundArt()
+    {
+        const string relative = "Images/Blocks/Blocks.txt";
+        string source = Path.Combine(SourceContentDir, relative.Replace('/', Path.DirectorySeparatorChar));
+        string output = Path.Combine(AppContext.BaseDirectory, "Content",
+            relative.Replace('/', Path.DirectorySeparatorChar));
+        try
+        {
+            if (File.Exists(source) && !string.Equals(
+                    Path.GetFullPath(source), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+                File.Copy(source, output, overwrite: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Status($"could not refresh the built copy of Blocks.txt: {ex.Message}");
+        }
+        BlockCatalog.Reset();
+        RecountProblems();
+    }
+
+    /// <summary>The Reload button: pick up Blocks.txt as it stands on disk.</summary>
+    private void ReloadFromDisk()
+    {
+        ReloadGroundArt();
+        Status($"reloaded Blocks.txt — {BlockCatalog.Pieces.Count} piece(s) in " +
+               $"{BlockCatalog.Families.Count} famil{(BlockCatalog.Families.Count == 1 ? "y" : "ies")}");
     }
 
     /// <summary>The repo's Content folder, so a save lands in the source tree.</summary>
@@ -186,19 +285,21 @@ public partial class IsoEditorScreen
 
         var tex = _ctx.Assets.LoadTexture(piece.Path);
 
-        // exactly the arithmetic BlockCatalog.Draw uses, so this preview is the
-        // game's own placement rather than an approximation of it
+        // BlockCatalog.Draw's arithmetic with the preview zoom folded in. Art
+        // and diamond take the same factor, so lining them up here lines them
+        // up in the level.
+        float shown = _anchorScale * PreviewZoom;
         var rect = new Rectangle(
-            (int)MathF.Round(AnchorOrigin.X - _anchorPoint.X * _anchorScale),
-            (int)MathF.Round(AnchorOrigin.Y - _anchorPoint.Y * _anchorScale),
-            Math.Max(1, (int)MathF.Round(tex.Width * _anchorScale)),
-            Math.Max(1, (int)MathF.Round(tex.Height * _anchorScale)));
+            (int)MathF.Round(AnchorOrigin.X - _anchorPoint.X * shown),
+            (int)MathF.Round(AnchorOrigin.Y - _anchorPoint.Y * shown),
+            Math.Max(1, (int)MathF.Round(tex.Width * shown)),
+            Math.Max(1, (int)MathF.Round(tex.Height * shown)));
         batch.Draw(tex, rect, Color.White);
 
-        // the square this piece will stand on, at its true size
+        // the square this piece will stand on, magnified to match
+        int dw = (int)(IsoMath.TileW * PreviewZoom), dh = (int)(IsoMath.TileH * PreviewZoom);
         var diamond = new Rectangle(
-            (int)(AnchorOrigin.X - IsoMath.TileW / 2f), (int)(AnchorOrigin.Y - IsoMath.TileH / 2f),
-            IsoMath.TileW, IsoMath.TileH);
+            (int)(AnchorOrigin.X - dw / 2f), (int)(AnchorOrigin.Y - dh / 2f), dw, dh);
         batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayTop.png"), diamond,
             new Color(120, 200, 255) * 0.20f);
         batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayEdge.png"), diamond,
@@ -213,16 +314,23 @@ public partial class IsoEditorScreen
 
         var anchor = new Point((int)MathF.Round(_anchorPoint.X), (int)MathF.Round(_anchorPoint.Y));
         Ui.DrawTextCentered(batch, _ctx.Font,
-            $"{piece.File}   {tex.Width}x{tex.Height}px",
-            new Rectangle(0, 300, VirtualViewport.Width, 70), Color.White, 0.42f);
+            $"{piece.File}   {tex.Width}x{tex.Height}px   shown at {PreviewZoom:0.#}x",
+            new Rectangle(0, 286, VirtualViewport.Width, 70), Color.White, 0.40f);
         Ui.DrawTextCentered(batch, _ctx.Font,
-            $"anchor {anchor.X}, {anchor.Y}    scale {_anchorScale * 100f:0.#}%",
-            new Rectangle(0, 370, VirtualViewport.Width, 60), Color.Gold, 0.36f);
+            _scaleBuffer != null
+                ? $"anchor {anchor.X}, {anchor.Y}    scale {_scaleBuffer}_ %"
+                : $"anchor {anchor.X}, {anchor.Y}    scale {_anchorScale * 100f:0.##}%",
+            new Rectangle(0, 352, VirtualViewport.Width, 60),
+            _scaleBuffer != null ? Color.Cyan : Color.Gold, 0.36f);
         Ui.DrawTextCentered(batch, _ctx.Font,
-            "drag the art to move it under the crosshair  ·  scroll to size it against the diamond",
-            new Rectangle(0, 430, VirtualViewport.Width, 50), Color.White * 0.75f, 0.26f);
-        Ui.DrawTextCentered(batch, _ctx.Font,
-            "Enter writes it to Blocks.txt  ·  Esc cancels",
-            new Rectangle(0, 476, VirtualViewport.Width, 50), Color.White * 0.75f, 0.26f);
+            _scaleBuffer != null
+                ? "Enter takes the number  ·  Esc leaves the scale as it was"
+                : "drag to move it under the crosshair  ·  scroll to size it, Ctrl to fine tune  " +
+                  "·  type a number to set the scale",
+            new Rectangle(0, 410, VirtualViewport.Width, 50), Color.White * 0.75f, 0.26f);
+        if (_scaleBuffer == null)
+            Ui.DrawTextCentered(batch, _ctx.Font,
+                "Enter writes it to Blocks.txt and redraws every placed block  ·  Esc cancels",
+                new Rectangle(0, 456, VirtualViewport.Width, 50), Color.White * 0.75f, 0.26f);
     }
 }

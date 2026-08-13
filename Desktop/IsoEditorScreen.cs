@@ -209,6 +209,7 @@ public partial class IsoEditorScreen : IScreen
         Add($"Ground: {FamilyName}", "family", _tool == Tool.Block, menu: true);
         Add($"Piece: {PieceLabel}", "piece", _tool == Tool.Block, menu: true);
         Add("Anchor", "anchor", _anchoring);
+        Add("Reload", "reload", false);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
         Add("Door", "door", _tool == Tool.Door);
         Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
@@ -302,6 +303,7 @@ public partial class IsoEditorScreen : IScreen
                 _openMenu = _openMenu == id ? null : id;
                 return true;
             case "anchor": ToggleAnchorTool(); return true;
+            case "reload": ReloadFromDisk(); return true;
             case "door": _tool = Tool.Door; return true;
             case "start": _tool = Tool.PlayerStart; return true;
             case "trigger": _tool = Tool.Trigger; return true;
