@@ -130,6 +130,16 @@ public class IsoLevelScreen : IScreen
     private static readonly Rectangle WinRect = new(1620, 1250, 600, 180);
     private static readonly Rectangle DialogueBox = new(60, 1560, 3720, 420);
     private const int CardW = 400, CardH = 560, CardGap = 26;
+
+    // Card text sizes in POINTS. Courier.spritefont is baked at 96pt, so the
+    // scale a draw call wants is points/96 — which is what makes "2pt smaller"
+    // an exact number here rather than a guess at a scale factor.
+    private const float FontBakedPt = 96f;
+    private const float CardNamePt = 36.4f;    // was 38.4
+    private const float CardBodyPt = 26.8f;    // was 28.8
+    private const float CardTotalPt = 32.6f;   // was 34.6
+    private const float CardRangePt = 26.8f;   // was 28.8
+    private static float Pt(float points) => points / FontBakedPt;
     private static readonly int CardRestY = VirtualViewport.Height - CardH / 2;
     private const float HoverScale = 1.3f;
 
@@ -1969,7 +1979,12 @@ public class IsoLevelScreen : IScreen
 
     private void DrawCard(SpriteBatch batch, Card card, Rectangle rect, bool hovered)
     {
-        float s = hovered ? HoverScale : 1f;
+        // Text scales with the card it is on, taken from the rect rather than
+        // from `hovered`. A hovered card is CardW * HoverScale wide and so gets
+        // HoverScale, exactly as before — but the steal picker narrows its
+        // cards to fit a big hand on screen, and text that stayed full size on
+        // a card half the width was what ran the labels into each other.
+        float s = rect.Width / (float)CardW;
         // a card the holder cannot currently afford is greyed out card by card,
         // so with 1 point left the cheap ones stay lit and the dear ones dim
         bool spent = Current == null || Current.ActionPoints < card.ActionCost;
@@ -1985,11 +2000,21 @@ public class IsoLevelScreen : IScreen
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(rect.Right - bw, rect.Y, bw, rect.Height), border);
 
         var ink = spent ? Color.White * 0.4f : Color.White;
-        Ui.DrawTextCentered(batch, _ctx.Font, card.Name,
-            new Rectangle(rect.X, rect.Y + (int)(18 * s), rect.Width, (int)(80 * s)), ink, 0.4f * s);
-        batch.DrawString(_ctx.Font, Ui.Wrap(_ctx.Font, card.CardText, rect.Width - 56 * s, 0.3f * s),
-            new Vector2(rect.X + 28 * s, rect.Y + 120 * s), ink * 0.9f,
-            0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
+        int pad = (int)(24 * s);
+        var inner = new Rectangle(rect.X + pad, rect.Y, rect.Width - pad * 2, rect.Height);
+
+        // The name wraps and reports how tall it came out, so a long one like
+        // "Beg, Borrow, but Mostly Steal" takes two lines instead of running
+        // off both sides, and pushes the text under it down rather than
+        // being drawn through it.
+        float nameTop = rect.Y + 18 * s;
+        float nameHeight = Ui.DrawWrappedCentered(batch, _ctx.Font, card.Name,
+            new Rectangle(inner.X, (int)nameTop, inner.Width, 0), ink, Pt(CardNamePt) * s);
+
+        batch.DrawString(_ctx.Font,
+            Ui.Wrap(_ctx.Font, card.CardText, inner.Width, Pt(CardBodyPt) * s),
+            new Vector2(inner.X, nameTop + nameHeight + 22 * s), ink * 0.9f,
+            0f, Vector2.Zero, Pt(CardBodyPt) * s, SpriteEffects.None, 0f);
 
         int hitCount = card.TargetsGround && _blastSet.Count > 0
             ? VisibleEnemies.Count(e => _blastSet.Contains(Tile(e)))
@@ -1997,14 +2022,28 @@ public class IsoLevelScreen : IScreen
         string total = card.Damage <= 0 && card.Effects.Count > 0
             ? $"+{card.Effects[0].Amount} {card.Effects[0].Name}"
             : $"{card.TotalDamage(hitCount)} {card.DamageType}";
-        var size = _ctx.Font.MeasureString(total) * (0.36f * s);
+        string range = _ctx.Strings.Format("iso_card_range", ("range", card.Range.ToString()));
+
+        // The bottom row is two labels facing each other, so each is given half
+        // of the width and shrunk to fit it. Neither can reach the other however
+        // long the words are — "Range 4" and "+3 Stolen" used to meet in the
+        // middle of a narrow card and print over one another.
+        int half = (inner.Width - (int)(16 * s)) / 2;
+        float rangeScale = Ui.FitScale(_ctx.Font, range, half, Pt(CardRangePt) * s);
+        float totalScale = Ui.FitScale(_ctx.Font, total, half, Pt(CardTotalPt) * s);
+        float baseline = rect.Bottom - 28 * s;
+
+        var totalSize = _ctx.Font.MeasureString(total) * totalScale;
         batch.DrawString(_ctx.Font, total,
-            new Vector2(rect.Right - 24 * s - size.X, rect.Bottom - 28 * s - size.Y),
-            spent ? Color.Gold * 0.4f : Color.Gold, 0f, Vector2.Zero, 0.36f * s, SpriteEffects.None, 0f);
-        batch.DrawString(_ctx.Font, _ctx.Strings.Format("iso_card_range", ("range", card.Range.ToString())),
-            new Vector2(rect.X + 24 * s, rect.Bottom - 28 * s - size.Y),
-            spent ? Color.LightBlue * 0.4f : Color.LightBlue,
-            0f, Vector2.Zero, 0.3f * s, SpriteEffects.None, 0f);
+            new Vector2(inner.Right - totalSize.X, baseline - totalSize.Y),
+            spent ? Color.Gold * 0.4f : Color.Gold, 0f, Vector2.Zero, totalScale,
+            SpriteEffects.None, 0f);
+
+        var rangeSize = _ctx.Font.MeasureString(range) * rangeScale;
+        batch.DrawString(_ctx.Font, range,
+            new Vector2(inner.X, baseline - rangeSize.Y),
+            spent ? Color.LightBlue * 0.4f : Color.LightBlue, 0f, Vector2.Zero, rangeScale,
+            SpriteEffects.None, 0f);
 
         // the cost, top-right, as one pip per point
         for (int i = 0; i < card.ActionCost; i++)

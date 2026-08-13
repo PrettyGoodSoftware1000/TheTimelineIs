@@ -84,4 +84,38 @@ public static class Ui
         if (line.Length > 0) result.Append(line);
         return result.ToString();
     }
+
+    /// <summary>
+    /// Wraps to the box's width and centres every line inside it, rather than
+    /// centring one block of left-aligned lines the way DrawTextCentered would.
+    /// Returns the height used, so whatever comes next can start below it —
+    /// which is what lets a two-line card name push the text under it down
+    /// instead of being drawn over.
+    /// </summary>
+    public static float DrawWrappedCentered(SpriteBatch batch, SpriteFont font, string text,
+        Rectangle bounds, Color color, float scale)
+    {
+        var lines = Wrap(font, text, bounds.Width, scale).Split('\n');
+        float lineHeight = font.LineSpacing * scale;
+        float y = bounds.Y;
+        foreach (var line in lines)
+        {
+            float w = font.MeasureString(line).X * scale;
+            batch.DrawString(font, line, new Vector2(bounds.X + (bounds.Width - w) / 2f, y),
+                color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+            y += lineHeight;
+        }
+        return lines.Length * lineHeight;
+    }
+
+    /// <summary>
+    /// <paramref name="scale"/>, or just enough less for the text to fit the
+    /// width. Two labels sharing a row can each be given half of it and neither
+    /// can then run into the other, however long the words turn out to be.
+    /// </summary>
+    public static float FitScale(SpriteFont font, string text, float maxWidth, float scale)
+    {
+        float w = font.MeasureString(text).X * scale;
+        return w <= maxWidth || w <= 0f ? scale : scale * (maxWidth / w);
+    }
 }
