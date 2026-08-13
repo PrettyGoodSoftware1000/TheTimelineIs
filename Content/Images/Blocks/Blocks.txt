@@ -39,33 +39,35 @@
 
 Family: GrassSurface
 Piece: GrassSurface1.png
-Anchor: 180, 90
-Scale: 100
+Anchor: 360, 184
+Scale: 54
 
 Family: GrassBlock
 Piece: GrassBlock1.png
+Anchor: 314, 155
+Scale: 58.32
 Piece: GrassBlock2.png
-Anchor: 180, 90
-Scale: 100
+Anchor: 312, 158
+Scale: 50
 
 Family: GrassBlockTall
 Piece: GrassBlockTall.png
-Anchor: 180, 90
-Scale: 100
+Anchor: 326, 172
+Scale: 50
 
 Family: GrassBlockDetails
 Piece: GrassBlockRoots.png
-Anchor: 180, 90
-Scale: 100
+Anchor: 307, 148
+Scale: 54
 
 Family: DirtBlock
 Piece: GrassBlock1.png
-Anchor: 180, 90
-Scale: 100
+Anchor: 314, 155
+Scale: 58.32
 
 Family: StoneBlock
 Piece: GrassBlock1.png
-Anchor: 180, 90
-Scale: 100
+Anchor: 314, 155
+Scale: 58.32
 
 
