@@ -105,6 +105,7 @@ public class DesktopInput : IInputSource
         state.CtrlHeld = keys.IsKeyDown(Keys.LeftControl) || keys.IsKeyDown(Keys.RightControl);
         state.ShiftHeld = keys.IsKeyDown(Keys.LeftShift) || keys.IsKeyDown(Keys.RightShift);
         state.Undo = state.CtrlHeld && Pressed(keys, Keys.Z);
+        state.ToggleControls = Pressed(keys, Keys.Insert);
         state.Copy = state.CtrlHeld && Pressed(keys, Keys.C);
         state.Paste = state.CtrlHeld && Pressed(keys, Keys.V);
         if (mouse.MiddleButton == ButtonState.Pressed && _prevMouse.MiddleButton == ButtonState.Released)

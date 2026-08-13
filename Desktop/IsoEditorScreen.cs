@@ -23,21 +23,9 @@ namespace TheTimelineIs.Desktop;
 /// enemies) hang a dropdown off their button instead of spending a button per
 /// entry.
 ///
-///   1/2/3 .. block palette   B next block type    hold left   paint
-///   D deco  O door  E enemy  P start  G trigger   hold Del    rub out
-///   Shift+drag               fill a box at the placement height
-///   Ctrl+Del, then drag      empty a box
-///   Ctrl+drag                select a box: +/- raise and lower it,
-///                            Ctrl+C copies, Ctrl+V pastes at the cursor,
-///                            Del empties it, Esc drops it
-///   middle click             eyedropper: adopt that square's type/height/room
-///   Ctrl+Z                   undo the last stroke
-///   right click a trigger    open that level's dialogue file in a text editor
-///   scroll wheel or +/-      placement height (feet)
-///   R then typing            set current room label (Enter to accept)
-///   N then typing            set the dialogue name new triggers call
-///   V then typing            save as a new level name, and keep editing it
-///   ARROWS ONLY pan here, so WASD stay free as tool keys. S save, T test.
+/// The full control list lives in ControlLines, shown in the middle of the
+/// screen by the Controls button or the Insert key and hidden by default —
+/// the strip across the top is what is on screen the rest of the time.
 /// </summary>
 public partial class IsoEditorScreen : IScreen
 {
@@ -86,12 +74,16 @@ public partial class IsoEditorScreen : IScreen
     private List<LevelBlock> _clipboard = new();
     private Point _clipOrigin;
 
+    private bool _showControls;             // the Controls panel, off by default
     private string? _openMenu;              // which button's dropdown is showing
     private readonly List<LevelData> _undo = new();
     private const int UndoDepth = 40;
 
     private int _problems;                    // validator complaints about this level
-    private const int BarY = 30, BarH = 108, BarGap = 12;
+    private const int BarY = 24, BarH = 84, BarGap = 10;
+    /// <summary>Text size on the buttons, and the padding around it.</summary>
+    private const float BtnText = 0.24f;
+    private const int BtnPad = 30, BtnArrow = 26, BarX0 = 40;
     private static readonly Rectangle ToolbarBand = new(0, 0, VirtualViewport.Width, 260);
 
     public IsoEditorScreen(GameContext ctx)
@@ -196,11 +188,11 @@ public partial class IsoEditorScreen : IScreen
     private List<Btn> Buttons()
     {
         var list = new List<Btn>();
-        int x = 60;
+        int x = BarX0;
 
-        void Add(string label, string id, bool active, bool menu = false, int pad = 44)
+        void Add(string label, string id, bool active, bool menu = false, int pad = BtnPad)
         {
-            int w = (int)(_ctx.Font.MeasureString(label).X * 0.30f) + pad + (menu ? 34 : 0);
+            int w = (int)(_ctx.Font.MeasureString(label).X * BtnText) + pad + (menu ? BtnArrow : 0);
             list.Add(new Btn(new Rectangle(x, BarY, w, BarH), label, id, active, menu));
             x += w + BarGap;
         }
@@ -210,14 +202,12 @@ public partial class IsoEditorScreen : IScreen
         Add($"Piece: {PieceLabel}", "piece", _tool == Tool.Block, menu: true);
         Add("Anchor", "anchor", _anchoring);
         Add("Reload", "reload", false);
+        Add("Controls", "controls", _showControls);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
         Add("Door", "door", _tool == Tool.Door);
         Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
         Add("Start", "start", _tool == Tool.PlayerStart);
         Add($"Trigger: {_trigger}", "trigger", _tool == Tool.Trigger);
-        Add("-", "hminus", false, pad: 30);
-        Add($"{_height} ft", "height", false, pad: 30);
-        Add("+", "hplus", false, pad: 30);
         Add($"Room: {_room}", "room", false);
         Add("Dialogue", "dialogue", false);
         Add(_problems == 0 ? "OK" : $"! {_problems}", "problems", false, pad: 34);
@@ -307,9 +297,7 @@ public partial class IsoEditorScreen : IScreen
             case "door": _tool = Tool.Door; return true;
             case "start": _tool = Tool.PlayerStart; return true;
             case "trigger": _tool = Tool.Trigger; return true;
-            case "hminus": _height = Math.Max(_height - 1, 0); return true;
-            case "hplus": _height = Math.Min(_height + 1, 12); return true;
-            case "height": return true;
+            case "controls": _showControls = !_showControls; return true;
             case "room": _typingRoom = true; _roomBuffer = _room; return true;
             case "dialogue": _typingTrigger = true; _roomBuffer = _trigger; return true;
             case "problems": RecountProblems(); Status(ProblemText()); return true;
@@ -331,7 +319,9 @@ public partial class IsoEditorScreen : IScreen
         _problemTimer -= dt;
         if (_problemTimer <= 0f) { RecountProblems(); _problemTimer = 0.4f; }
 
-        if (_typingRoom || _typingTrigger || _typingSaveAs) { UpdateTyping(input); return; }
+        if (input.ToggleControls) _showControls = !_showControls;
+
+        if (Typing) { UpdateTyping(input); return; }
 
         // the anchor tool takes over the ground entirely; only the toolbar
         // above it keeps working, so its own button can close it again
@@ -376,23 +366,50 @@ public partial class IsoEditorScreen : IScreen
         }
     }
 
+    private bool Typing => _typingRoom || _typingTrigger || _typingSaveAs;
+
+    /// <summary>
+    /// Text entry for a room, dialogue or level name.
+    ///
+    /// This runs before the toolbar and returns, so while it is up nothing else
+    /// in the editor responds. It used to end only on Esc or on Enter with
+    /// something typed — so entering it by accident, which is easy when a
+    /// button sits half off the edge of the screen, left the editor apparently
+    /// dead: the mouse moved, no button did anything, and the only way out was
+    /// a key nothing told you to press. A click anywhere now ends it too,
+    /// taking what was typed if there is any and abandoning it otherwise.
+    /// </summary>
     private void UpdateTyping(InputState input)
     {
         _roomBuffer += input.TypedChars;
         if (input.Backspace && _roomBuffer.Length > 0) _roomBuffer = _roomBuffer[..^1];
-        if (input.Cancel) _typingRoom = _typingTrigger = _typingSaveAs = false;
-        if (input.Submit && _roomBuffer.Trim().Length > 0)
+        if (input.Cancel) { StopTyping(); Status("cancelled"); return; }
+        if (input.Tap.HasValue || input.AltTap.HasValue)
         {
-            if (_typingRoom) { _room = _roomBuffer.Trim(); Status($"room = {_room}"); }
-            else if (_typingSaveAs) SaveAs(_roomBuffer);
-            else
-            {
-                _trigger = _roomBuffer.Trim();
-                _tool = Tool.Trigger;
-                Status($"trigger dialogue = {_trigger}");
-            }
-            _typingRoom = _typingTrigger = _typingSaveAs = false;
+            if (_roomBuffer.Trim().Length > 0) CommitTyping();
+            else { StopTyping(); Status("cancelled"); }
+            return;
         }
+        if (input.Submit)
+        {
+            if (_roomBuffer.Trim().Length > 0) CommitTyping();
+            else { StopTyping(); Status("cancelled"); }
+        }
+    }
+
+    private void StopTyping() => _typingRoom = _typingTrigger = _typingSaveAs = false;
+
+    private void CommitTyping()
+    {
+        if (_typingRoom) { _room = _roomBuffer.Trim(); Status($"room = {_room}"); }
+        else if (_typingSaveAs) SaveAs(_roomBuffer);
+        else
+        {
+            _trigger = _roomBuffer.Trim();
+            _tool = Tool.Trigger;
+            Status($"trigger dialogue = {_trigger}");
+        }
+        StopTyping();
     }
 
     /// <summary>Returns true when the click belonged to the open dropdown.</summary>
@@ -970,6 +987,9 @@ public partial class IsoEditorScreen : IScreen
         DrawToolbar(batch);
         DrawHudText(batch);
         DrawRoomLabels(batch, origin);
+        // last, so both cover whatever they hang over
+        DrawControlsPanel(batch);
+        DrawOpenMenu(batch);
     }
 
     private static bool InSpan(Point? from, Point? to, Point tile) =>
@@ -1021,17 +1041,26 @@ public partial class IsoEditorScreen : IScreen
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.X, b.Rect.Y, 3, b.Rect.Height), edge);
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(b.Rect.Right - 3, b.Rect.Y, 3, b.Rect.Height), edge);
             Ui.DrawTextCentered(batch, _ctx.Font, b.Label,
-                b.Menu ? new Rectangle(b.Rect.X, b.Rect.Y, b.Rect.Width - 30, b.Rect.Height) : b.Rect,
-                b.Active ? Color.White : Color.White * 0.9f, 0.30f);
+                b.Menu ? new Rectangle(b.Rect.X, b.Rect.Y, b.Rect.Width - BtnArrow, b.Rect.Height) : b.Rect,
+                b.Active ? Color.White : Color.White * 0.9f, BtnText);
 
             // a little triangle marks the buttons that drop a palette down
             if (!b.Menu) continue;
-            int cx = b.Rect.Right - 22, cy = b.Rect.Center.Y - 4;
-            for (int r = 0; r < 10; r++)
+            int cx = b.Rect.Right - 18, cy = b.Rect.Center.Y - 3;
+            for (int r = 0; r < 8; r++)
                 Ui.FillRect(batch, _ctx.Pixel,
-                    new Rectangle(cx - 10 + r, cy + r, 21 - r * 2, 1), Color.White * 0.8f);
+                    new Rectangle(cx - 8 + r, cy + r, 17 - r * 2, 1), Color.White * 0.8f);
         }
 
+    }
+
+    /// <summary>
+    /// An open dropdown, drawn after everything else so it covers whatever it
+    /// hangs over — the level, the HUD, the room labels — until it closes.
+    /// It is opaque, so a list over a busy level stays readable.
+    /// </summary>
+    private void DrawOpenMenu(SpriteBatch batch)
+    {
         if (_openMenu == null) return;
         var items = MenuItems(_openMenu);
         var rects = MenuRects(_openMenu);
@@ -1039,10 +1068,63 @@ public partial class IsoEditorScreen : IScreen
         {
             bool hot = rects[i].Contains(_pointer);
             Ui.FillRect(batch, _ctx.Pixel, rects[i],
-                hot ? new Color(70, 70, 90, 250) : new Color(26, 26, 34, 250));
+                hot ? new Color(70, 70, 90, 255) : new Color(26, 26, 34, 255));
             Ui.FillRect(batch, _ctx.Pixel,
                 new Rectangle(rects[i].X, rects[i].Y, rects[i].Width, 2), Color.White * 0.3f);
-            Ui.DrawTextCentered(batch, _ctx.Font, items[i], rects[i], Color.White, 0.30f);
+            Ui.DrawTextCentered(batch, _ctx.Font, items[i], rects[i], Color.White, BtnText);
+        }
+    }
+
+    /// <summary>
+    /// Every control, in the middle of the screen, off by default. The Controls
+    /// button and the Insert key both toggle it. It used to be two permanent
+    /// lines of small text under the toolbar, which cost that space on every
+    /// frame to say things you need once.
+    /// </summary>
+    private static readonly string[] ControlLines =
+    {
+        "hold left            paint",
+        "hold Del             rub out",
+        "Shift+drag           fill a box at the placement height",
+        "Ctrl+Del, then drag  empty a box",
+        "Ctrl+drag            select a box: +/- raise and lower, Ctrl+C copy,",
+        "                     Ctrl+V paste at the cursor, Del empty, Esc drop",
+        "middle click         eyedropper: adopt that square's piece/height/room",
+        "Ctrl+Z               undo the last stroke",
+        "right-click trigger  open that level's dialogue file",
+        "scroll wheel         placement height in feet",
+        "ARROWS               pan (WASD are tool keys)",
+        "",
+        "1..9  ground family     B  next piece, then Random",
+        "D deco   O door   E enemy   P start   G trigger",
+        "R room name    N dialogue name    V save as",
+        "S save    T test",
+        "",
+        "Insert or the Controls button hides this again",
+    };
+
+    private void DrawControlsPanel(SpriteBatch batch)
+    {
+        if (!_showControls) return;
+        const float scale = 0.30f;
+        int lineH = (int)(_ctx.Font.LineSpacing * scale);
+        int h = ControlLines.Length * lineH + 90;
+        int w = 1900;
+        var box = new Rectangle((VirtualViewport.Width - w) / 2,
+            (VirtualViewport.Height - h) / 2, w, h);
+
+        Ui.FillRect(batch, _ctx.Pixel, box, new Color(10, 10, 16, 248));
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, box.Width, 4), Color.Yellow);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Bottom - 4, box.Width, 4), Color.Yellow);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, 4, box.Height), Color.Yellow);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.Right - 4, box.Y, 4, box.Height), Color.Yellow);
+
+        int y = box.Y + 46;
+        foreach (var line in ControlLines)
+        {
+            batch.DrawString(_ctx.Font, line, new Vector2(box.X + 60, y),
+                Color.White * 0.85f, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+            y += lineH;
         }
     }
 
@@ -1081,22 +1163,30 @@ public partial class IsoEditorScreen : IScreen
         string mode = _boxMode ? "  BOX DELETE: drag a box, Esc to cancel"
             : _selA != null ? "  SELECTION: +/- raise, Ctrl+C copy, Ctrl+V paste, Del empty, Esc drop"
             : "";
+        // height lives here now that the -/0 ft/+ buttons are gone; the wheel
+        // still sets it, so it needs somewhere to be read
         batch.DrawString(_ctx.Font,
-            $"{_levelName}.txt   room: {_room}   blocks: {_level.Blocks.Count}{mode}",
-            new Vector2(60, y), _boxMode ? Color.Red : Color.Yellow,
-            0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
-        batch.DrawString(_ctx.Font,
-            "hold left: paint   hold Del: erase   Shift+drag: fill   Ctrl+Del: box delete   " +
-            "Ctrl+drag: select   middle click: eyedropper   Ctrl+Z: undo   " +
-            "right-click a trigger: its dialogue file   scroll: height   ARROWS: pan",
-            new Vector2(60, y + 46), Color.White * 0.6f,
-            0f, Vector2.Zero, 0.26f, SpriteEffects.None, 0f);
+            $"{_levelName}.txt   room: {_room}   blocks: {_level.Blocks.Count}   " +
+            $"height: {_height} ft{mode}",
+            new Vector2(BarX0, y), _boxMode ? Color.Red : Color.Yellow,
+            0f, Vector2.Zero, 0.30f, SpriteEffects.None, 0f);
 
-        if (_typingRoom || _typingTrigger || _typingSaveAs)
-            batch.DrawString(_ctx.Font,
+        // Text entry stops the rest of the editor responding, so it says so
+        // where it cannot be missed rather than as one more line of HUD.
+        if (Typing)
+        {
+            var box = new Rectangle(VirtualViewport.Width / 2 - 900, 300, 1800, 200);
+            Ui.FillRect(batch, _ctx.Pixel, box, new Color(10, 10, 16, 245));
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, box.Width, 4), Color.Cyan);
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Bottom - 4, box.Width, 4), Color.Cyan);
+            Ui.DrawTextCentered(batch, _ctx.Font,
                 (_typingRoom ? "room name: " : _typingSaveAs ? "save as: " : "dialogue name: ")
                 + _roomBuffer + "_",
-                new Vector2(60, y + 100), Color.Cyan, 0f, Vector2.Zero, 0.4f, SpriteEffects.None, 0f);
+                new Rectangle(box.X, box.Y + 40, box.Width, 70), Color.Cyan, 0.42f);
+            Ui.DrawTextCentered(batch, _ctx.Font,
+                "Enter accepts  ·  Esc or a click anywhere abandons it",
+                new Rectangle(box.X, box.Y + 120, box.Width, 50), Color.White * 0.7f, 0.26f);
+        }
         else if (_statusTimer > 0)
             batch.DrawString(_ctx.Font, _status, new Vector2(60, y + 100), Color.LightGreen,
                 0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);

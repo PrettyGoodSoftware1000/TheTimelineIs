@@ -73,6 +73,9 @@ public struct InputState
     /// </summary>
     public bool Undo;
 
+    /// <summary>Insert this frame: shows or hides the editor's controls panel.</summary>
+    public bool ToggleControls;
+
     /// <summary>Ctrl+C / Ctrl+V this frame, for the same reason as Undo.</summary>
     public bool Copy, Paste;
 
