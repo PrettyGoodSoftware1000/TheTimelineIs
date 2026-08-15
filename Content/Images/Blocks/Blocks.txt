@@ -24,10 +24,68 @@ Piece: GrassBlockRoots.png
 Anchor: 325, 155
 Scale: 62
 
-Family: DirtBlock
-Piece: GrassBlock1.png
+Family: MossyStone.png
+Piece: MossyStone1.png
 Anchor: 325, 155
 Scale: 62
+Piece: MossyStone3.png
+Anchor: 325, 155
+Scale: 62
+Piece: MossyStone3.png
+Anchor: 325, 155
+Scale: 62
+Piece: MossyStone4.png
+Anchor: 325, 155
+Scale: 62
+Piece: MossyStoneMushroom1.png
+Anchor: 325, 155
+Scale: 62
+
+Family: MossyStoneTall.png
+Piece: MossyStoneTall1.png
+Anchor: 329, 171
+Scale: 62
+
+
+Family: DarkStoneSimple
+Piece: DarkStoneSimple1.png
+Anchor: 325, 155
+Scale: 62
+Piece: DarkStoneSimple2.png
+Anchor: 325, 155
+Scale: 62
+Piece: DarkStoneSimple3.png
+Anchor: 325, 155
+Scale: 62
+Piece: DarkStoneSimple4.png
+Anchor: 325, 155
+Scale: 62
+
+Family: DarkStoneWeird
+Piece: DarkStoneWeird1.png
+Anchor: 325, 155
+Scale: 62
+Piece: DarkStoneWeird2.png
+Anchor: 325, 155
+Scale: 62
+Piece: DarkStoneWeird3.png
+Anchor: 325, 155
+Scale: 62
+Piece: DarkStoneWeird4.png
+Anchor: 325, 155
+Scale: 62
+
+Family: GrayBrick
+Piece: GrayBrick1.png
+Anchor: 325, 155
+Scale: 62
+Piece: GrayBrick2.png
+Anchor: 325, 155
+Scale: 62
+Piece: GrayBrick3.png
+Anchor: 325, 155
+Scale: 62
+
 
 Family: StoneBlock
 Piece: GrassBlock1.png
