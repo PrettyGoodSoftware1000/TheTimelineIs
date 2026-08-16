@@ -82,6 +82,9 @@ public struct InputState
     /// <summary>Either Shift down — the editor's box-place modifier.</summary>
     public bool ShiftHeld;
 
+    /// <summary>Either Alt down — the editor writes every block's height while it is.</summary>
+    public bool AltHeld;
+
     /// <summary>Middle click this frame: the editor's eyedropper.</summary>
     public Point? MiddleTap;
 }

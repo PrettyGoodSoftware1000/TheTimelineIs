@@ -29,11 +29,11 @@ namespace TheTimelineIs.Desktop;
 /// </summary>
 public partial class IsoEditorScreen : IScreen
 {
-    private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger }
+    private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger, Room }
 
     /// <summary>Tools you drag across the ground; the rest are one click each.</summary>
     private static bool Paints(Tool t) =>
-        t is Tool.Block or Tool.Decoration or Tool.Trigger;
+        t is Tool.Block or Tool.Decoration or Tool.Trigger or Tool.Room;
 
     private readonly GameContext _ctx;
     private LevelData _level;
@@ -75,6 +75,15 @@ public partial class IsoEditorScreen : IScreen
     private Point _clipOrigin;
 
     private bool _showControls;             // the Controls panel, off by default
+    /// <summary>
+    /// The press in progress started on the toolbar or a dropdown, so nothing
+    /// it does afterwards touches the level.
+    /// </summary>
+    private bool _uiPress;
+
+    /// <summary>Alt is down: write every block's height across the level.</summary>
+    private bool _altHeights;
+
     private string? _openMenu;              // which button's dropdown is showing
     private readonly List<LevelData> _undo = new();
     private const int UndoDepth = 40;
@@ -84,7 +93,19 @@ public partial class IsoEditorScreen : IScreen
     /// <summary>Text size on the buttons, and the padding around it.</summary>
     private const float BtnText = 0.24f;
     private const int BtnPad = 30, BtnArrow = 26, BarX0 = 40;
-    private static readonly Rectangle ToolbarBand = new(0, 0, VirtualViewport.Width, 260);
+    private const int BarRight = VirtualViewport.Width - BarX0;
+
+    /// <summary>
+    /// How many rows the buttons wrapped onto last frame. The strip grows
+    /// downward rather than running off the right edge, so the band the ground
+    /// must not be clicked through has to grow with it.
+    /// </summary>
+    private int _barRows = 1;
+
+    private int BarBottom => BarY + _barRows * (BarH + BarGap) + 8;
+
+    /// <summary>The area the toolbar owns; clicks here never reach the level.</summary>
+    private Rectangle ToolbarBand => new(0, 0, VirtualViewport.Width, BarBottom);
 
     public IsoEditorScreen(GameContext ctx)
     {
@@ -188,12 +209,16 @@ public partial class IsoEditorScreen : IScreen
     private List<Btn> Buttons()
     {
         var list = new List<Btn>();
-        int x = BarX0;
+        int x = BarX0, row = 0;
 
         void Add(string label, string id, bool active, bool menu = false, int pad = BtnPad)
         {
             int w = (int)(_ctx.Font.MeasureString(label).X * BtnText) + pad + (menu ? BtnArrow : 0);
-            list.Add(new Btn(new Rectangle(x, BarY, w, BarH), label, id, active, menu));
+            // wrap onto the next row rather than run off the right edge, so a
+            // long level name or a new tool can never push a button off screen
+            if (x > BarX0 && x + w > BarRight) { row++; x = BarX0; }
+            list.Add(new Btn(new Rectangle(x, BarY + row * (BarH + BarGap), w, BarH),
+                label, id, active, menu));
             x += w + BarGap;
         }
 
@@ -209,12 +234,14 @@ public partial class IsoEditorScreen : IScreen
         Add("Start", "start", _tool == Tool.PlayerStart);
         Add($"Trigger: {_trigger}", "trigger", _tool == Tool.Trigger);
         Add($"Room: {_room}", "room", false);
+        Add("Place Room", "placeroom", _tool == Tool.Room);
         Add("Dialogue", "dialogue", false);
         Add(_problems == 0 ? "OK" : $"! {_problems}", "problems", false, pad: 34);
         Add("Undo", "undo", false);
         Add("Save", "save", false);
         Add("Save As", "saveas", false);
         Add("Test", "test", false);
+        _barRows = row + 1;
         return list;
     }
 
@@ -299,6 +326,7 @@ public partial class IsoEditorScreen : IScreen
             case "trigger": _tool = Tool.Trigger; return true;
             case "controls": _showControls = !_showControls; return true;
             case "room": _typingRoom = true; _roomBuffer = _room; return true;
+            case "placeroom": _tool = Tool.Room; return true;
             case "dialogue": _typingTrigger = true; _roomBuffer = _trigger; return true;
             case "problems": RecountProblems(); Status(ProblemText()); return true;
             case "undo": Undo(); return true;
@@ -315,11 +343,18 @@ public partial class IsoEditorScreen : IScreen
     {
         _pointer = input.PointerPos;
         _camera += input.PanDeltaNoLetters;   // WASD are tool keys here
+        Buttons();                            // refreshes the row count the band uses
         if (_statusTimer > 0) _statusTimer -= dt;
+
+        // A click on the toolbar or a dropdown owns the whole press. Without
+        // this the NEXT frame, with the button still down, would see the
+        // pointer over the ground and paint a block there.
+        if (!input.PointerHeld) _uiPress = false;
         _problemTimer -= dt;
         if (_problemTimer <= 0f) { RecountProblems(); _problemTimer = 0.4f; }
 
         if (input.ToggleControls) _showControls = !_showControls;
+        _altHeights = input.AltHeld;
 
         if (Typing) { UpdateTyping(input); return; }
 
@@ -338,18 +373,26 @@ public partial class IsoEditorScreen : IScreen
             Eyedropper(PickTile(drop.ToVector2(), origin) ?? IsoMath.ToGrid(drop.ToVector2(), origin));
 
         // a dropdown swallows the next click wherever it lands
-        if (_openMenu != null && UpdateMenu(input)) return;
+        if (_openMenu != null)
+        {
+            if (input.Tap.HasValue) _uiPress = true;
+            if (UpdateMenu(input)) return;
+        }
 
         if (input.Tap is Point tap && ToolbarBand.Contains(tap))
         {
+            _uiPress = true;
             foreach (var b in Buttons())
                 if (b.Rect.Contains(tap) && HitButton(b.Id))
                     return;
             return;   // clicks on the bar never fall through to the ground
         }
-
         UpdateHotkeys(input);
         _height = Math.Clamp(_height + input.ScrollDelta, 0, 12);
+
+        // keys and the wheel still work while a UI button is held down; only
+        // the tools that touch the level are held off until it is released
+        if (_uiPress) return;
 
         if (_boxMode) { UpdateBox(input, origin); return; }
         if (UpdateFill(input, origin)) return;
@@ -680,6 +723,11 @@ public partial class IsoEditorScreen : IScreen
                 _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
                 _level.Triggers.Add(new LevelTrigger { X = tile.X, Y = tile.Y, Dialogue = _trigger });
                 break;
+            // paints the room label onto blocks that already exist, so a room
+            // can be marked out after the ground is built
+            case Tool.Room when _level.BlockAt(tile) is LevelBlock rb:
+                rb.Room = _room;
+                break;
             case Tool.PlayerStart when _level.BlockAt(tile) != null:
                 _level.PlayerStarts.Remove(tile);
                 _level.PlayerStarts.Add(tile);
@@ -951,7 +999,8 @@ public partial class IsoEditorScreen : IScreen
                 Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, b.Height, origin, Color.White);
             foreach (var e in _level.Enemies.Where(e => e.X == b.X && e.Y == b.Y))
                 if (_ctx.Enemies.Get(e.Name) is EnemyDef def && def.SpriteFiles.Count > 0)
-                    Billboard(batch, $"{def.Folder}/{def.SpriteFiles[0]}", tile, b.Height, origin, Color.White * 0.9f);
+                    Cast(batch, $"{def.Folder}/{def.SpriteFiles[0]}", e.Name, tile, b.Height,
+                        origin, Color.White * 0.9f);
             if (_level.PlayerStarts.Contains(tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.LimeGreen * 0.35f);
             if (_level.TriggerAt(tile) is LevelTrigger trig)
@@ -979,6 +1028,19 @@ public partial class IsoEditorScreen : IScreen
                     if (!_level.Blocks.ContainsKey(new Point(x, y)))
                         DrawTop(batch, x, y, _height, origin, Color.Orange * 0.45f);
         }
+
+        // Alt writes every block's height on top of it, so a whole slope can be
+        // read at a glance instead of one square at a time under the cursor
+        if (_altHeights)
+            foreach (var b in _level.Blocks.Values)
+            {
+                var c = IsoMath.ToScreen(b.X, b.Y, b.Height, origin);
+                if (c.X < -IsoMath.TileW || c.X > VirtualViewport.Width + IsoMath.TileW ||
+                    c.Y < -IsoMath.TileH || c.Y > VirtualViewport.Height + IsoMath.TileH) continue;
+                Ui.DrawTextCentered(batch, _ctx.Font, b.Height.ToString(),
+                    new Rectangle((int)(c.X - IsoMath.TileW / 2f), (int)(c.Y - IsoMath.TileH / 2f),
+                        IsoMath.TileW, IsoMath.TileH), Color.White, 0.34f);
+            }
 
         DrawCursor(batch, origin);
         // the anchor tool covers the level but sits under the toolbar, so its
@@ -1024,7 +1086,7 @@ public partial class IsoEditorScreen : IScreen
     private void DrawToolbar(SpriteBatch batch)
     {
         Ui.FillRect(batch, _ctx.Pixel,
-            new Rectangle(0, 0, VirtualViewport.Width, BarY + BarH + 18), new Color(14, 14, 20, 235));
+            new Rectangle(0, 0, VirtualViewport.Width, BarBottom), new Color(14, 14, 20, 235));
 
         foreach (var b in Buttons())
         {
@@ -1090,6 +1152,7 @@ public partial class IsoEditorScreen : IScreen
         "Ctrl+drag            select a box: +/- raise and lower, Ctrl+C copy,",
         "                     Ctrl+V paste at the cursor, Del empty, Esc drop",
         "middle click         eyedropper: adopt that square's piece/height/room",
+        "hold Alt             write every block's height on top of it",
         "Ctrl+Z               undo the last stroke",
         "right-click trigger  open that level's dialogue file",
         "scroll wheel         placement height in feet",
@@ -1097,7 +1160,8 @@ public partial class IsoEditorScreen : IScreen
         "",
         "1..9  ground family     B  next piece, then Random",
         "D deco   O door   E enemy   P start   G trigger",
-        "R room name    N dialogue name    V save as",
+        "R room name    Place Room paints it onto blocks",
+        "N dialogue name    V save as",
         "S save    T test",
         "",
         "Insert or the Controls button hides this again",
@@ -1136,6 +1200,23 @@ public partial class IsoEditorScreen : IScreen
                 IsoMath.TileW, IsoMath.TileH), tint);
     }
 
+    /// <summary>
+    /// A character on the ground, sized exactly as the game sizes it: the same
+    /// 460px base height scaled by Config.txt's cast scale for that name. The
+    /// editor showed them at their raw pixel size before, so anything with a
+    /// scale line looked the wrong size against the blocks.
+    /// </summary>
+    private void Cast(SpriteBatch batch, string path, string name, Point tile, int height,
+        Vector2 origin, Color tint)
+    {
+        var tex = _ctx.Assets.LoadTexture(path);
+        float scale = _ctx.Config.CastScale(name);
+        int h = (int)(460 * scale);
+        int w = (int)(h * tex.Width / (float)tex.Height);
+        var c = IsoMath.ToScreen(tile.X, tile.Y, height, origin);
+        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 26 - h), w, h), tint);
+    }
+
     private void Billboard(SpriteBatch batch, string path, Point tile, int height, Vector2 origin, Color tint)
     {
         var tex = _ctx.Assets.LoadTexture(path);
@@ -1158,8 +1239,10 @@ public partial class IsoEditorScreen : IScreen
 
     private void DrawHudText(SpriteBatch batch)
     {
-        // editor is a dev tool: literal strings, not Strings.txt
-        int y = BarY + BarH + 26;
+        // editor is a dev tool: literal strings, not Strings.txt.
+        // The status line sits along the BOTTOM so it is never mistaken for
+        // part of the toolbar and never covers the ground being built.
+        int y = VirtualViewport.Height - 64;
         string mode = _boxMode ? "  BOX DELETE: drag a box, Esc to cancel"
             : _selA != null ? "  SELECTION: +/- raise, Ctrl+C copy, Ctrl+V paste, Del empty, Esc drop"
             : "";
@@ -1188,7 +1271,7 @@ public partial class IsoEditorScreen : IScreen
                 new Rectangle(box.X, box.Y + 120, box.Width, 50), Color.White * 0.7f, 0.26f);
         }
         else if (_statusTimer > 0)
-            batch.DrawString(_ctx.Font, _status, new Vector2(60, y + 100), Color.LightGreen,
+            batch.DrawString(_ctx.Font, _status, new Vector2(BarX0, y - 52), Color.LightGreen,
                 0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
     }
 }

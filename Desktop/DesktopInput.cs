@@ -104,6 +104,7 @@ public class DesktopInput : IInputSource
         state.DeleteHeld = keys.IsKeyDown(Keys.Delete) || keys.IsKeyDown(Keys.Back);
         state.CtrlHeld = keys.IsKeyDown(Keys.LeftControl) || keys.IsKeyDown(Keys.RightControl);
         state.ShiftHeld = keys.IsKeyDown(Keys.LeftShift) || keys.IsKeyDown(Keys.RightShift);
+        state.AltHeld = keys.IsKeyDown(Keys.LeftAlt) || keys.IsKeyDown(Keys.RightAlt);
         state.Undo = state.CtrlHeld && Pressed(keys, Keys.Z);
         state.ToggleControls = Pressed(keys, Keys.Insert);
         state.Copy = state.CtrlHeld && Pressed(keys, Keys.C);
