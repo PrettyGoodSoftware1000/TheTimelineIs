@@ -54,7 +54,7 @@ public class CharacterInstance
     public int ActionPoints;
 
     /// <summary>Fresh points granted at the start of every turn.</summary>
-    public const int ActionsPerTurn = 2;
+    public const int ActionsPerTurn = 10;
 
     /// <summary>The most that can be carried into the next turn unspent.</summary>
     public const int ActionRollover = 1;
@@ -85,6 +85,18 @@ public class CharacterInstance
 
     /// <summary>Extra damage this character takes from melee cards right now.</summary>
     public int CurseBonus => Curses.Sum(c => c.Amount);
+
+    /// <summary>
+    /// The card being channelled, if any. While this is set the character is
+    /// rooted: they cannot move, and the only card they can play is this one,
+    /// which releases it.
+    /// </summary>
+    public string ChannellingCard = "";
+
+    /// <summary>Turns still to wait before the channel can be released.</summary>
+    public int ChannelTurnsLeft;
+
+    public bool IsChannelling => ChannellingCard.Length > 0;
 
     /// <summary>Which shape a shapeshifter currently wears; blank for everyone else.</summary>
     public string Form = "";

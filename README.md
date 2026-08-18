@@ -44,6 +44,18 @@ dotnet run --project Desktop -- --devmap
 The game is an **isometric tactics** game: Title -> party select -> world map -> the destination opens
 `Content/Levels/TestLevel.txt` over a black void.
 
+- **Checkerboard families**: put `Checkerboard Dark:` and `Checkerboard Light:`
+  headings inside a `Family:` in `Blocks.txt` and it stops picking at random —
+  which half a square draws from is decided by its position, so a dark piece
+  never lands beside another dark one. Within a half the pieces are still
+  random, so several variants keep the pattern from looking stamped. The piece
+  dropdown does nothing for such a family; the grid chooses. The validator
+  errors if only one half is declared.
+- **`Placeholder*` art** in `Content/Images/Blocks/` is drawn 1:1 with virtual
+  pixels for checking alignment: `PlaceholderSurface.png` is exactly 360x180 —
+  one grid square's top face — and `PlaceholderBlock.png` is that face over a
+  760px body, the depth `DarkStoneSimple1.png` renders at. Dark variants of
+  both, plus a ready-made `PlaceholderCheckerboard` family.
 - **Decorations** (`Content/Images/Decorations/`, listed in `Decorations.txt`)
   sit on a square and block it: trees, rocks, and a treasure chest. The chest
   is scenery for now; it will hand out items when a character steps beside it.
@@ -128,6 +140,13 @@ The game is an **isometric tactics** game: Title -> party select -> world map ->
     card, the thief immediately gets a second pick from the hand of the shape it
     would have turned them into. Steal `Witch Form` off a Werewitch in wolf
     form and you may then take `Curse`, which the wolf's hand never offers.
+  - `Channel N` — the card is cast over **two turns**. The first play pays for
+    it and **roots** the caster: they cannot move, and the only card in their
+    hand is this one. The next turn's play aims and fires it, paying again.
+  - `FireTiles N` — every square the card covered **burns for N turns**. Anyone
+    who *starts* their turn on burning ground takes 5 damage, so crossing a
+    fire is free and standing in it is not. Fires age once per round, not once
+    per character, so three turns means three rounds however big the fight.
   - `Form X` — the caster changes into their form X, swapping art and hand.
     **Changing shape is free**: it spends neither the turn's card nor its
     movement, so a shapeshifter can shift and then actually do something. The
@@ -137,6 +156,11 @@ The game is an **isometric tactics** game: Title -> party select -> world map ->
   appears while its owner wears that shape, so the Werewitch's claws and
   curses never share a hand. The validator warns about a form with no card
   that changes out of it.
+- **`Sky Angle: N`** on a ranged card drops the shot out of the sky at N
+  degrees onto the square aimed at, instead of flying it flat from the caster.
+  The Gun-O-Mancer's **Magic Tomahawk Missile** uses it: 10 points to start
+  channelling, 10 more next turn to bring it down at 110°, 15 fire damage over
+  a blast of 5, and the ground burns for 3 turns.
 - **Cone cards** (`Type: [cone] AoE damage`) spray a staircase wedge measured
   in whole tiles: **1 tile at depth 1, 3 at depth 2, 5 at depth 3** — the point
   sits on the square in front of the caster and the wide end faces away.
@@ -160,12 +184,11 @@ The game is an **isometric tactics** game: Title -> party select -> world map ->
   `EnemyCards.txt` for enemies. Identical format — the only difference is
   whether a card's `Tags:` match a class in `Classes.txt` or an enemy in
   `Enemies.txt`.
-- **Action points.** Everyone gets **2 per turn** and may carry **at most 1**
+- **Action points.** Everyone gets **10 per turn** and may carry **at most 1**
   unspent point into the next, so a turn that spent nothing opens the next with
   three. **Walking costs nothing** — movement points and action points are
   separate budgets. Every card costs `Action Points: N` (default 1, `0` = free),
-  set per card in `PlayerCards.txt` / `EnemyCards.txt`. At the default cost that
-  is two cards a turn. Cards you cannot currently afford grey out individually,
+  set per card in `PlayerCards.txt` / `EnemyCards.txt`. Cards you cannot currently afford grey out individually,
   and the cost shows as orange pips on the card face.
 - **Enemies act through cards**, exactly as the party does — and are bound by
   the same action points. Their turn:

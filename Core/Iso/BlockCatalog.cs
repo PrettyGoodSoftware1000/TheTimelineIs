@@ -8,6 +8,9 @@ using TheTimelineIs.Core.Data;
 
 namespace TheTimelineIs.Core.Iso;
 
+/// <summary>Which half of a checkerboard family a piece belongs to.</summary>
+public enum Checker { None, Dark, Light }
+
 /// <summary>
 /// One piece of ground art: a whole .png drawn in a single draw, positioned by
 /// its anchor and sized by its scale.
@@ -28,6 +31,12 @@ public class GroundPiece
     public float Scale = 1f;
     /// <summary>Line in Blocks.txt where this piece starts, for error messages.</summary>
     public int Line;
+
+    /// <summary>
+    /// Which half of a checkerboard family this piece belongs to. None for an
+    /// ordinary family, where every piece is interchangeable.
+    /// </summary>
+    public Checker Shade = Checker.None;
 
     public string Path => $"{BlockCatalog.Folder}/{File}";
 
@@ -74,6 +83,26 @@ public static class BlockCatalog
 
     public static IReadOnlyList<GroundPiece> PiecesIn(string family) =>
         Pieces.Where(p => p.Family.Equals(family, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    /// <summary>
+    /// True when a family declared "Checkerboard Dark:" / "Checkerboard Light:"
+    /// headings. Such a family lays its two halves out in a checker: a square
+    /// takes a dark piece or a light one purely by its position, so no two
+    /// neighbours ever share a shade.
+    /// </summary>
+    public static bool IsCheckerboard(string family) =>
+        PiecesIn(family).Any(p => p.Shade != Checker.None);
+
+    /// <summary>
+    /// Which shade belongs on a square. (x + y) alternates across the grid in
+    /// both directions at once, which is exactly a checkerboard on an
+    /// isometric map as much as on a square one.
+    /// </summary>
+    public static Checker ShadeAt(Point tile) =>
+        ((tile.X + tile.Y) & 1) == 0 ? Checker.Dark : Checker.Light;
+
+    public static IReadOnlyList<GroundPiece> PiecesIn(string family, Checker shade) =>
+        PiecesIn(family).Where(p => p.Shade == shade).ToList();
 
     /// <summary>
     /// The piece a level line names. Levels may write "Grass" or "Grass.png";
@@ -126,6 +155,7 @@ public static class BlockCatalog
         var diag = Diagnostics.Current;
         var pieces = new List<GroundPiece>();
         string family = "";
+        var shade = Checker.None;
         GroundPiece? current = null;
 
         foreach (var (lineNo, raw) in AssetLoader.ReadNumbered(BlocksIndex, BlocksIndex))
@@ -146,6 +176,19 @@ public static class BlockCatalog
                     if (value.Length == 0)
                         diag.Error(BlocksIndex, lineNo, "'Family:' has no name after it");
                     family = value;
+                    shade = Checker.None;      // a new family starts plain
+                    current = null;
+                    break;
+
+                // "Checkerboard Dark:" / "Checkerboard Light:" head the two
+                // halves of a checkerboard family. Every Piece after one of
+                // them belongs to that half until the next heading or family.
+                case "checkerboard dark":
+                    shade = Checker.Dark;
+                    current = null;
+                    break;
+                case "checkerboard light":
+                    shade = Checker.Light;
                     current = null;
                     break;
 
@@ -168,7 +211,8 @@ public static class BlockCatalog
                     // the family, so it is not reported: every diagnostic
                     // raises the startup popup, and a placeholder that lives
                     // for weeks would raise it every single launch.
-                    current = new GroundPiece { File = value, Family = family, Line = lineNo };
+                    current = new GroundPiece
+                        { File = value, Family = family, Line = lineNo, Shade = shade };
                     pieces.Add(current);
                     break;
 

@@ -168,7 +168,8 @@ public partial class IsoEditorScreen : IScreen
     private bool RandomBrush => _pieceIndex < 0;
 
     private string PieceLabel =>
-        RandomBrush ? "Random"
+        BlockCatalog.IsCheckerboard(FamilyName) ? "Checkerboard"
+        : RandomBrush ? "Random"
         : FamilyPieces.Count > 0
             ? Strip(FamilyPieces[Math.Clamp(_pieceIndex, 0, FamilyPieces.Count - 1)].File)
             : "-";
@@ -190,8 +191,18 @@ public partial class IsoEditorScreen : IScreen
     /// comes out stone, a block never comes out a surface. The choice is then
     /// written into the level, so a level looks the same every time it loads.
     /// </summary>
-    private string BrushPiece()
+    private string BrushPiece(Point tile)
     {
+        // A checkerboard family ignores the piece picker entirely: the square's
+        // position decides which half it draws from, so a dark piece can never
+        // land beside another dark one however the brush was set.
+        if (BlockCatalog.IsCheckerboard(FamilyName))
+        {
+            var half = BlockCatalog.PiecesIn(FamilyName, BlockCatalog.ShadeAt(tile));
+            if (half.Count == 0) return "";
+            return half[Rng.Next(half.Count)].File;
+        }
+
         var pieces = FamilyPieces;
         if (pieces.Count == 0) return "";
         return (RandomBrush ? pieces[Rng.Next(pieces.Count)]
@@ -698,7 +709,7 @@ public partial class IsoEditorScreen : IScreen
         switch (_tool)
         {
             case Tool.Block:
-                string type = BrushPiece();
+                string type = BrushPiece(tile);
                 _level.Blocks[tile] = new LevelBlock
                     { X = tile.X, Y = tile.Y, Height = _height, Type = type, Room = _room };
                 break;
@@ -844,12 +855,12 @@ public partial class IsoEditorScreen : IScreen
     {
         BeginEdit();
         var (x0, y0, x1, y1) = Span(a, b);
-        // BrushPiece() is called per square, so a Random brush scatters the
+        // BrushPiece is called per square, so a Random brush scatters the
         // family across the box instead of stamping one piece over all of it
         for (int x = x0; x <= x1; x++)
             for (int y = y0; y <= y1; y++)
                 _level.Blocks[new Point(x, y)] = new LevelBlock
-                    { X = x, Y = y, Height = _height, Type = BrushPiece(), Room = _room };
+                    { X = x, Y = y, Height = _height, Type = BrushPiece(new Point(x, y)), Room = _room };
         Status($"filled {(x1 - x0 + 1) * (y1 - y0 + 1)} squares with " +
                $"{(RandomBrush ? $"random {FamilyName}" : PieceLabel)} at {_height} ft");
     }

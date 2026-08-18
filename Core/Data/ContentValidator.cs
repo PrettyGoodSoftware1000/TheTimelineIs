@@ -28,6 +28,7 @@ public static class ContentValidator
         ValidateEnemies(enemies, enemyCards, diag);
         ValidateLevels(enemies, diag);
         ValidateStrings(strings, diag);
+        ValidateGround(diag);
         ValidateCastAnimations(classes, enemies, assets);
     }
 
@@ -50,6 +51,32 @@ public static class ContentValidator
         // Load reports anything wrong itself, in the terms the author needs
         foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
             SpriteAnimation.Load(assets, path);
+    }
+
+    /// <summary>
+    /// A checkerboard family needs both halves. With only one, every square
+    /// would want the shade that isn't there and the family would paint
+    /// nothing at all — silently, which is the worst way to fail.
+    /// </summary>
+    private static void ValidateGround(Diagnostics diag)
+    {
+        foreach (var family in BlockCatalog.Families)
+        {
+            if (!BlockCatalog.IsCheckerboard(family)) continue;
+            var pieces = BlockCatalog.PiecesIn(family);
+            int line = pieces.Count > 0 ? pieces[0].Line : 0;
+
+            foreach (var shade in new[] { Checker.Dark, Checker.Light })
+                if (BlockCatalog.PiecesIn(family, shade).Count == 0)
+                    diag.Error(BlockCatalog.BlocksIndex, line,
+                        $"family '{family}' is a checkerboard but declares no " +
+                        $"'Checkerboard {shade}:' pieces, so half its squares would draw nothing");
+
+            if (pieces.Any(p => p.Shade == Checker.None))
+                diag.Warn(BlockCatalog.BlocksIndex, line,
+                    $"family '{family}' mixes checkerboard pieces with plain ones; the plain " +
+                    "pieces belong to no shade and will never be painted");
+        }
     }
 
     /// <summary>Checks that hold for any deck: art, sounds, shapes, effects.</summary>
@@ -92,6 +119,17 @@ public static class ContentValidator
                         $"'{card.Name}': carries Armor and damage, so it aims at enemies " +
                         "and will armour whatever it hits");
             }
+            // a channelled card is paid for twice, but on two different turns,
+            // so what matters is that ONE play fits inside one turn's points
+            if (card.IsChannelled && card.ActionCost > CharacterInstance.ActionsPerTurn)
+                diag.Warn(card.Source, card.Line,
+                    $"'{card.Name}': costs {card.ActionCost} to play but a turn only grants " +
+                    $"{CharacterInstance.ActionsPerTurn} points, so it can never be started");
+            if (card.FireTileTurns > 0 && !card.TargetsGround)
+                diag.Warn(card.Source, card.Line,
+                    $"'{card.Name}': FireTiles needs ground to burn, so the card should be " +
+                    "AoE damage or a [cone]");
+
             if (card.Delivery == Delivery.Cone && card.Kind != CardKind.AoEDamage)
                 diag.Warn(card.Source, card.Line,
                     $"'{card.Name}': a [cone] card should be 'AoE damage' — the cone is its area");
@@ -309,6 +347,7 @@ public static class ContentValidator
             "iso_stole", "iso_steal_over", "iso_nothing_to_steal", "iso_no_cards", "iso_needs_other",
             "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_no_actions",
             "iso_steal_pick", "iso_steal_pick_form", "iso_empty_square",
+            "iso_channel_start", "iso_channelling", "iso_channel_rooted", "iso_fire_lit",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

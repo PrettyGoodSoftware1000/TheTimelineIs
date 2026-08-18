@@ -66,7 +66,27 @@ public class IsoLevelScreen : IScreen
     private List<Card> _hand = new();
     private Card? _selectedCard;
     private readonly List<CharacterInstance> _targets = new();  // chosen targets, in click order
-    private HashSet<Point> _blastSet = new();    // purple: tiles the area would cover
+    private HashSet<Point> _blastSet = new();
+
+    /// <summary>Ground the card in flight will set alight when it lands.</summary>
+    private HashSet<Point> _burnArea = new();
+
+    /// <summary>The square a sky-angled shot is falling onto.</summary>
+    private Point _skyTarget;
+
+    /// <summary>
+    /// Burning ground: a square, and how many more turns it stays alight.
+    /// Anyone who STARTS their turn on one takes damage, so walking across a
+    /// fire and off it again is free — standing in it is not.
+    /// </summary>
+    private readonly Dictionary<Point, int> _fires = new();
+
+    /// <summary>Runs the fire art, and everything else that loops on the ground.</summary>
+    private float _clock;
+
+    /// <summary>The looping animation burning squares are drawn with, if the art exists.</summary>
+    private SpriteAnimation? _fireAnim;
+    private bool _fireAnimTried;
 
     // a steal waiting for the thief to choose what to take
     private CharacterInstance? _stealVictim;
@@ -301,6 +321,11 @@ public class IsoLevelScreen : IScreen
         foreach (var loot in who.Stolen)
             if (FindCard(loot.CardName, loot.FromEnemyDeck) is Card borrowed)
                 hand.Add(borrowed);
+
+        // mid-channel there is exactly one thing to do: let go of it
+        if (who.IsChannelling)
+            hand = hand.Where(c =>
+                c.Name.Equals(who.ChannellingCard, StringComparison.OrdinalIgnoreCase)).ToList();
         return hand;
     }
 
@@ -343,6 +368,7 @@ public class IsoLevelScreen : IScreen
         _camera += input.PanDelta;
         if (_toastTimer > 0) _toastTimer -= dt;
         Recoil.Update(Everyone, dt);
+        _clock += dt;
         UpdateCastAnimations(dt);
 
         if (_tap is Point logTap && LogToggleRect.Contains(logTap))
@@ -560,7 +586,18 @@ public class IsoLevelScreen : IScreen
         var current = Current!;
         current.MovePoints = current.MoveMax;
         current.RefreshActionPoints();
+        AgeFires(current);
         _overlayKey = null;
+
+        // a channelled card roots its caster: no movement until it is released
+        if (current.IsChannelling)
+        {
+            if (current.ChannelTurnsLeft > 0) current.ChannelTurnsLeft--;
+            current.MovePoints = 0;
+            Log(_ctx.Strings.Format("iso_channelling",
+                ("name", current.Name), ("card", current.ChannellingCard)));
+        }
+
         if (!BurnAtTurnStart(current)) { NextTurn(); return; }
         if (current.IsPlayer)
         {
@@ -571,6 +608,20 @@ public class IsoLevelScreen : IScreen
         {
             _mode = Mode.EnemyTurn;
         }
+    }
+
+    /// <summary>
+    /// Fires age once per round rather than once per character, so a three-turn
+    /// fire lasts three rounds however many people are in the fight. The round
+    /// is marked by the first character in the order taking their turn.
+    /// </summary>
+    private void AgeFires(CharacterInstance current)
+    {
+        if (_fires.Count == 0 || _order.Count == 0 || _order[_turn] != _order.First(o => o.Alive))
+            return;
+        foreach (var tile in _fires.Keys.ToList())
+            if (--_fires[tile] <= 0)
+                _fires.Remove(tile);
     }
 
     // ---------------- overlays ----------------
@@ -803,6 +854,11 @@ public class IsoLevelScreen : IScreen
         if (mover == null || !mover.Alive) return;
         // a card spends the turn's movement, but Nimble hands some back — so the
         // gate is the points on hand, never "has a card been played yet"
+        if (mover.IsChannelling)
+        {
+            Toast(_ctx.Strings.Format("iso_channel_rooted", ("card", mover.ChannellingCard)));
+            return;
+        }
         if (_mode is Mode.PlayerTurn or Mode.PlayerTarget && mover.MovePoints <= 0)
         {
             Toast(_ctx.Strings.Get("iso_move_spent"));
@@ -901,7 +957,27 @@ public class IsoLevelScreen : IScreen
         if (card == null) return;
         var caught = (card.TargetsAllies ? (IEnumerable<CharacterInstance>)LivingParty : VisibleEnemies)
             .Where(c => area.Contains(Tile(c))).ToList();
+        // the ground the card covered is remembered here, because by the time
+        // the hits resolve the aim and the area are gone
+        _burnArea = card.FireTileTurns > 0 ? new HashSet<Point>(area) : new HashSet<Point>();
+        _skyTarget = aim;
         PlayCard(caught, aim);
+    }
+
+    /// <summary>Sets ground alight, or tops up a square that is already burning.</summary>
+    private void LightFires(IEnumerable<Point> tiles, int turns, StringBuilder report)
+    {
+        int lit = 0;
+        foreach (var tile in tiles)
+        {
+            if (_level.BlockAt(tile) == null) continue;   // no ground, nothing to burn
+            _fires.TryGetValue(tile, out int already);
+            _fires[tile] = Math.Max(already, turns);
+            lit++;
+        }
+        if (lit > 0)
+            report.AppendLine(_ctx.Strings.Format("iso_fire_lit",
+                ("count", lit.ToString()), ("turns", turns.ToString())));
     }
 
     /// <summary>How many enemies this card needs clicked before it can fire.</summary>
@@ -969,10 +1045,36 @@ public class IsoLevelScreen : IScreen
             _actor.MovePoints = 0;   // a card ends this turn's movement, unless Nimble gives it back
         _overlayKey = null;
 
+        // A channelled card's FIRST play only starts the channel: it is paid
+        // for, the caster is rooted, and nothing else happens until a later
+        // turn releases it. The release comes back through here with the
+        // channel already open, and runs the card for real.
+        if (card.IsChannelled && !_actor.IsChannelling)
+        {
+            _actor.ChannellingCard = card.Name;
+            _actor.ChannelTurnsLeft = card.ChannelTurns;
+            _actor.MovePoints = 0;
+            Log(_ctx.Strings.Format("iso_channel_start",
+                ("name", _actor.Name), ("card", card.Name)));
+            _ctx.Sounds.Play(card.CastingSound);
+            StartCastAnimation(_actor);
+            _actingCard = null;
+            _victims.Clear();
+            ResumeAfterAction();
+            return;
+        }
+        if (card.IsChannelled) ClearChannel(_actor);
+
         _ctx.Sounds.Play(card.CastingSound);
         StartCastAnimation(_actor!);
         _mode = Mode.Acting;
         EnterAct(Act.Casting, card.CastingTime ?? _ctx.Sounds.Duration(card.CastingSound));
+    }
+
+    private static void ClearChannel(CharacterInstance c)
+    {
+        c.ChannellingCard = "";
+        c.ChannelTurnsLeft = 0;
     }
 
     private void EnterAct(Act act, float duration)
@@ -994,6 +1096,21 @@ public class IsoLevelScreen : IScreen
         switch (_act)
         {
             case Act.Casting when _actingCard is { Delivery: Delivery.Ranged } ranged:
+                // a shot out of the sky needs no target on the ground and no
+                // caster to leave from - it falls onto the square that was aimed at
+                if (ranged.SkyAngle != 0f)
+                {
+                    _projTo = IsoMath.ToScreen(_skyTarget.X, _skyTarget.Y,
+                        HeightAt(_skyTarget), Origin);
+                    // walk back up the incoming line until the shot is off screen
+                    float rad = MathHelper.ToRadians(ranged.SkyAngle);
+                    var dir = new Vector2((float)Math.Cos(rad), (float)Math.Sin(rad));
+                    _projFrom = _projTo - dir * SkyRunUp;
+                    _projRotation = rad;
+                    EnterAct(Act.Projectile, SkyRunUp / Math.Max(1f, ranged.Speed * IsoMath.TileW));
+                    break;
+                }
+
                 var aim = _victims.FirstOrDefault();
                 // a self-cast has nobody to fly at, but its effects still have
                 // to resolve — skip the projectile, not the hit phase
@@ -1036,6 +1153,12 @@ public class IsoLevelScreen : IScreen
         bool lastBlow = _hitIndex >= card.HitEvents.Count;
         if (lastBlow && card.Effects.Count > 0)
             ApplyEffects(card, struck, report);
+        // the ground catches on the last blow, whether or not anyone was standing on it
+        if (lastBlow && card.FireTileTurns > 0 && _burnArea.Count > 0)
+        {
+            LightFires(_burnArea, card.FireTileTurns, report);
+            _burnArea.Clear();
+        }
         if (report.Length > 0) Log(report.ToString().TrimEnd());
 
         if (!lastBlow)
@@ -1123,7 +1246,8 @@ public class IsoLevelScreen : IScreen
                 {
                     ChangeForm(_actor, effect.Text, report);
                 }
-                // Leap already did its work when the approach was planned
+                // Leap already did its work when the approach was planned, and
+                // Channel is handled where the card is played rather than here
                 continue;
             }
             foreach (var c in hit.Where(c => c.Alive))
@@ -1327,6 +1451,16 @@ public class IsoLevelScreen : IScreen
     /// </summary>
     private bool BurnAtTurnStart(CharacterInstance c)
     {
+        // burning ground bites whoever STARTS their turn on it, so crossing a
+        // fire costs nothing and standing in it costs every turn
+        if (_fires.ContainsKey(Tile(c)))
+        {
+            var fire = new StringBuilder();
+            ApplyHit(c, Data.Effects.FireTileDamage, "Fire", fire);
+            Log(fire.ToString().TrimEnd());
+            if (!c.Alive) return false;
+        }
+
         // curses tick down on their victim's turn too, independently of each other
         if (c.Curses.Count > 0)
         {
@@ -1543,6 +1677,7 @@ public class IsoLevelScreen : IScreen
             if (_level.DecorationAt(tile) is LevelDecoration deco)
                 Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, block.Height,
                     Color.White * alpha);
+            if (_fires.ContainsKey(tile)) DrawFire(batch, tile, block.Height, alpha);
 
             if (byTile.TryGetValue(tile, out var standing))
                 foreach (var c in standing)
@@ -1559,6 +1694,49 @@ public class IsoLevelScreen : IScreen
     private void DrawBlock(SpriteBatch batch, LevelBlock block) =>
         BlockCatalog.Draw(batch, _ctx.Assets, block.Type,
             IsoMath.ToScreen(block.X, block.Y, block.Height, Origin), Color.White);
+
+    /// <summary>
+    /// Burning ground. The art is a looping sprite sheet at
+    /// Content/Images/Effects/FireTile.png with the usual companion .txt; if it
+    /// isn't there the square still burns, drawn as a pulsing orange wash, so
+    /// the mechanic works before the art exists rather than after.
+    /// </summary>
+    private void DrawFire(SpriteBatch batch, Point tile, int height, float alpha)
+    {
+        if (!_fireAnimTried)
+        {
+            _fireAnimTried = true;
+            if (AssetLoader.Exists(FireArtPath))
+                _fireAnim = SpriteAnimation.Load(_ctx.Assets, FireArtPath);
+        }
+
+        var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
+        if (_fireAnim is SpriteAnimation anim && anim.FrameCount > 0)
+        {
+            // loops for as long as the square burns
+            int frame = anim.FrameAt(_clock % Math.Max(0.001f, anim.Duration));
+            var src = anim.SourceRect(frame);
+            int w = IsoMath.TileW;
+            int h = (int)(w * src.Height / (float)Math.Max(1, src.Width));
+            batch.Draw(anim.Sheet,
+                new Rectangle((int)(c.X - w / 2f), (int)(c.Y + IsoMath.TileH / 2f - h), w, h),
+                src, Color.White * alpha);
+            return;
+        }
+
+        // placeholder: a wash that breathes, so a burning square is unmistakable
+        float pulse = 0.42f + 0.18f * (float)Math.Sin(_clock * 5.0 + (tile.X + tile.Y));
+        Fill(batch, tile, height, new Color(255, 120, 30) * pulse * alpha);
+        Edge(batch, tile, height, new Color(255, 190, 60) * alpha);
+    }
+
+    private const string FireArtPath = "Content/Images/Effects/FireTile.png";
+
+    /// <summary>
+    /// How far back along its angle a sky shot starts, in virtual pixels. Well
+    /// past the top of the screen, so it is already falling when it appears.
+    /// </summary>
+    private const float SkyRunUp = 3000f;
 
     private Rectangle DiamondRect(Point tile, int height)
     {

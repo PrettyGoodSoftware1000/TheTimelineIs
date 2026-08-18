@@ -112,6 +112,26 @@ public class Card
     /// <summary>The form this card changes its caster into, if any.</summary>
     public string? BecomesForm => EffectNamed(Data.Effects.Form)?.Text is { Length: > 0 } f ? f : null;
 
+    /// <summary>
+    /// A card cast over two turns. The first play starts the channel and roots
+    /// the caster; the next turn's play aims and fires it. The amount is how
+    /// many of the caster's turns the channel takes before it can be released,
+    /// so "Channel 1" is "start now, fire on your next turn".
+    /// </summary>
+    public int ChannelTurns => EffectNamed(Data.Effects.Channel)?.Amount ?? 0;
+
+    public bool IsChannelled => ChannelTurns > 0;
+
+    /// <summary>Squares this card sets alight, for as many turns as the amount says.</summary>
+    public int FireTileTurns => EffectNamed(Data.Effects.FireTiles)?.Amount ?? 0;
+
+    /// <summary>
+    /// Degrees the projectile falls from, measured clockwise from straight
+    /// right. 0 means the shot flies flat from the caster; anything else drops
+    /// it out of the sky at that angle instead, ignoring where the caster is.
+    /// </summary>
+    public float SkyAngle;
+
     /// <summary>Total damage per target, split across the hit sequence.</summary>
     public int DamagePerTarget => Kind == CardKind.SingleTargetHits ? Damage * Hits : Damage;
 
@@ -171,7 +191,7 @@ public class CardLibrary
     {
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
-        "explosion range", "action points", "effects", "effect", "speed", "range",
+        "explosion range", "action points", "sky angle", "effects", "effect", "speed", "range",
         "form", "tags", "type", "sounds",
     };
 
@@ -324,6 +344,12 @@ public class CardLibrary
                 if (int.TryParse(value, out int ap) && ap >= 0) card.ActionCost = ap;
                 else diag.Error(card.Source, lineNo,
                     $"'{card.Name}': Action Points must be 0 or more, got '{value}'");
+                break;
+
+            case "sky angle":
+                if (ParseFloat(value) is float sky) card.SkyAngle = sky;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Sky Angle must be a number of degrees, got '{value}'");
                 break;
 
             case "explosion range":

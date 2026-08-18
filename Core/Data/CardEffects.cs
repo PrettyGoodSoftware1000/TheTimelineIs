@@ -28,8 +28,18 @@ public static class Effects
     public const string Form = "Form";
     public const string Steal = "Steal";
 
+    /// <summary>
+    /// The card is cast over two turns. The first play starts the channel and
+    /// locks the caster in place; the second aims and fires it.
+    /// </summary>
+    public const string Channel = "Channel";
+
+    /// <summary>Leaves burning ground behind wherever the card landed.</summary>
+    public const string FireTiles = "FireTiles";
+
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
-    public static readonly string[] Known = { Burning, Armor, Nimble, Leap, Curse, Form, Steal };
+    public static readonly string[] Known =
+        { Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
     public const int BurnDamagePerStack = 5;
@@ -52,6 +62,12 @@ public static class Effects
     /// </summary>
     public const int StealTurns = 3;
 
+    /// <summary>Damage a burning square deals to whoever starts their turn on it.</summary>
+    public const int FireTileDamage = 5;
+
+    /// <summary>How many turns a burning square lasts before it goes out.</summary>
+    public const int FireTileTurns = 3;
+
     public static bool IsKnown(string name) =>
         Known.Any(k => k.Equals(name, StringComparison.OrdinalIgnoreCase));
 
@@ -61,6 +77,7 @@ public static class Effects
 
     /// <summary>Effects that act on the caster rather than on whatever was hit.</summary>
     public static bool IsSelfCast(string name) =>
+        name.Equals(Channel, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Nimble, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Leap, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Form, StringComparison.OrdinalIgnoreCase);

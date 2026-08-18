@@ -16,11 +16,10 @@
 #                                            player clicks (AoE still damages
 #                                            everyone; the click only aims it)
 #                    "Multiple Projectiles" - one shot per target (default))
-# Action Points:  (What the card costs to play. Everyone gets 2 action points
+# Action Points:  (What the card costs to play. Everyone gets 10 action points
 #                  a turn and can carry at most 1 unspent point into the next
-#                  turn, so a 1-point card is "two a turn". 0 makes a card
-#                  free. Walking costs no action points at all. Missing line
-#                  means 1.)
+#                  turn. 0 makes a card free. Walking costs no action points at
+#                  all. Missing line means 1.)
 # Projectile Art: (File in Content/Images/Effects/. Art must point RIGHT;
 #                  it is rotated to match the shot's travel angle, so a shot
 #                  heading down-right appears rotated clockwise.)
@@ -44,12 +43,28 @@
 #                                cards, for 10 of their turns. Curses stack
 #                                and each keeps its own clock.
 #                    Form X    - the caster changes into their form X, which
-#                                swaps their art and their available cards.)
+#                                swaps their art and their available cards.
+#                    Steal N   - take a card off anyone, friend or foe, for N
+#                                of the thief's own turns.
+#                    Channel N - the card is cast over two turns. The first
+#                                play pays for it and ROOTS the caster, who can
+#                                then play nothing else until it is released;
+#                                the next turn's play aims and fires it, paying
+#                                again. N is how many turns the wait takes.
+#                    FireTiles N - every square the card covered burns for N
+#                                turns. Anyone who STARTS their turn on burning
+#                                ground takes 5 damage, so crossing it is free
+#                                and standing in it is not.)
 # Form:           (Optional. The card only appears while its owner wears this
 #                  form - see the class's "Form:" lines in Classes.txt.)
 # Explosion Range:(AoE cards only: blast radius in tiles around the impact
 #                  point. Separate from Range, which is only how far the card
 #                  reaches. Shown as a purple area while aiming.)
+# Sky Angle:      (Optional, [ranged] only. Degrees clockwise from straight
+#                  right. Leave it out and the shot flies flat from the caster;
+#                  set it and the shot falls out of the sky at that angle onto
+#                  the square aimed at instead. 110 comes down steeply from the
+#                  upper left.)
 # Speed:          (FEET PER SECOND for the projectile, or for the melee walk
 #                  out and back. The screen is 12 feet tall. Longer distances
 #                  therefore take longer. See the note at the bottom.)
@@ -256,4 +271,23 @@ Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Lift a card off anyone - friend or foe. They lose it, you hold it. Play it now, or on either of your next 2 turns.
 Bottom Right: 0 Stolen
+[]
+
+[]
+Card Name: Magic Tomahawk Missile
+Tags: Gun-O-Mancer
+Type: [ranged] AoE damage. Single Projectile
+Action Points: 10
+Explosion Range: 5
+Range: 12
+Effects: Channel 1, FireTiles 3
+Sky Angle: 110
+Projectile Art: Placeholder.png
+Casting Sound: [FireballCast.wav]
+Casting Time: 0.6
+Speed: 22
+Hit Sound: [FireballBoom.wav]
+Effect: AoE 15 fire damage to enemies
+Card Text: Play it once to start channelling - 10 points, and you cannot move. Play it again next turn for 10 more to bring it down out of the sky. 15 fire damage over a wide blast, and the ground burns for 3 turns.
+Bottom Right: 15 Fire
 []
