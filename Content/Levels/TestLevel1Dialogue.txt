@@ -1,0 +1,12 @@
+# Dialogue for TestLevel. A trigger square placed in the editor (G tool)
+# names one of these blocks; stepping on it plays the block once.
+# Format matches the old mission scripts: "Speaker: text".
+
+Dialogue: Intro
+Dirtbag: Goddamn if my balls ain't itching.
+Cyborg: SCANNING. THAT IS A PERSONAL PROBLEM.
+Dirtbag: Everything's personal when it's your balls.
+
+Dialogue: DoorWarning
+Gun-O-Mancer: Something's breathing on the other side of that door.
+Dirtbag: Then let's go say hello.
