@@ -26,65 +26,65 @@ Scale: 62
 
 Family: MossyStone.png
 Piece: MossyStone1.png
-Anchor: 325, 155
+Anchor: 405, 303
+Scale: 62
+Piece: MossyStone2.png
+Anchor: 395, 280
 Scale: 62
 Piece: MossyStone3.png
-Anchor: 325, 155
-Scale: 62
-Piece: MossyStone3.png
-Anchor: 325, 155
+Anchor: 407, 293
 Scale: 62
 Piece: MossyStone4.png
-Anchor: 325, 155
+Anchor: 406, 268
 Scale: 62
 Piece: MossyStoneMushroom1.png
-Anchor: 325, 155
+Anchor: 403, 296
 Scale: 62
 
 Family: MossyStoneTall.png
 Piece: MossyStoneTall1.png
-Anchor: 329, 171
-Scale: 62
+Anchor: 398, 293
+Scale: 58.899
 
 
 Family: DarkStoneSimple
 Piece: DarkStoneSimple1.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 400, 300
+Scale: 57.407
 Piece: DarkStoneSimple2.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 405, 298
+Scale: 57.407
 Piece: DarkStoneSimple3.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 404, 301
+Scale: 57.41
 Piece: DarkStoneSimple4.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 400, 301
+Scale: 57.407
 
 Family: DarkStoneWeird
 Piece: DarkStoneWeird1.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 405, 295
+Scale: 58.899
 Piece: DarkStoneWeird2.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 403, 296
+Scale: 58.899
 Piece: DarkStoneWeird3.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 401, 295
+Scale: 58.899
 Piece: DarkStoneWeird4.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 407, 296
+Scale: 58.899
 
 Family: GrayBrick
 Piece: GrayBrick1.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 405, 252
+Scale: 58.899
 Piece: GrayBrick2.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 409, 253
+Scale: 58.899
 Piece: GrayBrick3.png
-Anchor: 325, 155
-Scale: 62
+Anchor: 403, 250
+Scale: 58.899
 
 
 Family: StoneBlock
