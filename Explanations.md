@@ -160,6 +160,33 @@ which way the run points; if it comes out sideways, use the other one.
 
 ---
 
+## Doors vs area transitions
+
+Two ways to get between rooms, and they behave differently.
+
+| | Door | Area transition |
+|---|---|---|
+| Looks like | A door on a square | An orange patch of squares |
+| Blocks you | Yes, until opened | No, you walk onto it |
+| What it does | Opens, revealing the room behind | Moves the whole party elsewhere |
+| The old room | Stays visible | Goes dark again |
+| In combat | Openable | Does nothing |
+
+**Making a transition:** pick *Area transition* (last entry in the Door menu)
+and paint a patch — usually 4 squares, one per party member. Paint another
+patch somewhere else. Right-click the first, then the second: a teal line joins
+them. That line is editor-only.
+
+**Grey means unlinked.** Orange means it goes somewhere.
+
+Squares that touch **side-on** are one pad. Corner-to-corner are two separate
+pads — handy when you want two next to each other.
+
+Landing on a pad doesn't bounce you back: it's disarmed until *everyone* is off
+it. Once they are, one person stepping back on makes the return trip.
+
+---
+
 ## ffmpeg
 
 The sprite tool shells out to `ffmpeg` to pull frames from a video. **"on the
