@@ -97,8 +97,37 @@ public partial class IsoEditorScreen : IScreen
     /// </summary>
     private bool _uiPress;
 
-    /// <summary>Alt is down: write every block's height across the level.</summary>
-    private bool _altHeights;
+    /// <summary>Alt: write every block's height across the level. Tap to latch, hold for a glance.</summary>
+    private readonly TapHold _heights = new();
+
+    /// <summary>Space: paint every block with its room's colour, on the same rule.</summary>
+    private readonly TapHold _rooms = new();
+
+    /// <summary>
+    /// Room colours, in the order rooms are handed them. Chosen to stay apart
+    /// from each other and from the overlays already on the ground — red is the
+    /// box delete, orange the box fill, cyan the selection, green a player
+    /// start, violet a trigger — so a room wash is never mistaken for one.
+    /// </summary>
+    private static readonly Color[] RoomColors =
+    {
+        new(80, 150, 255), new(255, 190, 60), new(120, 220, 120), new(255, 120, 200),
+        new(160, 130, 255), new(90, 220, 220), new(240, 130, 90), new(200, 220, 110),
+    };
+
+    /// <summary>
+    /// Which colour each room wears. Keyed off the room names in alphabetical
+    /// order so a room keeps its colour as blocks are added and removed, rather
+    /// than shuffling every time the level's block order changes.
+    /// </summary>
+    private List<string> RoomOrder() =>
+        _level.RoomNames.OrderBy(r => r, StringComparer.OrdinalIgnoreCase).ToList();
+
+    private Color RoomColor(string room)
+    {
+        int i = RoomOrder().FindIndex(r => r.Equals(room, StringComparison.OrdinalIgnoreCase));
+        return i < 0 ? Color.Gray : RoomColors[i % RoomColors.Length];
+    }
 
     private string? _openMenu;              // which button's dropdown is showing
     private readonly List<LevelData> _undo = new();
@@ -383,9 +412,13 @@ public partial class IsoEditorScreen : IScreen
         if (_problemTimer <= 0f) { RecountProblems(); _problemTimer = 0.4f; }
 
         if (input.ToggleControls) _showControls = !_showControls;
-        _altHeights = input.AltHeld;
 
         if (Typing) { UpdateTyping(input); return; }
+
+        // after the typing guard: Space belongs to the room name being typed,
+        // not to the overlay, while a name is being entered
+        _heights.Update(input.AltHeld, dt);
+        _rooms.Update(input.SpaceHeld, dt);
 
         // the anchor tool takes over the ground entirely; only the toolbar
         // above it keeps working, so its own button can close it again
@@ -810,6 +843,9 @@ public partial class IsoEditorScreen : IScreen
         _undo.Clear();
         _selA = _selB = _selStart = _selEnd = null;
         _boxMode = false;
+        // a latched overlay belongs to the level it was turned on over
+        _heights.Clear();
+        _rooms.Clear();
         RecountProblems();
         Status($"opened {name}.txt ({_level.Blocks.Count} blocks)");
     }
@@ -826,8 +862,10 @@ public partial class IsoEditorScreen : IScreen
             if (_level.BlockAt(new Point(t.X, t.Y)) == null) n++;
         foreach (var d in _level.Decorations)
             if (_level.BlockAt(new Point(d.X, d.Y)) == null) n++;
+        // a body bigger than one tile needs its whole footprint, same as the
+        // startup validator demands
         foreach (var e in _level.Enemies)
-            if (_level.BlockAt(new Point(e.X, e.Y)) == null) n++;
+            n += FootprintGaps(e);
         foreach (var d in _level.Doors)
             n += d.Tiles.Count(t => _level.BlockAt(t) == null);
         n += _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
@@ -836,13 +874,24 @@ public partial class IsoEditorScreen : IScreen
         _problems = n;
     }
 
+    /// <summary>
+    /// How many squares of an enemy's body have no block under them. One for a
+    /// normal enemy standing over the void; up to four for a Living Stone.
+    /// </summary>
+    private int FootprintGaps(LevelEnemy e)
+    {
+        int size = _ctx.Enemies.Get(e.Name)?.Size ?? 1;
+        return Pathfinder.Footprint(new Point(e.X, e.Y), size)
+            .Count(t => _level.BlockAt(t) == null);
+    }
+
     /// <summary>A short account of what is wrong, for the toolbar button.</summary>
     private string ProblemText()
     {
         var bits = new List<string>();
         int orphans = _level.Triggers.Count(t => _level.BlockAt(new Point(t.X, t.Y)) == null)
             + _level.Decorations.Count(d => _level.BlockAt(new Point(d.X, d.Y)) == null)
-            + _level.Enemies.Count(e => _level.BlockAt(new Point(e.X, e.Y)) == null)
+            + _level.Enemies.Sum(FootprintGaps)
             + _level.Doors.Sum(d => d.Tiles.Count(t => _level.BlockAt(t) == null))
             + _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
         if (orphans > 0) bits.Add($"{orphans} thing(s) floating with no block under them");
@@ -1035,10 +1084,14 @@ public partial class IsoEditorScreen : IScreen
                 Billboard(batch, "Content/Images/Decorations/Door.png", tile, b.Height, origin, Color.White);
             if (_level.DecorationAt(tile) is LevelDecoration deco)
                 Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, b.Height, origin, Color.White);
-            foreach (var e in _level.Enemies.Where(e => e.X == b.X && e.Y == b.Y))
+            // An enemy goes down when the LAST square of its body is painted,
+            // not the first. Drawn on its anchor, a body covering more than one
+            // tile was buried by its own other squares — every one of them has
+            // a greater X+Y, so every one of them painted over its legs.
+            foreach (var e in EnemiesEndingAt(tile))
                 if (_ctx.Enemies.Get(e.Name) is EnemyDef def && def.SpriteFiles.Count > 0)
-                    Cast(batch, $"{def.Folder}/{def.SpriteFiles[0]}", e.Name, tile, b.Height,
-                        origin, Color.White * 0.9f, def.Size);
+                    Cast(batch, $"{def.Folder}/{def.SpriteFiles[0]}", e.Name,
+                        new Point(e.X, e.Y), b.Height, origin, Color.White * 0.9f, def.Size);
             if (_level.PlayerStarts.Contains(tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.LimeGreen * 0.35f);
             if (_level.TriggerAt(tile) is LevelTrigger trig)
@@ -1054,6 +1107,29 @@ public partial class IsoEditorScreen : IScreen
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Orange * 0.45f);
             if (InSpan(_selStart, _selEnd, tile) || InSpan(_selA, _selB, tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Cyan * 0.35f);
+            if (_rooms.On)
+                DrawTop(batch, b.X, b.Y, b.Height, origin, RoomColor(b.Room) * 0.55f);
+
+            // The height goes down INSIDE this loop, not in a pass of its own
+            // afterwards. Drawn afterwards, the number for a block hidden
+            // behind a taller neighbour still showed — landing on the face of
+            // the block in front of it and reading as that block's height.
+            // Here a nearer block paints over it, exactly as it does the art.
+            if (_heights.On) DrawHeightLabel(batch, b, origin);
+        }
+
+        // A body whose far corner has no block under it was never reached by
+        // the loop above, so it would vanish while being placed. It is drawn
+        // here instead — the problem counter is already complaining about it,
+        // and an invisible enemy is a worse way to find that out.
+        foreach (var e in _level.Enemies)
+        {
+            int size = _ctx.Enemies.Get(e.Name)?.Size ?? 1;
+            var far = new Point(e.X + size - 1, e.Y + size - 1);
+            if (_level.BlockAt(far) != null) continue;
+            if (_ctx.Enemies.Get(e.Name) is not EnemyDef def || def.SpriteFiles.Count == 0) continue;
+            Cast(batch, $"{def.Folder}/{def.SpriteFiles[0]}", e.Name, new Point(e.X, e.Y),
+                _level.BlockAt(new Point(e.X, e.Y))?.Height ?? 0, origin, Color.Red * 0.8f, size);
         }
 
         // a fill box covers squares that have no block yet, so it is painted
@@ -1067,20 +1143,8 @@ public partial class IsoEditorScreen : IScreen
                         DrawTop(batch, x, y, _height, origin, Color.Orange * 0.45f);
         }
 
-        // Alt writes every block's height on top of it, so a whole slope can be
-        // read at a glance instead of one square at a time under the cursor
-        if (_altHeights)
-            foreach (var b in _level.Blocks.Values)
-            {
-                var c = IsoMath.ToScreen(b.X, b.Y, b.Height, origin);
-                if (c.X < -IsoMath.TileW || c.X > VirtualViewport.Width + IsoMath.TileW ||
-                    c.Y < -IsoMath.TileH || c.Y > VirtualViewport.Height + IsoMath.TileH) continue;
-                Ui.DrawTextCentered(batch, _ctx.Font, b.Height.ToString(),
-                    new Rectangle((int)(c.X - IsoMath.TileW / 2f), (int)(c.Y - IsoMath.TileH / 2f),
-                        IsoMath.TileW, IsoMath.TileH), Color.White, 0.34f);
-            }
-
         DrawCursor(batch, origin);
+        if (_rooms.On) DrawRoomKey(batch);
         // the anchor tool covers the level but sits under the toolbar, so its
         // own button stays reachable to close it
         DrawAnchorTool(batch);
@@ -1091,6 +1155,18 @@ public partial class IsoEditorScreen : IScreen
         DrawControlsPanel(batch);
         DrawOpenMenu(batch);
     }
+
+    /// <summary>
+    /// The enemies whose body finishes on this square — its far corner, the one
+    /// with the greatest X+Y. That is the point in the painter's order after
+    /// which nothing the body stands on can be drawn over it.
+    /// </summary>
+    private IEnumerable<LevelEnemy> EnemiesEndingAt(Point tile) =>
+        _level.Enemies.Where(e =>
+        {
+            int size = _ctx.Enemies.Get(e.Name)?.Size ?? 1;
+            return e.X + size - 1 == tile.X && e.Y + size - 1 == tile.Y;
+        });
 
     private static bool InSpan(Point? from, Point? to, Point tile) =>
         from is Point a && to is Point b &&
@@ -1195,6 +1271,8 @@ public partial class IsoEditorScreen : IScreen
         "right-click trigger  open that level's dialogue file",
         "scroll wheel         placement height in feet",
         "ARROWS               pan (WASD are tool keys)",
+        "ALT   block heights   SPACE  room colours",
+        "  tap either to leave it up; hold it for a glance",
         "",
         "1..9  ground family     B  next piece, then Random",
         "D deco   O door   E enemy   P start   G trigger",
@@ -1256,7 +1334,9 @@ public partial class IsoEditorScreen : IScreen
         int w = (int)(h * tex.Width / (float)tex.Height);
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, origin);
         c.Y += (size - 1) * (IsoMath.TileH / 2f);
-        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 26 - h), w, h), tint);
+        // hung by its feet, exactly as the game does it — see AssetLoader.BottomPadding
+        int slack = (int)(h * _ctx.Assets.BottomPadding(tex));
+        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 26 - h + slack), w, h), tint);
     }
 
     private void Billboard(SpriteBatch batch, string path, Point tile, int height, Vector2 origin, Color tint)
@@ -1266,6 +1346,52 @@ public partial class IsoEditorScreen : IScreen
         int w = Math.Min(tex.Width, 420);
         int h = (int)(w * tex.Height / (float)tex.Width);
         batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 30 - h), w, h), tint);
+    }
+
+    /// <summary>
+    /// One block's height, written on its top face. Odd numbers are magenta so
+    /// a run of steps can be counted without reading every digit — the eye
+    /// picks up the alternation on its own.
+    /// </summary>
+    private void DrawHeightLabel(SpriteBatch batch, LevelBlock b, Vector2 origin)
+    {
+        var c = IsoMath.ToScreen(b.X, b.Y, b.Height, origin);
+        if (c.X < -IsoMath.TileW || c.X > VirtualViewport.Width + IsoMath.TileW ||
+            c.Y < -IsoMath.TileH || c.Y > VirtualViewport.Height + IsoMath.TileH) return;
+
+        var face = new Rectangle((int)(c.X - IsoMath.TileW / 2f), (int)(c.Y - IsoMath.TileH / 2f),
+            IsoMath.TileW, IsoMath.TileH);
+        var ink = (b.Height & 1) == 1 ? Color.Magenta : Color.White;
+        // a dark plate under the digits, so a number on pale ground still reads
+        Ui.FillRect(batch, _ctx.Pixel,
+            new Rectangle(face.Center.X - 54, face.Center.Y - 32, 108, 64), Color.Black * 0.55f);
+        Ui.DrawTextCentered(batch, _ctx.Font, b.Height.ToString(), face, ink, 0.34f);
+    }
+
+    /// <summary>
+    /// The legend for the room overlay: which colour is which room, and how
+    /// many blocks each one holds. Without it the wash is pretty but unreadable.
+    /// </summary>
+    private void DrawRoomKey(SpriteBatch batch)
+    {
+        var rooms = RoomOrder();
+        if (rooms.Count == 0) return;
+
+        int y = BarBottom + 20;
+        var panel = new Rectangle(BarX0, y, 620, 56 + rooms.Count * 52);
+        Ui.FillRect(batch, _ctx.Pixel, panel, Color.Black * 0.72f);
+        batch.DrawString(_ctx.Font, "rooms", new Vector2(panel.X + 20, panel.Y + 12),
+            Color.White, 0f, Vector2.Zero, 0.3f, SpriteEffects.None, 0f);
+
+        for (int i = 0; i < rooms.Count; i++)
+        {
+            int row = panel.Y + 56 + i * 52;
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(panel.X + 20, row, 40, 36), RoomColor(rooms[i]));
+            int count = _level.Blocks.Values.Count(b =>
+                b.Room.Equals(rooms[i], StringComparison.OrdinalIgnoreCase));
+            batch.DrawString(_ctx.Font, $"{rooms[i]}   {count}",
+                new Vector2(panel.X + 76, row), Color.White, 0f, Vector2.Zero, 0.3f, SpriteEffects.None, 0f);
+        }
     }
 
     private void DrawRoomLabels(SpriteBatch batch, Vector2 origin)

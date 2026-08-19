@@ -1668,7 +1668,11 @@ public class IsoLevelScreen : IScreen
         int h = (int)(460 * scale);
         int w = (int)(h * tex.Width / (float)tex.Height);
         var foot = FootOf(c);
-        return new Rectangle((int)(foot.X - w / 2f), (int)(foot.Y - h), w, h);
+        // the art is hung by its FEET — the lowest row with anything drawn on
+        // it — not by the bottom edge of its canvas, so empty space under the
+        // feet doesn't sink the character into the floor
+        int slack = (int)(h * _ctx.Assets.BottomPadding(tex));
+        return new Rectangle((int)(foot.X - w / 2f), (int)(foot.Y - h + slack), w, h);
     }
 
     public void Draw(SpriteBatch batch)

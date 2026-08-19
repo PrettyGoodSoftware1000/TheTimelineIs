@@ -85,6 +85,12 @@ public struct InputState
     /// <summary>Either Alt down — the editor writes every block's height while it is.</summary>
     public bool AltHeld;
 
+    /// <summary>Space down — the editor's room-colour overlay, on the same tap/hold rule.</summary>
+    public bool SpaceHeld;
+
+    /// <summary>Ctrl+D this frame: turns the map's dev placement mode on and off.</summary>
+    public bool ToggleDevMap;
+
     /// <summary>Middle click this frame: the editor's eyedropper.</summary>
     public Point? MiddleTap;
 }

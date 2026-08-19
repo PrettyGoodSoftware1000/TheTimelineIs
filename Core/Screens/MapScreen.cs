@@ -33,6 +33,7 @@ public class MapScreen : IScreen
     // dev-mode placement state
     private enum DevPhase { Idle, TypingName, TypingMission }
     private DevPhase _devPhase = DevPhase.Idle;
+    private bool _devWasOn;
     private Point _devPoint;
     private string _devName = "";
     private string _devMission = "";
@@ -47,10 +48,23 @@ public class MapScreen : IScreen
         var size = AssetLoader.DisplaySize(_map, AssetKind.Map) * _scale;
         _mapSize = new Point((int)size.X, (int)size.Y);
         _destinations = DestinationTable.Load();
+        // starting with --devmap is not news; only a change made with Ctrl+D is
+        _devWasOn = ctx.DevWriter != null;
     }
 
     public void Update(InputState input, float dt)
     {
+        // Ctrl+D is handled centrally, so it works from any screen. Noticing it
+        // here is what gives it something to say: the map is the only place the
+        // mode does anything, so this is where it is worth reporting.
+        bool devNow = _ctx.DevWriter != null;
+        if (devNow != _devWasOn)
+        {
+            _devWasOn = devNow;
+            Toast(_ctx.Strings.Get(devNow ? "devmap_on" : "devmap_off"));
+            if (!devNow) _devPhase = DevPhase.Idle;   // don't leave a half-typed name up
+        }
+
         bool typing = _devPhase != DevPhase.Idle;
         if (typing)
         {

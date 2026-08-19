@@ -20,6 +20,8 @@ public class DesktopPlatform : IPlatform
 
     public IInputSource CreateInput(Game game) => new DesktopInput(game);
 
+    public IDevDestinationWriter? CreateDevWriter() => new DesktopDevDestinationWriter();
+
     public TheTimelineIs.Core.Screens.IScreen? CreateEditorScreen(TheTimelineIs.Core.GameContext ctx) =>
         _editor ? new IsoEditorScreen(ctx) : null;
 }

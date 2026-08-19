@@ -27,6 +27,8 @@ devmap_hint = DEV MAP: click anywhere to place a destination
 devmap_name_prompt = Name this place, then press Enter:
 devmap_mission_prompt = Mission folder name, then press Enter:
 devmap_saved = Destination saved to Destinations.txt.
+devmap_on = Dev map placement ON. Ctrl+D turns it off again.
+devmap_off = Dev map placement OFF.
 
 # --- Party select ---
 party_title = Pick your 3 characters.

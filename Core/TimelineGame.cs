@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheTimelineIs.Core.Audio;
@@ -86,8 +87,25 @@ public class TimelineGame : Game
         var input = _input.Poll(_viewport, dt);
         if (input.ToggleRuler)
             _rulerVisible = !_rulerVisible;
+        if (input.ToggleDevMap)
+            ToggleDevMap();
         _ctx.Screen.Update(input, dt);
         base.Update(gameTime);
+    }
+
+    /// <summary>
+    /// Ctrl+D turns map dev placement on and off in the running game, so
+    /// marking a level no longer means quitting and relaunching with --devmap.
+    /// The flag lives on the context, which the map screen reads every frame,
+    /// so it takes effect immediately — and on the next visit to the map if it
+    /// was pressed somewhere else. --devmap still works: it just starts here.
+    /// </summary>
+    private void ToggleDevMap()
+    {
+        _ctx.DevWriter = _ctx.DevWriter == null ? _platform.CreateDevWriter() : null;
+        Console.WriteLine(_ctx.DevWriter == null
+            ? "[devmap] off"
+            : "[devmap] on — tap an empty spot on the map to place a destination");
     }
 
     private bool _rulerVisible;

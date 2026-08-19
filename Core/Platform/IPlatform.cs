@@ -15,8 +15,15 @@ public interface IPlatform
     ISaveStore SaveStore { get; }
     ILogStore LogStore { get; }
 
-    /// <summary>Non-null only when running with --devmap on desktop.</summary>
+    /// <summary>Non-null when the game STARTED with --devmap on desktop.</summary>
     IDevDestinationWriter? DevWriter { get; }
+
+    /// <summary>
+    /// A writer made on demand, for turning dev placement on with Ctrl+D while
+    /// the game is already running. Null on a platform that cannot write back
+    /// to the source tree, which is every platform but desktop.
+    /// </summary>
+    IDevDestinationWriter? CreateDevWriter();
 
     /// <summary>The level editor, when launched with --editor (desktop only); null otherwise.</summary>
     IScreen? CreateEditorScreen(GameContext ctx);

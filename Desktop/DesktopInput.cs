@@ -105,7 +105,9 @@ public class DesktopInput : IInputSource
         state.CtrlHeld = keys.IsKeyDown(Keys.LeftControl) || keys.IsKeyDown(Keys.RightControl);
         state.ShiftHeld = keys.IsKeyDown(Keys.LeftShift) || keys.IsKeyDown(Keys.RightShift);
         state.AltHeld = keys.IsKeyDown(Keys.LeftAlt) || keys.IsKeyDown(Keys.RightAlt);
+        state.SpaceHeld = keys.IsKeyDown(Keys.Space);
         state.Undo = state.CtrlHeld && Pressed(keys, Keys.Z);
+        state.ToggleDevMap = state.CtrlHeld && Pressed(keys, Keys.D);
         state.ToggleControls = Pressed(keys, Keys.Insert);
         state.Copy = state.CtrlHeld && Pressed(keys, Keys.C);
         state.Paste = state.CtrlHeld && Pressed(keys, Keys.V);

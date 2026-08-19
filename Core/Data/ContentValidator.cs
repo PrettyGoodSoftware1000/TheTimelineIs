@@ -365,6 +365,7 @@ public static class ContentValidator
             "battle_win", "battle_turn", "battle_hit", "battle_down",
             "death_title", "death_reload", "death_no_save",
             "devmap_hint", "devmap_name_prompt", "devmap_mission_prompt", "devmap_saved",
+            "devmap_on", "devmap_off",
             "error_title", "error_continue", "error_more", "error_log", "error_counts",
             "iso_enter", "iso_explore_hint", "iso_spotted", "iso_done", "iso_clear",
             "iso_end_turn", "iso_move_left", "iso_out_of_range",
