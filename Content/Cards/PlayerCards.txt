@@ -16,10 +16,7 @@
 #                                            player clicks (AoE still damages
 #                                            everyone; the click only aims it)
 #                    "Multiple Projectiles" - one shot per target (default))
-# Action Points:  (What the card costs to play. Everyone gets 10 action points
-#                  a turn and can carry at most 1 unspent point into the next
-#                  turn. 0 makes a card free. Walking costs no action points at
-#                  all. Missing line means 1.)
+# Action Points:  (What the card costs to play. 1 action point carries over.)
 # Projectile Art: (File in Content/Images/Effects/. Art must point RIGHT;
 #                  it is rotated to match the shot's travel angle, so a shot
 #                  heading down-right appears rotated clockwise.)
@@ -78,8 +75,7 @@
 #                  before the next. Health drops once per blow, timed to its
 #                  sound - not all at once. The Effect line's total damage is
 #                  split evenly across the blows.)
-# Effect:         (Machine-readable numbers. The player never sees this.
-#                  Keep the same wording pattern per Type.)
+# Effect:         (Machine-readable numbers.)
 # Card Text:      (Flavor text the player reads on the card.)
 # Bottom Right:   (Damage TYPE for the corner label, e.g. "15 Fire" -> Fire.
 #                  The number is ignored and recomputed live as total damage
@@ -96,7 +92,7 @@
 Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
-Action Points: 1
+Action Points: 6
 Explosion Range: 3
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]
@@ -112,7 +108,7 @@ Bottom Right: 15 Fire
 Card Name: Shank
 Tags: Dirtbag
 Type: [melee] Single target, X hits.
-Action Points: 1
+Action Points: 4
 Effects: Nimble 4
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -128,7 +124,7 @@ Bottom Right: 12 Stabby
 Card Name: Pew Pew
 Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
-Action Points: 1
+Action Points: 5
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -143,7 +139,7 @@ Bottom Right: 10 Energy
 Card Name: Hot Lead
 Tags: Gun-O-Mancer
 Type: [cone] AoE damage
-Action Points: 1
+Action Points: 7
 Range: 3
 Effects: Burning 1
 Casting Sound: [Blank.wav]
@@ -151,7 +147,7 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [FireballCast.wav]
 Effect: AoE 5 stabby damage to enemies
-Card Text: Spray a cone of hot lead. 5 Stabby damage and they catch fire.
+Card Text: Spray a cone of hot lead and light guys on fire.
 Bottom Right: 5 Stabby
 []
 
@@ -159,8 +155,8 @@ Bottom Right: 5 Stabby
 Card Name: Reinforce
 Tags: Cyborg
 Type: [ranged] Single target, X hits.
-Action Points: 1
-Range: 5
+Action Points: 5
+Range: 3
 Effects: Armor 5
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
@@ -193,7 +189,7 @@ Card Name: Claw 'Em
 Tags: Werewitch
 Form: Werewolf
 Type: [melee] Single target, X hits.
-Action Points: 1
+Action Points: 3
 Effects: Leap 5
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -210,7 +206,7 @@ Card Name: Witch Form
 Tags: Werewitch
 Form: Werewolf
 Type: [ranged] Single target, X hits.
-Action Points: 1
+Action Points: 2
 Effects: Form Witch
 Range: 1
 Projectile Art: Placeholder.png
@@ -228,7 +224,7 @@ Card Name: Wolf Form
 Tags: Werewitch
 Form: Witch
 Type: [ranged] Single target, X hits.
-Action Points: 1
+Action Points: 2
 Effects: Form Werewolf, Nimble 5
 Range: 1
 Projectile Art: Placeholder.png
@@ -246,16 +242,16 @@ Card Name: Curse
 Tags: Werewitch
 Form: Witch
 Type: [ranged] Single target, X hits.
-Action Points: 1
+Action Points: 2
 Effects: Curse 3
 Range: 6
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
-Casting Time: Use Sound Time
-Speed: 20
+Casting Time: 1
+Speed: 10
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: Mark one of them. Melee hits them for 3 more, for 10 turns.
+Card Text: Curse some guy to take +3 melee damage per hit.
 Bottom Right: 0 Cursed
 []
 
@@ -263,7 +259,7 @@ Bottom Right: 0 Cursed
 Card Name: Beg, Borrow, but Mostly Steal
 Tags: Dirtbag
 Type: [ranged] Single target, X hits.
-Action Points: 1
+Action Points: 5
 Effects: Steal 3
 Range: 4
 Projectile Art: Placeholder.png
