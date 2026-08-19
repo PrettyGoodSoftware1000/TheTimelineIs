@@ -772,6 +772,15 @@ public partial class IsoEditorScreen : IScreen
             case Tool.Door when _level.BlockAt(tile) is LevelBlock db:
             {
                 var (label, width, alongY) = DoorSizes[_doorIndex];
+                // A door joining a room to itself opens onto nothing. It is the
+                // easy mistake to make — the Room box still says whatever you
+                // last typed — so it is refused here rather than found at
+                // startup, and the message says what to do about it.
+                if (db.Room.Equals(_room, StringComparison.OrdinalIgnoreCase))
+                {
+                    Status($"both sides would be '{_room}' — set Room to the room this opens INTO");
+                    break;
+                }
                 var placed = new LevelDoor
                 {
                     X = tile.X, Y = tile.Y, RoomA = db.Room, RoomB = _room,
@@ -782,7 +791,11 @@ public partial class IsoEditorScreen : IScreen
                 var run = placed.Tiles.ToHashSet();
                 _level.Doors.RemoveAll(d => d.Tiles.Any(run.Contains));
                 _level.Doors.Add(placed);
-                Status($"{label.ToLowerInvariant()} joins {db.Room} <-> {_room}");
+
+                int off = placed.Tiles.Count(t => _level.BlockAt(t) == null);
+                Status(off > 0
+                    ? $"{label.ToLowerInvariant()}: {db.Room} <-> {_room}, but {off} square(s) hang off the ground"
+                    : $"{label.ToLowerInvariant()}: {db.Room} <-> {_room}");
                 break;
             }
             case Tool.Enemy when _level.BlockAt(tile) != null && _ctx.Enemies.EnemyNames.Count > 0:

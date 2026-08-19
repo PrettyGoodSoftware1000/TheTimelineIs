@@ -144,13 +144,38 @@ public class LevelData
                 // width and axis are optional so every level written before
                 // wide doors existed still reads as a run of one square
                 case "door" when Num(0, out int ox) && Num(1, out int oy) && parts.Length >= 4:
+                {
+                    // A mistyped width or axis is reported rather than quietly
+                    // becoming a one-square door pointing the wrong way — a
+                    // door in the wrong place is exactly the kind of thing
+                    // nobody notices until the level is unfinishable.
+                    int width = 1;
+                    if (parts.Length >= 5)
+                    {
+                        if (!int.TryParse(parts[4], out width) || width < 1)
+                        {
+                            diag.Error(path, lineNo,
+                                $"door at {ox},{oy}: width must be a whole number of squares, " +
+                                $"got '{parts[4]}'");
+                            width = 1;
+                        }
+                    }
+                    bool alongY = false;
+                    if (parts.Length >= 6)
+                    {
+                        string axis = parts[5].Trim();
+                        if (axis.Equals("y", StringComparison.OrdinalIgnoreCase)) alongY = true;
+                        else if (!axis.Equals("x", StringComparison.OrdinalIgnoreCase))
+                            diag.Error(path, lineNo,
+                                $"door at {ox},{oy}: the axis must be X or Y, got '{axis}'");
+                    }
                     level.Doors.Add(new LevelDoor
                     {
                         X = ox, Y = oy, RoomA = parts[2], RoomB = parts[3],
-                        Width = parts.Length >= 5 && int.TryParse(parts[4], out int dw) && dw > 0 ? dw : 1,
-                        AlongY = parts.Length >= 6 && parts[5].Trim().StartsWith("y", StringComparison.OrdinalIgnoreCase),
+                        Width = width, AlongY = alongY,
                     });
                     break;
+                }
                 case "enemy" when Num(0, out int ex) && Num(1, out int ey) && parts.Length >= 3:
                     level.Enemies.Add(new LevelEnemy { X = ex, Y = ey, Name = parts[2] });
                     break;

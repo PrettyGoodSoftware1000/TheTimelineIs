@@ -322,6 +322,17 @@ public static class ContentValidator
                     diag.Error(path, 0,
                         $"door at {door.X},{door.Y} joins '{door.RoomA}' and '{door.RoomB}' " +
                         "but at least one of those rooms has no blocks");
+                // a door whose two sides are the same room reveals nothing when
+                // opened, so it is a wall with a handle. Almost always means
+                // the editor's current room was left on the room being stood in.
+                // a warning, not an error: it still works as a barrier, and a
+                // one-room level might want exactly that. It is almost always
+                // a mistake though, so it does not pass unmentioned.
+                if (door.RoomA.Equals(door.RoomB, StringComparison.OrdinalIgnoreCase))
+                    diag.Warn(path, 0,
+                        $"door at {door.X},{door.Y} joins '{door.RoomA}' to itself, so opening it " +
+                        "reveals nothing — paint the far side as its own room and place the door " +
+                        "with Room set to that name");
                 foreach (var t in door.Tiles)
                     if (level.BlockAt(t) == null)
                         diag.Error(path, 0,
@@ -329,6 +340,12 @@ public static class ContentValidator
                                 ? $"the {door.Width}-wide door at {door.X},{door.Y} runs over {t.X},{t.Y}, " +
                                   "which has no block under it"
                                 : $"door at {door.X},{door.Y} has no block under it");
+                // two doors on one square: only the first is ever found, so the
+                // other can never be opened
+                foreach (var t in door.Tiles)
+                    if (level.Doors.Count(d => d.Covers(t)) > 1)
+                        diag.Error(path, 0,
+                            $"more than one door covers {t.X},{t.Y}; only one of them can ever be opened");
             }
             foreach (var start in level.PlayerStarts)
                 if (level.BlockAt(start) == null)
