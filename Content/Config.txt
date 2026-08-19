@@ -30,3 +30,4 @@ AoE opacity: 30%
 Cone opacity: 30%
 Trigger opacity: 18%
 Hover opacity: 35%
+Cast scale: 80%
