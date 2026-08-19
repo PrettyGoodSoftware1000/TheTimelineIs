@@ -41,7 +41,23 @@ public partial class IsoEditorScreen : IScreen
     private string _levelName = "TestLevel";
 
     private Tool _tool = Tool.Block;
-    private int _decoIndex, _enemyIndex;
+    private int _decoIndex, _enemyIndex, _doorIndex;
+
+    /// <summary>
+    /// The doorway sizes the Door button offers. A wide door is a run of
+    /// squares that open as one, so it needs an axis as well as a width —
+    /// X runs the way screen-right-and-down goes, Y the other way.
+    /// </summary>
+    private static readonly (string Label, int Width, bool AlongY)[] DoorSizes =
+    {
+        ("Small", 1, false),
+        ("Medium along X", 2, false),
+        ("Medium along Y", 2, true),
+        ("Large along X", 4, false),
+        ("Large along Y", 4, true),
+    };
+
+    private string DoorSizeName => DoorSizes[_doorIndex].Label;
 
     // the block brush: which family, and which piece inside it. -1 = Random,
     // which is settled per square as it is painted.
@@ -240,7 +256,7 @@ public partial class IsoEditorScreen : IScreen
         Add("Reload", "reload", false);
         Add("Controls", "controls", _showControls);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
-        Add("Door", "door", _tool == Tool.Door);
+        Add($"Door: {DoorSizeName}", "door", _tool == Tool.Door, menu: true);
         Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
         Add("Start", "start", _tool == Tool.PlayerStart);
         Add($"Trigger: {_trigger}", "trigger", _tool == Tool.Trigger);
@@ -268,6 +284,7 @@ public partial class IsoEditorScreen : IScreen
             .Concat(FamilyPieces.Select(gp => Strip(gp.File))).ToList(),
         "deco" => BlockCatalog.Decorations.Select(Strip).ToList(),
         "enemy" => _ctx.Enemies.EnemyNames.ToList(),
+        "door" => DoorSizes.Select(d => d.Label).ToList(),
         "level" => LevelNames(),
         _ => new List<string>(),
     };
@@ -312,6 +329,7 @@ public partial class IsoEditorScreen : IScreen
             case "piece": _pieceIndex = index - 1; _tool = Tool.Block; break;
             case "deco": _decoIndex = index; _tool = Tool.Decoration; break;
             case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
+            case "door": _doorIndex = index; _tool = Tool.Door; break;
         }
         _openMenu = null;
     }
@@ -324,15 +342,15 @@ public partial class IsoEditorScreen : IScreen
             case "level":
                 _openMenu = _openMenu == "level" ? null : "level";
                 return true;
-            case "family" or "piece" or "deco" or "enemy":
+            case "family" or "piece" or "deco" or "enemy" or "door":
                 // the button both selects its tool and opens its palette
                 _tool = id is "family" or "piece" ? Tool.Block
-                    : id == "deco" ? Tool.Decoration : Tool.Enemy;
+                    : id == "deco" ? Tool.Decoration
+                    : id == "door" ? Tool.Door : Tool.Enemy;
                 _openMenu = _openMenu == id ? null : id;
                 return true;
             case "anchor": ToggleAnchorTool(); return true;
             case "reload": ReloadFromDisk(); return true;
-            case "door": _tool = Tool.Door; return true;
             case "start": _tool = Tool.PlayerStart; return true;
             case "trigger": _tool = Tool.Trigger; return true;
             case "controls": _showControls = !_showControls; return true;
@@ -719,12 +737,21 @@ public partial class IsoEditorScreen : IScreen
                     { X = tile.X, Y = tile.Y, File = BlockCatalog.Decorations[_decoIndex] });
                 break;
             case Tool.Door when _level.BlockAt(tile) is LevelBlock db:
-                _level.Doors.RemoveAll(d => d.X == tile.X && d.Y == tile.Y);
-                // the door joins the block's own room to the editor's current room
-                _level.Doors.Add(new LevelDoor
-                    { X = tile.X, Y = tile.Y, RoomA = db.Room, RoomB = _room });
-                Status($"door joins {db.Room} <-> {_room}");
+            {
+                var (label, width, alongY) = DoorSizes[_doorIndex];
+                var placed = new LevelDoor
+                {
+                    X = tile.X, Y = tile.Y, RoomA = db.Room, RoomB = _room,
+                    Width = width, AlongY = alongY,
+                };
+                // a wide door swallows anything it overlaps, so dragging one
+                // across an old single door replaces it instead of stacking
+                var run = placed.Tiles.ToHashSet();
+                _level.Doors.RemoveAll(d => d.Tiles.Any(run.Contains));
+                _level.Doors.Add(placed);
+                Status($"{label.ToLowerInvariant()} joins {db.Room} <-> {_room}");
                 break;
+            }
             case Tool.Enemy when _level.BlockAt(tile) != null && _ctx.Enemies.EnemyNames.Count > 0:
                 _level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y);
                 _level.Enemies.Add(new LevelEnemy
@@ -751,7 +778,7 @@ public partial class IsoEditorScreen : IScreen
     private void Delete(Point tile)
     {
         if (_level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y) > 0) return;
-        if (_level.Doors.RemoveAll(d => d.X == tile.X && d.Y == tile.Y) > 0) return;
+        if (_level.Doors.RemoveAll(d => d.Covers(tile)) > 0) return;
         if (_level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y) > 0) return;
         if (_level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.PlayerStarts.Remove(tile)) return;
@@ -763,7 +790,7 @@ public partial class IsoEditorScreen : IScreen
     {
         int n = 0;
         n += _level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y);
-        n += _level.Doors.RemoveAll(d => d.X == tile.X && d.Y == tile.Y);
+        n += _level.Doors.RemoveAll(d => d.Covers(tile));
         n += _level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y);
         n += _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         if (_level.PlayerStarts.Remove(tile)) n++;
@@ -802,7 +829,7 @@ public partial class IsoEditorScreen : IScreen
         foreach (var e in _level.Enemies)
             if (_level.BlockAt(new Point(e.X, e.Y)) == null) n++;
         foreach (var d in _level.Doors)
-            if (_level.BlockAt(new Point(d.X, d.Y)) == null) n++;
+            n += d.Tiles.Count(t => _level.BlockAt(t) == null);
         n += _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
         if (_level.PlayerStarts.Count < 4) n++;
         if (_level.Blocks.Count == 0) n++;
@@ -816,7 +843,7 @@ public partial class IsoEditorScreen : IScreen
         int orphans = _level.Triggers.Count(t => _level.BlockAt(new Point(t.X, t.Y)) == null)
             + _level.Decorations.Count(d => _level.BlockAt(new Point(d.X, d.Y)) == null)
             + _level.Enemies.Count(e => _level.BlockAt(new Point(e.X, e.Y)) == null)
-            + _level.Doors.Count(d => _level.BlockAt(new Point(d.X, d.Y)) == null)
+            + _level.Doors.Sum(d => d.Tiles.Count(t => _level.BlockAt(t) == null))
             + _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
         if (orphans > 0) bits.Add($"{orphans} thing(s) floating with no block under them");
         if (_level.PlayerStarts.Count < 4)
@@ -1011,7 +1038,7 @@ public partial class IsoEditorScreen : IScreen
             foreach (var e in _level.Enemies.Where(e => e.X == b.X && e.Y == b.Y))
                 if (_ctx.Enemies.Get(e.Name) is EnemyDef def && def.SpriteFiles.Count > 0)
                     Cast(batch, $"{def.Folder}/{def.SpriteFiles[0]}", e.Name, tile, b.Height,
-                        origin, Color.White * 0.9f);
+                        origin, Color.White * 0.9f, def.Size);
             if (_level.PlayerStarts.Contains(tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.LimeGreen * 0.35f);
             if (_level.TriggerAt(tile) is LevelTrigger trig)
@@ -1171,6 +1198,7 @@ public partial class IsoEditorScreen : IScreen
         "",
         "1..9  ground family     B  next piece, then Random",
         "D deco   O door   E enemy   P start   G trigger",
+        "the Door button picks small, medium (2) or large (4)",
         "R room name    Place Room paints it onto blocks",
         "N dialogue name    V save as",
         "S save    T test",
@@ -1218,13 +1246,16 @@ public partial class IsoEditorScreen : IScreen
     /// scale line looked the wrong size against the blocks.
     /// </summary>
     private void Cast(SpriteBatch batch, string path, string name, Point tile, int height,
-        Vector2 origin, Color tint)
+        Vector2 origin, Color tint, int size = 1)
     {
         var tex = _ctx.Assets.LoadTexture(path);
-        float scale = _ctx.Config.CastScale(name);
+        // matches the game: a body covering N squares a side is N times as
+        // tall and stands in the middle of its footprint
+        float scale = _ctx.Config.CastScale(name) * size;
         int h = (int)(460 * scale);
         int w = (int)(h * tex.Width / (float)tex.Height);
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, origin);
+        c.Y += (size - 1) * (IsoMath.TileH / 2f);
         batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 26 - h), w, h), tint);
     }
 

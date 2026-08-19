@@ -10,6 +10,11 @@ public class EnemyDef
     public string Name = "";
     public int Hp = 10;
     public int Movement = 3;
+    /// <summary>
+    /// How many squares on a side the body covers. 1 is a normal enemy; a
+    /// Living Stone is 2 and so fills four tiles.
+    /// </summary>
+    public int Size = 1;
     public List<string> Sprites = new();
     /// <summary>Which cards in EnemyCards.txt this enemy holds; its own name by default.</summary>
     public List<string> CardTags = new();
@@ -33,6 +38,8 @@ public class EnemyDef
 ///   Enemy: Goblin
 ///   HP: 30
 ///   Movement: 3
+///   Size: 2                          (optional; squares per side, so 2 = a
+///                                     four-tile body. Defaults to 1)
 ///   Sprites: Goblin1.png, Goblin2.png, Goblin3.png
 ///   Card Tags: Goblin                (optional; defaults to the enemy's name)
 ///   Cast Animation: Swing/Swing.png  (optional; the sheet played while this
@@ -116,6 +123,12 @@ public class EnemyLibrary
                     diag.Warn(Path, lineNo,
                         $"'{current.Name}': '{key}' moved onto the enemy's cards in " +
                         $"{CardLibrary.EnemyPath} and is ignored here — delete the line");
+                    break;
+                // "Size: 2" means a 2x2 body — four tiles — not four tiles in a row
+                case "size":
+                    if (int.TryParse(value, out int sz) && sz > 0) current.Size = sz;
+                    else diag.Error(Path, lineNo,
+                        $"'{current.Name}': Size must be a positive number of squares per side, got '{value}'");
                     break;
                 case "sprites":
                     current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();

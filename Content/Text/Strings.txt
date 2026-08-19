@@ -82,6 +82,7 @@ iso_channel_start = {name} begins channelling {card}.
 iso_channelling = {name} is channelling {card} and cannot move.
 iso_channel_rooted = Channelling {card} - you cannot move until it is released.
 iso_fire_lit = {count} square(s) catch fire for {turns} turns.
+iso_fire_caught = {name} catches fire ({stacks} stacks of burning).
 iso_needs_other = Pick somebody else - you cannot rob yourself.
 iso_nothing_to_steal = {name} has nothing worth taking.
 iso_no_cards = {name} has nothing to attack with, and wanders off.

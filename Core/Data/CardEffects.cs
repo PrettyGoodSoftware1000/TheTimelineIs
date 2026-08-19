@@ -62,11 +62,15 @@ public static class Effects
     /// </summary>
     public const int StealTurns = 3;
 
-    /// <summary>Damage a burning square deals to whoever starts their turn on it.</summary>
-    public const int FireTileDamage = 5;
+    /// <summary>
+    /// Burning ground doesn't deal damage of its own — it sets people alight.
+    /// Starting a turn on it, walking through it, or ending a turn on it each
+    /// add this many stacks of Burning, which then burn on the victim's clock.
+    /// </summary>
+    public const int FireTileStacks = 1;
 
     /// <summary>How many turns a burning square lasts before it goes out.</summary>
-    public const int FireTileTurns = 3;
+    public const int FireTileTurns = 2;
 
     public static bool IsKnown(string name) =>
         Known.Any(k => k.Equals(name, StringComparison.OrdinalIgnoreCase));

@@ -137,6 +137,7 @@ Door: 10, 3, RoomA, RoomB
 Enemy: 17, 1, Goblin
 Enemy: 17, 3, Goblin
 Enemy: 15, 4, Goblin
+Enemy: 14, 1, Living Stone
 PlayerStart: 1, 5
 PlayerStart: 2, 6
 PlayerStart: 3, 5

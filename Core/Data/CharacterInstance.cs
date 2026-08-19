@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Xna.Framework;
 
 namespace TheTimelineIs.Core.Data;
 
@@ -40,7 +41,54 @@ public class CharacterInstance
     public float ShakeTimer;
 
     // --- isometric grid state ---
+
+    /// <summary>
+    /// The square this character stands on. For anything bigger than one tile
+    /// this is the corner of its footprint with the smallest X and Y, and the
+    /// body spreads out from there — see <see cref="Footprint"/>.
+    /// </summary>
     public int GX, GY;
+
+    /// <summary>
+    /// How many squares on a side the body covers. 1 for everyone normal; a
+    /// Living Stone is 2, so it fills a 2x2 block of four tiles. Only square
+    /// footprints exist, which keeps the body the same shape whichever way it
+    /// is facing and spares every rule from having to know about rotation.
+    /// </summary>
+    public int Size = 1;
+
+    /// <summary>Every square the body currently covers, anchor first.</summary>
+    public IEnumerable<Point> Footprint
+    {
+        get
+        {
+            for (int y = 0; y < Size; y++)
+                for (int x = 0; x < Size; x++)
+                    yield return new Point(GX + x, GY + y);
+        }
+    }
+
+    /// <summary>Whether the body covers a given square.</summary>
+    public bool Covers(Point p) =>
+        p.X >= GX && p.X < GX + Size && p.Y >= GY && p.Y < GY + Size;
+
+    /// <summary>
+    /// Grid distance from a square to the nearest part of this body. A big
+    /// enemy is therefore in melee reach of anything touching any of its
+    /// tiles, not just of things near its anchor corner.
+    /// </summary>
+    public int DistanceTo(Point p) =>
+        Math.Max(0, p.X < GX ? GX - p.X : p.X - (GX + Size - 1)) +
+        Math.Max(0, p.Y < GY ? GY - p.Y : p.Y - (GY + Size - 1));
+
+    /// <summary>Grid distance between the nearest parts of two bodies.</summary>
+    public int DistanceTo(CharacterInstance other)
+    {
+        int best = int.MaxValue;
+        foreach (var tile in other.Footprint) best = Math.Min(best, DistanceTo(tile));
+        return best;
+    }
+
     /// <summary>Movement points per turn (from Classes.txt / Enemies.txt).</summary>
     public int MoveMax = 5;
     /// <summary>Points left this turn.</summary>

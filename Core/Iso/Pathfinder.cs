@@ -34,13 +34,45 @@ public static class Pathfinder
     }
 
     /// <summary>
+    /// Every square a size x size body anchored at <paramref name="anchor"/>
+    /// covers. Size 1 is the ordinary case and yields the anchor alone.
+    /// </summary>
+    public static IEnumerable<Point> Footprint(Point anchor, int size)
+    {
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+                yield return new Point(anchor.X + x, anchor.Y + y);
+    }
+
+    /// <summary>
+    /// Whether a body of the given size fits with its corner on this square.
+    /// Every tile under it has to be standable, clear of other people, and at
+    /// the same height — a four-tile body cannot straddle a step.
+    /// </summary>
+    public static bool Fits(LevelData level, Point anchor, int size,
+        IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied,
+        IReadOnlySet<Point>? passThrough = null)
+    {
+        int? height = null;
+        foreach (var tile in Footprint(anchor, size))
+        {
+            if (!Standable(level, tile, revealedRooms)) return false;
+            if (occupied.Contains(tile) && !(passThrough?.Contains(tile) ?? false)) return false;
+            int h = level.BlockAt(tile)?.Height ?? 0;
+            if (height is int known && known != h) return false;
+            height = h;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// Dijkstra out to the budget. Returns cost to every reachable tile and
     /// the parent map for walking the path back.
     /// </summary>
     public static (Dictionary<Point, int> Cost, Dictionary<Point, Point> Parent) Reachable(
         LevelData level, Point from, int budget,
         IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied,
-        bool ignoreHeight = false, IReadOnlySet<Point>? passThrough = null)
+        bool ignoreHeight = false, IReadOnlySet<Point>? passThrough = null, int size = 1)
     {
         var cost = new Dictionary<Point, int> { [from] = 0 };
         var parent = new Dictionary<Point, Point>();
@@ -57,8 +89,15 @@ public static class Pathfinder
                 var next = new Point(here.X + dx, here.Y + dy);
                 // friends can be squeezed past, but not stood on — see the trim below
                 bool crossable = passThrough != null && passThrough.Contains(next);
-                if (!Standable(level, next, revealedRooms)) continue;
-                if (occupied.Contains(next) && !crossable) continue;
+                if (size > 1)
+                {
+                    if (!Fits(level, next, size, revealedRooms, occupied, passThrough)) continue;
+                }
+                else
+                {
+                    if (!Standable(level, next, revealedRooms)) continue;
+                    if (occupied.Contains(next) && !crossable) continue;
+                }
 
                 // a Leap goes over terrain: no climb cost, no height limit
                 int rise = ignoreHeight ? 0 : (level.BlockAt(next)?.Height ?? 0) - hereHeight;
@@ -96,18 +135,23 @@ public static class Pathfinder
     /// <summary>Best reachable tile adjacent-enough to a target: enemies chase with this.</summary>
     public static Point? StepToward(LevelData level, Point from, Point target, int budget,
         int stopAtRange, IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied,
-        out List<Point> path)
+        out List<Point> path, int size = 1)
     {
         path = new List<Point>();
-        var (cost, parent) = Reachable(level, from, budget, revealedRooms, occupied);
-        // already close enough?
-        if (IsoMath.GridDistance(from, target) <= stopAtRange) return null;
+        var (cost, parent) = Reachable(level, from, budget, revealedRooms, occupied, size: size);
+
+        // distance from the whole body, not just its corner, so a big enemy
+        // stops as soon as any part of it is close enough
+        int Gap(Point anchor) => Footprint(anchor, size).Min(t => IsoMath.GridDistance(t, target));
+
+        int here = Gap(from);
+        if (here <= stopAtRange) return null;   // already close enough?
 
         Point? best = null;
         int bestDist = int.MaxValue, bestCost = int.MaxValue;
         foreach (var (tile, c) in cost)
         {
-            int d = IsoMath.GridDistance(tile, target);
+            int d = Gap(tile);
             if (d < bestDist || (d == bestDist && c < bestCost))
             {
                 best = tile;
@@ -115,7 +159,7 @@ public static class Pathfinder
                 bestCost = c;
             }
         }
-        if (best is Point goal && bestDist < IsoMath.GridDistance(from, target))
+        if (best is Point goal && bestDist < here)
         {
             path = PathTo(parent, from, goal);
             return goal;

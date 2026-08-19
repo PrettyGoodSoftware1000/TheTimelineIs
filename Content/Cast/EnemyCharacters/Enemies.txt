@@ -8,8 +8,19 @@
 # wanders.
 #
 # Sprites default to {Name}.png; list variants to mix looks.
+#
+# "Size:" is how many squares on a SIDE the body covers, so Size 2 is a body
+# four tiles across. A big body needs all of those tiles flat, clear and
+# revealed before it can stand there, it is in reach of anything touching any
+# of its sides, and it is drawn that many times taller.
 
 Enemy: Goblin
 HP: 30
 Movement: 3
 Sprites: Goblin1.png, Goblin2.png, Goblin3.png
+
+Enemy: Living Stone
+HP: 40
+Movement: 2
+Size: 2
+Sprites: LivingStone.png

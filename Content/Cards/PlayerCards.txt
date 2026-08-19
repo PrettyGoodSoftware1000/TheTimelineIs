@@ -52,9 +52,12 @@
 #                                the next turn's play aims and fires it, paying
 #                                again. N is how many turns the wait takes.
 #                    FireTiles N - every square the card covered burns for N
-#                                turns. Anyone who STARTS their turn on burning
-#                                ground takes 5 damage, so crossing it is free
-#                                and standing in it is not.)
+#                                turns. Burning ground does no damage itself:
+#                                it sets people alight. Starting a turn on it,
+#                                walking through it, and ending a turn on it
+#                                each add a stack of Burning, so someone who
+#                                stops in the fire leaves with more stacks than
+#                                someone who only crosses it.)
 # Form:           (Optional. The card only appears while its owner wears this
 #                  form - see the class's "Form:" lines in Classes.txt.)
 # Explosion Range:(AoE cards only: blast radius in tiles around the impact
@@ -280,7 +283,7 @@ Type: [ranged] AoE damage. Single Projectile
 Action Points: 10
 Explosion Range: 5
 Range: 12
-Effects: Channel 1, FireTiles 3
+Effects: Channel 1, FireTiles 2
 Sky Angle: 110
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]

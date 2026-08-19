@@ -291,6 +291,30 @@ public static class ContentValidator
                         $"enemy at {enemy.X},{enemy.Y} is '{enemy.Name}', which is not in {EnemyLibrary.Path}");
                 if (level.BlockAt(new Microsoft.Xna.Framework.Point(enemy.X, enemy.Y)) == null)
                     diag.Error(path, 0, $"enemy at {enemy.X},{enemy.Y} is floating in the void (no block)");
+                // a big body needs its whole footprint under it, flat and clear,
+                // or it spawns half off the ground and can never move
+                int size = enemies.Get(enemy.Name)?.Size ?? 1;
+                if (size > 1)
+                {
+                    var anchor = new Microsoft.Xna.Framework.Point(enemy.X, enemy.Y);
+                    int? floor = null;
+                    foreach (var t in Iso.Pathfinder.Footprint(anchor, size))
+                    {
+                        var under = level.BlockAt(t);
+                        if (under == null)
+                        {
+                            diag.Error(path, 0,
+                                $"'{enemy.Name}' at {enemy.X},{enemy.Y} covers {size}x{size} squares, " +
+                                $"but {t.X},{t.Y} has no block under it");
+                            continue;
+                        }
+                        if (floor is int known && known != under.Height)
+                            diag.Error(path, 0,
+                                $"'{enemy.Name}' at {enemy.X},{enemy.Y} straddles a step: {t.X},{t.Y} " +
+                                $"is {under.Height} feet where the rest of its footprint is {known}");
+                        floor ??= under.Height;
+                    }
+                }
             }
             foreach (var door in level.Doors)
             {
@@ -298,8 +322,13 @@ public static class ContentValidator
                     diag.Error(path, 0,
                         $"door at {door.X},{door.Y} joins '{door.RoomA}' and '{door.RoomB}' " +
                         "but at least one of those rooms has no blocks");
-                if (level.BlockAt(new Microsoft.Xna.Framework.Point(door.X, door.Y)) == null)
-                    diag.Error(path, 0, $"door at {door.X},{door.Y} has no block under it");
+                foreach (var t in door.Tiles)
+                    if (level.BlockAt(t) == null)
+                        diag.Error(path, 0,
+                            door.Width > 1
+                                ? $"the {door.Width}-wide door at {door.X},{door.Y} runs over {t.X},{t.Y}, " +
+                                  "which has no block under it"
+                                : $"door at {door.X},{door.Y} has no block under it");
             }
             foreach (var start in level.PlayerStarts)
                 if (level.BlockAt(start) == null)

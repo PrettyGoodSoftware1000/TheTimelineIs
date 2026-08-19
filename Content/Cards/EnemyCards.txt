@@ -58,3 +58,18 @@ Effect: Single target. 1 times x 5 damage.
 Card Text: A grubby swipe. Nothing personal.
 Bottom Right: 5 Stabby
 []
+
+[]
+Card Name: Stone Slap
+Tags: Living Stone
+Type: [melee] Single target, X hits.
+Range: 1
+Action Points: 5
+Melee Time: 0.45
+Casting Sound: [Blank.wav]
+Casting Time: 0.2
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 12 damage.
+Card Text: A slab of a hand, swung like a door closing.
+Bottom Right: 12 Smashing
+[]

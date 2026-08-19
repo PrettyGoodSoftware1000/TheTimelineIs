@@ -22,11 +22,38 @@ public class LevelDecoration
     public string File = "";    // in Content/Images/Decorations/; blocks its square
 }
 
+/// <summary>
+/// A doorway joining two rooms. Most are a single square, but a wider one is a
+/// run of adjacent squares that open together: Width squares starting at X,Y
+/// and running along either the X or the Y axis. The whole run is one door —
+/// one click opens all of it, and it blocks all of it while shut.
+/// </summary>
 public class LevelDoor
 {
     public int X, Y;
     public string RoomA = "", RoomB = "";
+
+    /// <summary>Squares in the run: 1 small, 2 medium, 4 large.</summary>
+    public int Width = 1;
+
+    /// <summary>True when the run goes along Y instead of X. Meaningless at width 1.</summary>
+    public bool AlongY;
+
     public bool Open;           // runtime only; never saved
+
+    /// <summary>Every square this doorway fills.</summary>
+    public IEnumerable<Point> Tiles
+    {
+        get
+        {
+            for (int i = 0; i < Math.Max(1, Width); i++)
+                yield return AlongY ? new Point(X, Y + i) : new Point(X + i, Y);
+        }
+    }
+
+    public bool Covers(Point p) => AlongY
+        ? p.X == X && p.Y >= Y && p.Y < Y + Math.Max(1, Width)
+        : p.Y == Y && p.X >= X && p.X < X + Math.Max(1, Width);
 }
 
 public class LevelEnemy
@@ -48,7 +75,7 @@ public class LevelTrigger
 ///
 ///   Block: x, y, height, type, room
 ///   Decoration: x, y, file
-///   Door: x, y, roomA, roomB
+///   Door: x, y, roomA, roomB[, width[, X|Y]]
 ///   Enemy: x, y, name
 ///   PlayerStart: x, y
 ///   Trigger: x, y, dialogueName
@@ -69,7 +96,7 @@ public class LevelData
     public static string PathFor(string name) => $"Content/Levels/{name}.txt";
 
     public LevelBlock? BlockAt(Point p) => Blocks.TryGetValue(p, out var b) ? b : null;
-    public LevelDoor? DoorAt(Point p) => Doors.FirstOrDefault(d => d.X == p.X && d.Y == p.Y);
+    public LevelDoor? DoorAt(Point p) => Doors.FirstOrDefault(d => d.Covers(p));
     public LevelDecoration? DecorationAt(Point p) =>
         Decorations.FirstOrDefault(d => d.X == p.X && d.Y == p.Y);
     public LevelTrigger? TriggerAt(Point p) =>
@@ -114,8 +141,15 @@ public class LevelData
                 case "decoration" when Num(0, out int dx) && Num(1, out int dy) && parts.Length >= 3:
                     level.Decorations.Add(new LevelDecoration { X = dx, Y = dy, File = parts[2] });
                     break;
+                // width and axis are optional so every level written before
+                // wide doors existed still reads as a run of one square
                 case "door" when Num(0, out int ox) && Num(1, out int oy) && parts.Length >= 4:
-                    level.Doors.Add(new LevelDoor { X = ox, Y = oy, RoomA = parts[2], RoomB = parts[3] });
+                    level.Doors.Add(new LevelDoor
+                    {
+                        X = ox, Y = oy, RoomA = parts[2], RoomB = parts[3],
+                        Width = parts.Length >= 5 && int.TryParse(parts[4], out int dw) && dw > 0 ? dw : 1,
+                        AlongY = parts.Length >= 6 && parts[5].Trim().StartsWith("y", StringComparison.OrdinalIgnoreCase),
+                    });
                     break;
                 case "enemy" when Num(0, out int ex) && Num(1, out int ey) && parts.Length >= 3:
                     level.Enemies.Add(new LevelEnemy { X = ex, Y = ey, Name = parts[2] });
@@ -145,7 +179,11 @@ public class LevelData
         copy.Decorations.AddRange(Decorations.Select(d =>
             new LevelDecoration { X = d.X, Y = d.Y, File = d.File }));
         copy.Doors.AddRange(Doors.Select(d =>
-            new LevelDoor { X = d.X, Y = d.Y, RoomA = d.RoomA, RoomB = d.RoomB, Open = d.Open }));
+            new LevelDoor
+            {
+                X = d.X, Y = d.Y, RoomA = d.RoomA, RoomB = d.RoomB,
+                Width = d.Width, AlongY = d.AlongY, Open = d.Open,
+            }));
         copy.Enemies.AddRange(Enemies.Select(e => new LevelEnemy { X = e.X, Y = e.Y, Name = e.Name }));
         copy.Triggers.AddRange(Triggers.Select(t =>
             new LevelTrigger { X = t.X, Y = t.Y, Dialogue = t.Dialogue, Fired = t.Fired }));
@@ -176,7 +214,9 @@ public class LevelData
         foreach (var d in Decorations.OrderBy(d => d.Y).ThenBy(d => d.X))
             sb.AppendLine($"Decoration: {d.X}, {d.Y}, {d.File}");
         foreach (var d in Doors)
-            sb.AppendLine($"Door: {d.X}, {d.Y}, {d.RoomA}, {d.RoomB}");
+            sb.AppendLine(d.Width > 1
+                ? $"Door: {d.X}, {d.Y}, {d.RoomA}, {d.RoomB}, {d.Width}, {(d.AlongY ? "Y" : "X")}"
+                : $"Door: {d.X}, {d.Y}, {d.RoomA}, {d.RoomB}");
         foreach (var e in Enemies)
             sb.AppendLine($"Enemy: {e.X}, {e.Y}, {e.Name}");
         foreach (var t in Triggers.OrderBy(t => t.Y).ThenBy(t => t.X))

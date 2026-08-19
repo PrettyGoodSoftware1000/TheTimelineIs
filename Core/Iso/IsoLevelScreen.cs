@@ -225,6 +225,7 @@ public class IsoLevelScreen : IScreen
                 MaxHp = def.Hp,
                 Hp = def.Hp,
                 MoveMax = def.Movement,
+                Size = def.Size,
                 GX = spawn.X, GY = spawn.Y,
             });
         }
@@ -249,16 +250,23 @@ public class IsoLevelScreen : IScreen
     private List<CharacterInstance> VisibleEnemies => _enemies.Where(e =>
         e.Alive && _level.BlockAt(Tile(e)) is LevelBlock b && _revealed.Contains(b.Room)).ToList();
 
+    /// <summary>Every square a character's body covers — one, unless it is a big one.</summary>
+    private static IEnumerable<Point> Occupied(CharacterInstance c) => c.Footprint;
+
     private HashSet<Point> OccupiedExcept(CharacterInstance? except) =>
-        Everyone.Where(c => c.Alive && c != except).Select(Tile).ToHashSet();
+        Everyone.Where(c => c.Alive && c != except).SelectMany(Occupied).ToHashSet();
 
     /// <summary>
     /// Squares a mover may walk THROUGH but not stop on. Party members squeeze
     /// past each other freely; enemies block the way as before.
     /// </summary>
     private HashSet<Point> PassThroughFor(CharacterInstance mover) => mover.IsPlayer
-        ? _party.Where(p => p.Alive && p != mover).Select(Tile).ToHashSet()
+        ? _party.Where(p => p.Alive && p != mover).SelectMany(Occupied).ToHashSet()
         : new HashSet<Point>();
+
+    /// <summary>Whoever is standing on a square, big bodies included.</summary>
+    private CharacterInstance? WhoIsOn(Point tile) =>
+        Everyone.FirstOrDefault(c => c.Alive && c.Covers(tile));
 
     private CharacterInstance? Current => _turn >= 0 && _turn < _order.Count ? _order[_turn] : null;
     private bool DialogueActive => _lines != null;
@@ -355,6 +363,9 @@ public class IsoLevelScreen : IScreen
             var to = IsoMath.ToScreen(next.X, next.Y, HeightAt(next), Origin);
             at = Vector2.Lerp(from, to, _walkT);
         }
+        // a body wider than one square stands in the middle of its footprint,
+        // which in this projection is straight down the screen from its corner
+        at.Y += (c.Size - 1) * (IsoMath.TileH / 2f);
         return at + new Vector2(0, 26) + Recoil.Offset(c);
     }
 
@@ -474,6 +485,10 @@ public class IsoLevelScreen : IScreen
             _walker.GY = arrived.Y;
             _overlayKey = null;
 
+            // crossing burning ground catches you as surely as standing in it
+            Ignite(_walker);
+            if (!_walker.Alive) { _walkPath.Clear(); break; }
+
             if (_walker.IsPlayer && FireTrigger(arrived)) { _walkPath.Clear(); break; }
             if (_mode == Mode.Explore && _walker.IsPlayer && CheckAggro(_walker))
             {
@@ -522,7 +537,7 @@ public class IsoLevelScreen : IScreen
     private bool CheckAggro(CharacterInstance mover)
     {
         var seen = VisibleEnemies.Where(e =>
-            _party.Any(p => p.Alive && IsoMath.GridDistance(Tile(p), Tile(e)) <= AggroTiles)).ToList();
+            _party.Any(p => p.Alive && e.DistanceTo(p) <= AggroTiles)).ToList();
         if (seen.Count == 0) return false;
 
         foreach (var e in seen) _aggroed.Add(e);
@@ -562,6 +577,8 @@ public class IsoLevelScreen : IScreen
     private void NextTurn()
     {
         CancelCard();
+        // finishing a turn in the fire catches you, the same as starting one there
+        if (Current is CharacterInstance leaving) Ignite(leaving);
         if (LivingParty.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
         if (!_aggroed.Any(e => e.Alive))
         {
@@ -649,7 +666,8 @@ public class IsoLevelScreen : IScreen
         // a Leap card reaches further and vaults terrain while closing in
         int budget = _mode == Mode.Explore ? 9999 : mover.MovePoints + (card?.LeapBonus ?? 0);
         _moveSet = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed,
-            OccupiedExcept(mover), card?.IgnoresHeight ?? false, PassThroughFor(mover)).Cost;
+            OccupiedExcept(mover), card?.IgnoresHeight ?? false, PassThroughFor(mover),
+            mover.Size).Cost;
         if (card == null || _mode == Mode.Explore) return;
 
         // a Leap card's reach covers a lot of ground, so it gets its own,
@@ -720,7 +738,7 @@ public class IsoLevelScreen : IScreen
     /// do. Everything else has to be within reach of where the caster stands.
     /// </summary>
     private bool ReachableAim(CharacterInstance me, Point aim, Card card) =>
-        card.Delivery == Delivery.Cone || IsoMath.GridDistance(Tile(me), aim) <= card.Range;
+        card.Delivery == Delivery.Cone || me.DistanceTo(aim) <= card.Range;
 
     /// <summary>
     /// Where the caster acts from: where it already stands if that works, else
@@ -731,7 +749,9 @@ public class IsoLevelScreen : IScreen
     {
         var here = Tile(me);
         if (card.Delivery == Delivery.Cone) return here;
-        bool InRange(Point from) => targets.All(t => IsoMath.GridDistance(from, Tile(t)) <= card.Range);
+        // measured to the nearest part of the target, so a four-tile body is in
+        // reach of anything standing against any of its sides
+        bool InRange(Point from) => targets.All(t => t.DistanceTo(from) <= card.Range);
         if (InRange(here)) return here;
         return _moveSet.Keys.Where(InRange)
             .OrderBy(t => _moveSet[t]).Select(t => (Point?)t).FirstOrDefault();
@@ -780,7 +800,7 @@ public class IsoLevelScreen : IScreen
         if (FindTileAt(press.ToVector2()) is Point tile)
         {
             if (_level.DoorAt(tile) is LevelDoor door && !door.Open && _mode is Mode.Explore &&
-                LivingParty.Any(p => IsoMath.GridDistance(Tile(p), tile) <= DoorReach))
+                LivingParty.Any(p => p.DistanceTo(tile) <= DoorReach))
             {
                 OpenDoor(door);
                 return;
@@ -802,7 +822,7 @@ public class IsoLevelScreen : IScreen
     /// </summary>
     private void ClickSquare(Point tile)
     {
-        var who = Everyone.FirstOrDefault(c => c.Alive && Tile(c) == tile);
+        var who = WhoIsOn(tile);
 
         if (_mode == Mode.PlayerTarget && _selectedCard is Card aiming)
         {
@@ -828,7 +848,7 @@ public class IsoLevelScreen : IScreen
         }
 
         if (_level.DoorAt(tile) is LevelDoor d && !d.Open && _mode is Mode.Explore &&
-            LivingParty.Any(p => IsoMath.GridDistance(Tile(p), tile) <= DoorReach))
+            LivingParty.Any(p => p.DistanceTo(tile) <= DoorReach))
         {
             OpenDoor(d);
             return;
@@ -843,8 +863,7 @@ public class IsoLevelScreen : IScreen
         _revealed.Add(door.RoomB);
         _overlayKey = null;
         Log(_ctx.Strings.Get("iso_door_open"));
-        var nearest = LivingParty.OrderBy(p =>
-            IsoMath.GridDistance(Tile(p), new Point(door.X, door.Y))).First();
+        var nearest = LivingParty.OrderBy(p => door.Tiles.Min(p.DistanceTo)).First();
         CheckAggro(nearest);
     }
 
@@ -874,7 +893,7 @@ public class IsoLevelScreen : IScreen
     {
         int budget = _mode == Mode.Explore ? 9999 : mover.MoveMax + (via?.LeapBonus ?? 0);
         var (_, parent) = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed,
-            OccupiedExcept(mover), via?.IgnoresHeight ?? false, PassThroughFor(mover));
+            OccupiedExcept(mover), via?.IgnoresHeight ?? false, PassThroughFor(mover), mover.Size);
         _walker = mover;
         _walkFrom = Tile(mover);
         _walkPath = Pathfinder.PathTo(parent, _walkFrom, goal);
@@ -956,7 +975,7 @@ public class IsoLevelScreen : IScreen
         var card = _selectedCard;
         if (card == null) return;
         var caught = (card.TargetsAllies ? (IEnumerable<CharacterInstance>)LivingParty : VisibleEnemies)
-            .Where(c => area.Contains(Tile(c))).ToList();
+            .Where(c => c.Footprint.Any(area.Contains)).ToList();
         // the ground the card covered is remembered here, because by the time
         // the hits resolve the aim and the area are gone
         _burnArea = card.FireTileTurns > 0 ? new HashSet<Point>(area) : new HashSet<Point>();
@@ -1184,19 +1203,35 @@ public class IsoLevelScreen : IScreen
         ResumeAfterAction();
     }
 
-    /// <summary>Back to the turn if anything is left to spend on it, else onward.</summary>
+    /// <summary>
+    /// Back to the turn if anything is left to spend on it, else onward. An
+    /// enemy comes back only when it could actually play another card — a
+    /// Living Stone's Stone Slap costs five of its ten points, so it swings
+    /// twice — because otherwise it would loop back only to stand there.
+    /// </summary>
     private void ResumeAfterAction()
     {
         _actor = null;
         var mover = Current;
-        if (mover != null && mover.IsPlayer && mover.Alive &&
-            (mover.ActionPoints > 0 || mover.MovePoints > 0))
+        if (mover is { Alive: true })
         {
-            _mode = Mode.PlayerTurn;
-            return;
+            if (mover.IsPlayer && (mover.ActionPoints > 0 || mover.MovePoints > 0))
+            {
+                _mode = Mode.PlayerTurn;
+                return;
+            }
+            if (!mover.IsPlayer && HasPlayableAttack(mover))
+            {
+                _mode = Mode.EnemyTurn;
+                return;
+            }
         }
         NextTurn();
     }
+
+    /// <summary>Whether an enemy still holds an attack card it can pay for.</summary>
+    private bool HasPlayableAttack(CharacterInstance e) =>
+        HandOf(e).Any(c => !c.TargetsAllies && c.ActionCost <= e.ActionPoints);
 
     /// <summary>
     /// Armor is an extension of health: it soaks damage first and only what's
@@ -1451,15 +1486,9 @@ public class IsoLevelScreen : IScreen
     /// </summary>
     private bool BurnAtTurnStart(CharacterInstance c)
     {
-        // burning ground bites whoever STARTS their turn on it, so crossing a
-        // fire costs nothing and standing in it costs every turn
-        if (_fires.ContainsKey(Tile(c)))
-        {
-            var fire = new StringBuilder();
-            ApplyHit(c, Data.Effects.FireTileDamage, "Fire", fire);
-            Log(fire.ToString().TrimEnd());
-            if (!c.Alive) return false;
-        }
+        // burning ground deals no damage itself — it sets you alight, and the
+        // stacks it gives do the rest on your own clock
+        Ignite(c);
 
         // curses tick down on their victim's turn too, independently of each other
         if (c.Curses.Count > 0)
@@ -1495,6 +1524,22 @@ public class IsoLevelScreen : IScreen
     }
 
     /// <summary>
+    /// Burning ground catching someone. It happens three ways — starting a turn
+    /// standing in fire, walking through it, and ending a turn in it — so a
+    /// character who crosses one square and stops there leaves with more stacks
+    /// than one who only passes over it. The fire itself does no damage; the
+    /// stacks it hands out do, at the victim's own turn start.
+    /// </summary>
+    private void Ignite(CharacterInstance c)
+    {
+        if (!c.Alive || !Occupied(c).Any(_fires.ContainsKey)) return;
+        for (int i = 0; i < Data.Effects.FireTileStacks; i++)
+            c.Burns.Add(Data.Effects.BurnTurns);
+        Log(_ctx.Strings.Format("iso_fire_caught",
+            ("name", c.Name), ("stacks", c.BurningStacks.ToString())));
+    }
+
+    /// <summary>
     /// What an enemy does with its turn, driven entirely by its cards in
     /// EnemyCards.txt:
     ///   1. A melee card it can actually land this turn wins — it walks at the
@@ -1515,8 +1560,13 @@ public class IsoLevelScreen : IScreen
         var hand = HandOf(me)
             .Where(c => !c.TargetsAllies && c.ActionCost <= me.ActionPoints).ToList();
         var reach = Pathfinder.Reachable(_level, Tile(me), me.MovePoints, _revealed,
-            OccupiedExcept(me)).Cost;
+            OccupiedExcept(me), size: me.Size).Cost;
         var stands = reach.Keys.Append(Tile(me)).ToList();
+
+        // how far a target would be if this enemy's body were anchored on a
+        // given square — the whole body counts, not just its corner
+        int GapFrom(Point square, CharacterInstance target) =>
+            Pathfinder.Footprint(square, me.Size).Min(t => IsoMath.GridDistance(t, Tile(target)));
 
         // longest reach first within each kind, so a spear beats a fist
         foreach (var card in hand.Where(c => c.Delivery == Delivery.Melee)
@@ -1527,9 +1577,9 @@ public class IsoLevelScreen : IScreen
             // the cheapest square that puts somebody in this card's range
             var shot = players
                 .SelectMany(p => stands.Select(sq => (Square: sq, Target: p)))
-                .Where(x => IsoMath.GridDistance(x.Square, Tile(x.Target)) <= card.Range)
+                .Where(x => GapFrom(x.Square, x.Target) <= card.Range)
                 .OrderBy(x => reach.TryGetValue(x.Square, out int c) ? c : 0)
-                .ThenBy(x => IsoMath.GridDistance(x.Square, Tile(x.Target)))
+                .ThenBy(x => GapFrom(x.Square, x.Target))
                 .Select(x => ((Point, CharacterInstance)?)(x.Square, x.Target))
                 .FirstOrDefault();
             if (shot == null) continue;
@@ -1546,10 +1596,10 @@ public class IsoLevelScreen : IScreen
         // and try again next turn
         if (hand.Count > 0)
         {
-            var near = players.OrderBy(p => IsoMath.GridDistance(Tile(me), Tile(p))).First();
+            var near = players.OrderBy(p => me.DistanceTo(p)).First();
             int wanted = hand.Max(c => c.Range);
             var goal = Pathfinder.StepToward(_level, Tile(me), Tile(near), me.MovePoints,
-                wanted, _revealed, OccupiedExcept(me), out var path);
+                wanted, _revealed, OccupiedExcept(me), out var path, me.Size);
             me.MovePoints = 0;
             if (goal != null && path.Count > 0)
             {
@@ -1587,7 +1637,7 @@ public class IsoLevelScreen : IScreen
     /// </summary>
     private void EnemyPlay(CharacterInstance me, Card card, CharacterInstance victim)
     {
-        if (!victim.Alive || IsoMath.GridDistance(Tile(me), Tile(victim)) > card.Range)
+        if (!victim.Alive || me.DistanceTo(victim) > card.Range)
         {
             NextTurn();
             return;
@@ -1611,7 +1661,10 @@ public class IsoLevelScreen : IScreen
     private Rectangle SpriteRect(CharacterInstance c)
     {
         var tex = _ctx.Assets.LoadTexture(c.SpritePath);
-        float scale = _ctx.Config.CastScale(c.Name);
+        // a body covering N squares a side is drawn N times as tall, so a
+        // four-tile enemy looks like it fills the ground it stands on. Cast
+        // Scale in Config.txt still trims it either way.
+        float scale = _ctx.Config.CastScale(c.Name) * c.Size;
         int h = (int)(460 * scale);
         int w = (int)(h * tex.Width / (float)tex.Height);
         var foot = FootOf(c);
@@ -1626,7 +1679,10 @@ public class IsoLevelScreen : IScreen
         var byTile = new Dictionary<Point, List<CharacterInstance>>();
         foreach (var c in Everyone.Where(c => c.Alive))
         {
-            var key = c == _walker && _walkPath.Count > 0 ? _walkPath[0] : Tile(c);
+            // keyed on the FAR corner of the body, so every square it stands on
+            // is already painted by the time the sprite goes down over them
+            var anchor = c == _walker && _walkPath.Count > 0 ? _walkPath[0] : Tile(c);
+            var key = new Point(anchor.X + c.Size - 1, anchor.Y + c.Size - 1);
             if (!byTile.TryGetValue(key, out var list)) byTile[key] = list = new List<CharacterInstance>();
             list.Add(c);
         }
@@ -2195,7 +2251,7 @@ public class IsoLevelScreen : IScreen
             0f, Vector2.Zero, Pt(CardBodyPt) * s, SpriteEffects.None, 0f);
 
         int hitCount = card.TargetsGround && _blastSet.Count > 0
-            ? VisibleEnemies.Count(e => _blastSet.Contains(Tile(e)))
+            ? VisibleEnemies.Count(e => e.Footprint.Any(_blastSet.Contains))
             : VisibleEnemies.Count;
         string total = card.Damage <= 0 && card.Effects.Count > 0
             ? $"+{card.Effects[0].Amount} {card.Effects[0].Name}"
