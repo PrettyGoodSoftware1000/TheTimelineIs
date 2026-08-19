@@ -1,15 +1,10 @@
-# Art scale tuning. 100% = authored size; 90% shrinks, 110% grows.
-# Rule: the MOST SPECIFIC line wins outright (override, not multiply).
+# Rule: the MOST SPECIFIC line wins outright (overrides, not multiply).
 #   "<Character> scale" beats "Cast scale", which beats "Global scale".
 # Global scale covers all art (map, backgrounds, cast). Cast scale covers
 # every cast sprite. A character line covers just that character.
 # A value of 0 means IGNORE that line, so it falls through to the next level
 # up: "Dirtbag scale: 0" uses Cast scale instead. The % sign is optional.
 # UI text, buttons, the dialogue box, and the F12 ruler never scale.
-Global scale: 100%
-Cast scale: 125%
-Dirtbag scale: 0
-
 # ---------------------------------------------------------------------
 # Overlay opacity for the isometric levels: how solid the colour wash is
 # INSIDE each highlighted region. The outline around the region is always
@@ -23,6 +18,16 @@ Dirtbag scale: 0
 #   Cone     - purple, a cone card's wedge
 #   Trigger  - violet, an unfired dialogue square
 #   Hover    - yellow, the square under the cursor while Ctrl is held
+
+
+
+
+
+Global scale: 0%
+Cast scale: 125%
+
+
+
 Movement opacity: 20%
 Range opacity: 18%
 Leap opacity: 10%
