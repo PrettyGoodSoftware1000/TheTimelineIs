@@ -56,6 +56,7 @@ iso_done = Done
 iso_end_turn = End Turn
 iso_move_left = Movement left: {points}
 iso_out_of_range = Out of range.
+iso_transition = The party moves through to {room}.
 iso_door_open = The door creaks open...
 iso_clear = Clear... for now.
 iso_victory = Area cleared!

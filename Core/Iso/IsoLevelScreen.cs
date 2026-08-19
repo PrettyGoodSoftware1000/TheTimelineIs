@@ -104,6 +104,13 @@ public class IsoLevelScreen : IScreen
 
     private Vector2 _camera;
     private Vector2 _baseOrigin;
+
+    /// <summary>
+    /// Transition pads the party is standing on, by the pad's lowest square.
+    /// A pad arrived on cannot fire until every party member is off it, or the
+    /// party would bounce straight back where they came from.
+    /// </summary>
+    private readonly HashSet<Point> _disarmed = new();
     private Point _pointer;
     private Point? _tap;
     private bool _ctrl;              // square-targeting mode: see ClickSquare
@@ -406,6 +413,7 @@ public class IsoLevelScreen : IScreen
 
         if (_walker != null) { UpdateWalk(dt); return; }
 
+        if (_mode == Mode.Explore) RearmTransitions();
         RefreshOverlays();
 
         switch (_mode)
@@ -490,6 +498,17 @@ public class IsoLevelScreen : IScreen
             if (!_walker.Alive) { _walkPath.Clear(); break; }
 
             if (_walker.IsPlayer && FireTrigger(arrived)) { _walkPath.Clear(); break; }
+
+            // an area transition takes the whole party somewhere else, so the
+            // walk that set it off has nowhere left to go
+            if (_mode == Mode.Explore && _walker.IsPlayer && TakeTransition(arrived))
+            {
+                _walkPath.Clear();
+                _walker = null;
+                _afterWalk = null;
+                return;
+            }
+
             if (_mode == Mode.Explore && _walker.IsPlayer && CheckAggro(_walker))
             {
                 _walkPath.Clear();
@@ -503,6 +522,124 @@ public class IsoLevelScreen : IScreen
             _afterWalk = null;
             done?.Invoke();
         }
+    }
+
+    /// <summary>
+    /// Stepping onto a linked transition pad, out of combat: the whole party
+    /// moves to the pad at the other end, that room becomes the only one lit,
+    /// and the room they left goes dark again. Returns false when the square is
+    /// not a pad, leads nowhere, or is the one they just arrived on.
+    ///
+    /// A pad the party is standing on is disarmed, or arriving would send them
+    /// straight back. It re-arms once EVERY party member is clear of it, and
+    /// from then on one member stepping back on is enough.
+    /// </summary>
+    private bool TakeTransition(Point tile)
+    {
+        var pads = _level.TransitionPads();
+        var here = pads.FirstOrDefault(p => p.Covers(tile));
+        if (here == null || here.Pair == 0) return false;
+        if (_disarmed.Contains(here.Key)) return false;
+
+        var there = pads.FirstOrDefault(p => p != here && p.Pair == here.Pair);
+        if (there == null)
+        {
+            // half a link: report it rather than swallowing the step
+            _ctx.ReportProblem(LevelData.PathFor(_level.Name),
+                $"the transition at {tile.X},{tile.Y} is pair {here.Pair}, but nothing else " +
+                "in this level carries that number, so it leads nowhere");
+            return false;
+        }
+
+        MoveParty(there);
+        return true;
+    }
+
+    /// <summary>Whether anyone in the party is still standing on a pad.</summary>
+    private bool PartyOn(TransitionPad pad) =>
+        LivingParty.Any(p => p.Footprint.Any(pad.Covers));
+
+    /// <summary>
+    /// Puts the party down on a pad and lights only the room it sits in. Pads
+    /// are usually one square per party member; anyone who doesn't fit takes
+    /// the nearest free square instead, so a small pad still works.
+    /// </summary>
+    private void MoveParty(TransitionPad destination)
+    {
+        // the destination's room has to be lit before anything can be placed in
+        // it — Standable refuses a square in a room nobody has revealed
+        var room = destination.Tiles
+            .Select(t => _level.BlockAt(t)?.Room)
+            .FirstOrDefault(r => r != null) ?? _level.Blocks.Values.First().Room;
+        _revealed.Clear();
+        _revealed.Add(room);
+
+        var taken = new HashSet<Point>();
+        var pads = destination.Tiles.OrderBy(t => t.Y).ThenBy(t => t.X).ToList();
+        int next = 0;
+        foreach (var member in LivingParty)
+        {
+            Point? spot = null;
+            while (next < pads.Count && spot == null)
+            {
+                var candidate = pads[next++];
+                if (!taken.Contains(candidate) && Fits(member, candidate, taken))
+                    spot = candidate;
+            }
+            spot ??= NearestFree(destination.Center, member, taken);
+            if (spot is not Point at) continue;   // nowhere at all: leave them put
+
+            foreach (var t in member.Footprint) taken.Add(t);
+            member.GX = at.X;
+            member.GY = at.Y;
+            foreach (var t in member.Footprint) taken.Add(t);
+        }
+
+        // the pad they land on must not throw them straight back
+        _disarmed.Add(destination.Key);
+        RecenterOn(LivingParty.FirstOrDefault());
+        _overlayKey = null;
+        Log(_ctx.Strings.Format("iso_transition", ("room", room)));
+
+        // a new room can hold a fight
+        foreach (var p in LivingParty)
+            if (CheckAggro(p)) break;
+    }
+
+    private bool Fits(CharacterInstance who, Point at, IReadOnlySet<Point> taken) =>
+        Pathfinder.Fits(_level, at, who.Size, _revealed,
+            OccupiedExcept(who).Concat(taken).ToHashSet());
+
+    /// <summary>The closest square to a pad that this character actually fits on.</summary>
+    private Point? NearestFree(Point around, CharacterInstance who, IReadOnlySet<Point> taken)
+    {
+        var candidates = _level.Blocks.Keys
+            .Where(t => Fits(who, t, taken))
+            .OrderBy(t => IsoMath.GridDistance(t, around));
+        foreach (var t in candidates) return t;
+        return null;
+    }
+
+    /// <summary>Drops the camera on somebody, for when the party is moved under it.</summary>
+    private void RecenterOn(CharacterInstance? who)
+    {
+        if (who == null) return;
+        var focus = IsoMath.ToScreen(who.GX, who.GY, HeightAt(Tile(who)), Vector2.Zero);
+        _baseOrigin = new Vector2(VirtualViewport.Width / 2f, VirtualViewport.Height / 2f) - focus;
+        _camera = Vector2.Zero;
+    }
+
+    /// <summary>
+    /// Pads the party is standing on, which cannot fire again until everybody
+    /// is off. Cleared here rather than on the step off, so a member wandering
+    /// back on before the last one leaves does not set it off.
+    /// </summary>
+    private void RearmTransitions()
+    {
+        if (_disarmed.Count == 0) return;
+        foreach (var pad in _level.TransitionPads())
+            if (_disarmed.Contains(pad.Key) && !PartyOn(pad))
+                _disarmed.Remove(pad.Key);
     }
 
     /// <summary>Stepping on a trigger square plays its dialogue, once.</summary>

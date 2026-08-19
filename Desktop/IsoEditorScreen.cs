@@ -29,11 +29,11 @@ namespace TheTimelineIs.Desktop;
 /// </summary>
 public partial class IsoEditorScreen : IScreen
 {
-    private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger, Room }
+    private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger, Room, Transition }
 
     /// <summary>Tools you drag across the ground; the rest are one click each.</summary>
     private static bool Paints(Tool t) =>
-        t is Tool.Block or Tool.Decoration or Tool.Trigger or Tool.Room;
+        t is Tool.Block or Tool.Decoration or Tool.Trigger or Tool.Room or Tool.Transition;
 
     private readonly GameContext _ctx;
     private LevelData _level;
@@ -56,6 +56,24 @@ public partial class IsoEditorScreen : IScreen
         ("Large along X", 4, false),
         ("Large along Y", 4, true),
     };
+
+    /// <summary>
+    /// The Door dropdown's last entry. It is not a door at all — it is here
+    /// because it is the other way to get from one room to another, and that
+    /// is where somebody would look for it.
+    /// </summary>
+    private const string TransitionEntry = "Area transition";
+
+    /// <summary>
+    /// The pad waiting to be linked: right-click one pad to arm it, right-click
+    /// a second to join them. Held as one of the pad's squares, because the pad
+    /// itself is rebuilt from the map every time it is asked for.
+    /// </summary>
+    private Point? _linkFrom;
+
+    /// <summary>Pair numbers are handed out in order; 0 means unlinked.</summary>
+    private int NextPair() =>
+        _level.Transitions.Count == 0 ? 1 : _level.Transitions.Max(t => t.Pair) + 1;
 
     private string DoorSizeName => DoorSizes[_doorIndex].Label;
 
@@ -285,7 +303,8 @@ public partial class IsoEditorScreen : IScreen
         Add("Reload", "reload", false);
         Add("Controls", "controls", _showControls);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
-        Add($"Door: {DoorSizeName}", "door", _tool == Tool.Door, menu: true);
+        Add($"Door: {(_tool == Tool.Transition ? TransitionEntry : DoorSizeName)}", "door",
+            _tool is Tool.Door or Tool.Transition, menu: true);
         Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
         Add("Start", "start", _tool == Tool.PlayerStart);
         Add($"Trigger: {_trigger}", "trigger", _tool == Tool.Trigger);
@@ -313,7 +332,7 @@ public partial class IsoEditorScreen : IScreen
             .Concat(FamilyPieces.Select(gp => Strip(gp.File))).ToList(),
         "deco" => BlockCatalog.Decorations.Select(Strip).ToList(),
         "enemy" => _ctx.Enemies.EnemyNames.ToList(),
-        "door" => DoorSizes.Select(d => d.Label).ToList(),
+        "door" => DoorSizes.Select(d => d.Label).Append(TransitionEntry).ToList(),
         "level" => LevelNames(),
         _ => new List<string>(),
     };
@@ -358,7 +377,10 @@ public partial class IsoEditorScreen : IScreen
             case "piece": _pieceIndex = index - 1; _tool = Tool.Block; break;
             case "deco": _decoIndex = index; _tool = Tool.Decoration; break;
             case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
-            case "door": _doorIndex = index; _tool = Tool.Door; break;
+            case "door":
+                if (index >= DoorSizes.Length) { _tool = Tool.Transition; break; }
+                _doorIndex = index; _tool = Tool.Door;
+                break;
         }
         _openMenu = null;
     }
@@ -375,7 +397,8 @@ public partial class IsoEditorScreen : IScreen
                 // the button both selects its tool and opens its palette
                 _tool = id is "family" or "piece" ? Tool.Block
                     : id == "deco" ? Tool.Decoration
-                    : id == "door" ? Tool.Door : Tool.Enemy;
+                    : id == "door" ? (_tool == Tool.Transition ? Tool.Transition : Tool.Door)
+                    : Tool.Enemy;
                 _openMenu = _openMenu == id ? null : id;
                 return true;
             case "anchor": ToggleAnchorTool(); return true;
@@ -463,11 +486,13 @@ public partial class IsoEditorScreen : IScreen
         UpdatePaint(input, origin);
         UpdateErase(input, origin);
 
-        // right-clicking a dialogue square opens that level's dialogue file
+        // right-click: link two transition pads, or open a dialogue square's file
         if (input.AltTap is Point rc && !ToolbarBand.Contains(rc))
         {
             var t = PickTile(rc.ToVector2(), origin) ?? IsoMath.ToGrid(rc.ToVector2(), origin);
-            if (_level.TriggerAt(t) is LevelTrigger trig) OpenDialogueFile(trig.Dialogue);
+            if (_level.TransitionAt(t) != null) LinkTransition(t);
+            else if (_level.TriggerAt(t) is LevelTrigger trig) OpenDialogueFile(trig.Dialogue);
+            else if (_linkFrom != null) { _linkFrom = null; Status("link cancelled"); }
         }
     }
 
@@ -803,6 +828,12 @@ public partial class IsoEditorScreen : IScreen
                 _level.Enemies.Add(new LevelEnemy
                     { X = tile.X, Y = tile.Y, Name = _ctx.Enemies.EnemyNames[_enemyIndex] });
                 break;
+            // painted like any other overlay; which squares form one pad is
+            // decided by which of them touch, not by anything stored
+            case Tool.Transition when _level.BlockAt(tile) != null:
+                if (_level.TransitionAt(tile) == null)
+                    _level.Transitions.Add(new LevelTransition { X = tile.X, Y = tile.Y });
+                break;
             case Tool.Trigger when _level.BlockAt(tile) != null:
                 _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
                 _level.Triggers.Add(new LevelTrigger { X = tile.X, Y = tile.Y, Dialogue = _trigger });
@@ -826,6 +857,7 @@ public partial class IsoEditorScreen : IScreen
         if (_level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y) > 0) return;
         if (_level.Doors.RemoveAll(d => d.Covers(tile)) > 0) return;
         if (_level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y) > 0) return;
+        if (_level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.PlayerStarts.Remove(tile)) return;
         _level.Blocks.Remove(tile);
@@ -838,6 +870,7 @@ public partial class IsoEditorScreen : IScreen
         n += _level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y);
         n += _level.Doors.RemoveAll(d => d.Covers(tile));
         n += _level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y);
+        n += _level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         n += _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         if (_level.PlayerStarts.Remove(tile)) n++;
         if (_level.Blocks.Remove(tile)) n++;
@@ -873,6 +906,11 @@ public partial class IsoEditorScreen : IScreen
         int n = 0;
         foreach (var t in _level.Triggers)
             if (_level.BlockAt(new Point(t.X, t.Y)) == null) n++;
+        foreach (var t in _level.Transitions)
+            if (_level.BlockAt(new Point(t.X, t.Y)) == null) n++;
+        // a pad that leads nowhere is a level that cannot be finished
+        n += _level.TransitionPads().Count(p => p.Pair == 0 ||
+            _level.TransitionPads().Count(o => o.Pair == p.Pair) != 2);
         foreach (var d in _level.Decorations)
             if (_level.BlockAt(new Point(d.X, d.Y)) == null) n++;
         // a body bigger than one tile needs its whole footprint, same as the
@@ -1120,6 +1158,14 @@ public partial class IsoEditorScreen : IScreen
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Orange * 0.45f);
             if (InSpan(_selStart, _selEnd, tile) || InSpan(_selA, _selB, tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.Cyan * 0.35f);
+            if (_level.TransitionAt(tile) != null)
+            {
+                bool linked = _level.TransitionAt(tile)!.Pair != 0;
+                // orange for a live pad, grey for one that leads nowhere yet,
+                // so a half-built link is obvious without opening the file
+                DrawTop(batch, b.X, b.Y, b.Height, origin,
+                    (linked ? new Color(255, 150, 40) : new Color(150, 150, 150)) * 0.5f);
+            }
             if (_rooms.On)
                 DrawTop(batch, b.X, b.Y, b.Height, origin, RoomColor(b.Room) * 0.55f);
 
@@ -1156,6 +1202,7 @@ public partial class IsoEditorScreen : IScreen
                         DrawTop(batch, x, y, _height, origin, Color.Orange * 0.45f);
         }
 
+        DrawTransitionLinks(batch, origin);
         DrawCursor(batch, origin);
         if (_rooms.On) DrawRoomKey(batch);
         // the anchor tool covers the level but sits under the toolbar, so its
@@ -1167,6 +1214,45 @@ public partial class IsoEditorScreen : IScreen
         // last, so both cover whatever they hang over
         DrawControlsPanel(batch);
         DrawOpenMenu(batch);
+    }
+
+    /// <summary>
+    /// Right-clicking a transition pad. The first one is remembered; the second
+    /// joins the two, giving both a fresh pair number. Right-clicking the pad
+    /// that is already armed cancels, and right-clicking a pad already linked to
+    /// something breaks that link first, so relinking never leaves a third pad
+    /// wearing the same number.
+    /// </summary>
+    private void LinkTransition(Point tile)
+    {
+        var pads = _level.TransitionPads();
+        var pad = pads.FirstOrDefault(p => p.Covers(tile));
+        if (pad == null) return;
+
+        if (_linkFrom == null)
+        {
+            _linkFrom = tile;
+            Status($"linking from the pad at {pad.Key.X},{pad.Key.Y} — right-click its far end");
+            return;
+        }
+
+        var from = pads.FirstOrDefault(p => p.Covers(_linkFrom.Value));
+        if (from == null) { _linkFrom = tile; Status("that pad is gone; starting again here"); return; }
+        if (from.Key == pad.Key) { _linkFrom = null; Status("link cancelled"); return; }
+
+        // whatever either end used to be joined to is let go, so no third pad
+        // is left sharing the number
+        foreach (var stale in new[] { from.Pair, pad.Pair }.Where(n => n != 0).Distinct())
+            foreach (var t in _level.Transitions.Where(t => t.Pair == stale))
+                t.Pair = 0;
+
+        int pair = NextPair();
+        foreach (var t in _level.Transitions)
+            if (from.Covers(new Point(t.X, t.Y)) || pad.Covers(new Point(t.X, t.Y)))
+                t.Pair = pair;
+
+        Status($"pair {pair}: {from.Key.X},{from.Key.Y} <-> {pad.Key.X},{pad.Key.Y}");
+        _linkFrom = null;
     }
 
     /// <summary>
@@ -1289,6 +1375,8 @@ public partial class IsoEditorScreen : IScreen
         "",
         "1..9  ground family     B  next piece, then Random",
         "D deco   O door   E enemy   P start   G trigger",
+        "area transition: last entry in the Door menu",
+        "  paint the pads, then right-click one and its far end",
         "the Door button picks small, medium (2) or large (4)",
         "R room name    Place Room paints it onto blocks",
         "N dialogue name    V save as",
@@ -1359,6 +1447,50 @@ public partial class IsoEditorScreen : IScreen
         int w = Math.Min(tex.Width, 420);
         int h = (int)(w * tex.Height / (float)tex.Width);
         batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 30 - h), w, h), tint);
+    }
+
+    /// <summary>
+    /// A teal line between the two ends of every linked pair, plus a dashed one
+    /// from the pad waiting to be linked to the cursor. Editor only — the game
+    /// draws none of this.
+    /// </summary>
+    private void DrawTransitionLinks(SpriteBatch batch, Vector2 origin)
+    {
+        var pads = _level.TransitionPads();
+        var teal = new Color(0, 200, 190);
+
+        foreach (var group in pads.Where(p => p.Pair != 0).GroupBy(p => p.Pair))
+        {
+            var ends = group.ToList();
+            // a pair with anything other than two ends is broken; the validator
+            // says so, and drawing every leg makes it visible here too
+            for (int i = 0; i < ends.Count; i++)
+                for (int j = i + 1; j < ends.Count; j++)
+                    Line(batch, Middle(ends[i], origin), Middle(ends[j], origin),
+                        ends.Count == 2 ? teal : Color.Red, 7f);
+        }
+
+        if (_linkFrom is Point from && pads.FirstOrDefault(p => p.Covers(from)) is TransitionPad armed)
+            Line(batch, Middle(armed, origin), _pointer.ToVector2(), teal * 0.55f, 5f);
+    }
+
+    /// <summary>The screen point at the middle of a pad's top faces.</summary>
+    private Vector2 Middle(TransitionPad pad, Vector2 origin)
+    {
+        var sum = Vector2.Zero;
+        foreach (var t in pad.Tiles)
+            sum += IsoMath.ToScreen(t.X, t.Y, _level.BlockAt(t)?.Height ?? 0, origin);
+        return sum / Math.Max(1, pad.Tiles.Count);
+    }
+
+    /// <summary>A straight line, drawn by stretching and rotating the 1x1 pixel.</summary>
+    private void Line(SpriteBatch batch, Vector2 a, Vector2 b, Color color, float thickness)
+    {
+        var span = b - a;
+        float length = span.Length();
+        if (length < 0.5f) return;
+        batch.Draw(_ctx.Pixel, new Rectangle((int)a.X, (int)a.Y, (int)length, (int)thickness),
+            null, color, (float)Math.Atan2(span.Y, span.X), new Vector2(0, 0.5f), SpriteEffects.None, 0f);
     }
 
     /// <summary>

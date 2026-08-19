@@ -136,6 +136,10 @@ public static class ContentValidator
         }
     }
 
+    /// <summary>Which room a transition pad sits in, or null if it is over nothing.</summary>
+    private static string? RoomOf(LevelData level, TransitionPad pad) =>
+        pad.Tiles.Select(t => level.BlockAt(t)?.Room).FirstOrDefault(r => r != null);
+
     /// <summary>Form gating only means anything for the player deck.</summary>
     private static void ValidateCardsAgainstClasses(CardLibrary cards, ClassLibrary classes, Diagnostics diag)
     {
@@ -351,6 +355,49 @@ public static class ContentValidator
                 if (level.BlockAt(start) == null)
                     diag.Error(path, 0, $"PlayerStart at {start.X},{start.Y} has no block under it");
 
+            // area transitions: a pad has to be walkable, has to lead somewhere,
+            // and has to lead somewhere unambiguous
+            foreach (var t in level.Transitions)
+                if (level.BlockAt(new Microsoft.Xna.Framework.Point(t.X, t.Y)) == null)
+                    diag.Error(path, 0,
+                        $"the area transition at {t.X},{t.Y} has no block under it, so nobody can step on it");
+
+            var pads = level.TransitionPads();
+            foreach (var pad in pads)
+            {
+                var at = pad.Key;
+                if (pad.Pair == 0)
+                {
+                    diag.Warn(path, 0,
+                        $"the area transition at {at.X},{at.Y} is not linked to anything, so " +
+                        "stepping on it does nothing — right-click it and then its far end");
+                    continue;
+                }
+                if (pad.Mixed)
+                    diag.Error(path, 0,
+                        $"the area transition at {at.X},{at.Y} is made of squares with different " +
+                        "pair numbers — two linked pads have been painted into one, and only " +
+                        $"pair {pad.Pair} survives. Rub out the squares joining them, or link it again");
+                int ends = pads.Count(p => p.Pair == pad.Pair);
+                if (ends == 1)
+                    diag.Error(path, 0,
+                        $"the area transition at {at.X},{at.Y} is pair {pad.Pair}, but it is the " +
+                        "only pad with that number, so it leads nowhere");
+                else if (ends > 2)
+                    diag.Error(path, 0,
+                        $"pair {pad.Pair} is shared by {ends} area transitions; a pair joins " +
+                        "exactly two, so there is no telling which one this leads to");
+
+                // a pad in the same room as its far end moves the party without
+                // changing anything, which is almost never what was wanted
+                var other = pads.FirstOrDefault(p => p != pad && p.Pair == pad.Pair);
+                if (other != null && RoomOf(level, pad) is string a && RoomOf(level, other) is string b &&
+                    a.Equals(b, StringComparison.OrdinalIgnoreCase))
+                    diag.Warn(path, 0,
+                        $"the area transition at {at.X},{at.Y} leads to another pad in the same " +
+                        $"room ('{a}'), so the party is moved but nothing is revealed or hidden");
+            }
+
             // trigger squares must name a dialogue block that exists and has lines
             var dialogue = DialogueLibrary.Load(dest.Level);
             foreach (var trigger in level.Triggers)
@@ -386,7 +433,7 @@ public static class ContentValidator
             "error_title", "error_continue", "error_more", "error_log", "error_counts",
             "iso_enter", "iso_explore_hint", "iso_spotted", "iso_done", "iso_clear",
             "iso_end_turn", "iso_move_left", "iso_out_of_range",
-            "iso_door_open", "iso_victory", "iso_card_range",
+            "iso_door_open", "iso_victory", "iso_card_range", "iso_transition",
             "iso_move_spent", "iso_pick_target", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",

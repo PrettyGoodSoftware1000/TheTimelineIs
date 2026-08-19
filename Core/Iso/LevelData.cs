@@ -71,6 +71,25 @@ public class LevelTrigger
 }
 
 /// <summary>
+/// One square of an area transition — the painted pads a party walks onto to
+/// move somewhere else in the level.
+///
+/// A transition is not this one square: it is every painted square touching it,
+/// so painting a 2x2 patch makes one pad four squares across. Which squares
+/// belong together is worked out from the map rather than stored, so the pads
+/// can be reshaped in the editor without any bookkeeping.
+///
+/// <see cref="Pair"/> is what joins two pads: both ends of the same trip carry
+/// the same number. 0 means the pad has not been linked to anything yet and
+/// does nothing.
+/// </summary>
+public class LevelTransition
+{
+    public int X, Y;
+    public int Pair;
+}
+
+/// <summary>
 /// One isometric level: Content/Levels/{Name}.txt, one entity per line.
 ///
 ///   Block: x, y, height, type, room
@@ -79,6 +98,7 @@ public class LevelTrigger
 ///   Enemy: x, y, name
 ///   PlayerStart: x, y
 ///   Trigger: x, y, dialogueName
+///   Transition: x, y, pair
 ///
 /// Rooms are just labels on blocks; a door joins two of them and hides RoomB
 /// (and everything standing in it) until opened. The editor writes this file.
@@ -91,6 +111,7 @@ public class LevelData
     public List<LevelDoor> Doors { get; } = new();
     public List<LevelEnemy> Enemies { get; } = new();
     public List<LevelTrigger> Triggers { get; } = new();
+    public List<LevelTransition> Transitions { get; } = new();
     public List<Point> PlayerStarts { get; } = new();
 
     public static string PathFor(string name) => $"Content/Levels/{name}.txt";
@@ -101,6 +122,8 @@ public class LevelData
         Decorations.FirstOrDefault(d => d.X == p.X && d.Y == p.Y);
     public LevelTrigger? TriggerAt(Point p) =>
         Triggers.FirstOrDefault(t => t.X == p.X && t.Y == p.Y);
+    public LevelTransition? TransitionAt(Point p) =>
+        Transitions.FirstOrDefault(t => t.X == p.X && t.Y == p.Y);
 
     public IEnumerable<string> RoomNames =>
         Blocks.Values.Select(b => b.Room).Distinct(StringComparer.OrdinalIgnoreCase);
@@ -182,6 +205,22 @@ public class LevelData
                 case "trigger" when Num(0, out int tx) && Num(1, out int ty) && parts.Length >= 3:
                     level.Triggers.Add(new LevelTrigger { X = tx, Y = ty, Dialogue = parts[2] });
                     break;
+                // the pair number is optional: an unlinked pad is a legal thing
+                // to have half-built, and the validator says so rather than the
+                // parser refusing the line
+                case "transition" when Num(0, out int ax) && Num(1, out int ay):
+                {
+                    int pair = 0;
+                    if (parts.Length >= 3 && !int.TryParse(parts[2], out pair))
+                    {
+                        diag.Error(path, lineNo,
+                            $"transition at {ax},{ay}: the pair number must be a whole number, " +
+                            $"got '{parts[2]}'");
+                        pair = 0;
+                    }
+                    level.Transitions.Add(new LevelTransition { X = ax, Y = ay, Pair = pair });
+                    break;
+                }
                 case "playerstart" when Num(0, out int px) && Num(1, out int py):
                     level.PlayerStarts.Add(new Point(px, py));
                     break;
@@ -210,6 +249,8 @@ public class LevelData
                 Width = d.Width, AlongY = d.AlongY, Open = d.Open,
             }));
         copy.Enemies.AddRange(Enemies.Select(e => new LevelEnemy { X = e.X, Y = e.Y, Name = e.Name }));
+        copy.Transitions.AddRange(Transitions.Select(t =>
+            new LevelTransition { X = t.X, Y = t.Y, Pair = t.Pair }));
         copy.Triggers.AddRange(Triggers.Select(t =>
             new LevelTrigger { X = t.X, Y = t.Y, Dialogue = t.Dialogue, Fired = t.Fired }));
         copy.PlayerStarts.AddRange(PlayerStarts);
@@ -225,6 +266,7 @@ public class LevelData
         Doors.Clear(); Doors.AddRange(other.Doors);
         Enemies.Clear(); Enemies.AddRange(other.Enemies);
         Triggers.Clear(); Triggers.AddRange(other.Triggers);
+        Transitions.Clear(); Transitions.AddRange(other.Transitions);
         PlayerStarts.Clear(); PlayerStarts.AddRange(other.PlayerStarts);
     }
 
@@ -246,8 +288,95 @@ public class LevelData
             sb.AppendLine($"Enemy: {e.X}, {e.Y}, {e.Name}");
         foreach (var t in Triggers.OrderBy(t => t.Y).ThenBy(t => t.X))
             sb.AppendLine($"Trigger: {t.X}, {t.Y}, {t.Dialogue}");
+        foreach (var t in Transitions.OrderBy(t => t.Pair).ThenBy(t => t.Y).ThenBy(t => t.X))
+            sb.AppendLine($"Transition: {t.X}, {t.Y}, {t.Pair}");
         foreach (var p in PlayerStarts)
             sb.AppendLine($"PlayerStart: {p.X}, {p.Y}");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The transition squares grouped into pads: every run of squares that
+    /// touch each other side-on is one pad. Diagonal contact does NOT join two
+    /// pads, so two pads can sit corner to corner without merging into one.
+    ///
+    /// Worked out from the squares each time rather than stored, so a pad can
+    /// be painted, extended and rubbed out in the editor without any ids to
+    /// keep straight.
+    /// </summary>
+    public List<TransitionPad> TransitionPads()
+    {
+        var left = Transitions.ToDictionary(t => new Point(t.X, t.Y), t => t);
+        var pads = new List<TransitionPad>();
+
+        while (left.Count > 0)
+        {
+            var seed = left.Keys.First();
+            var pad = new TransitionPad { Pair = left[seed].Pair };
+            var queue = new Queue<Point>();
+            queue.Enqueue(seed);
+            left.Remove(seed);
+            pad.Tiles.Add(seed);
+
+            while (queue.Count > 0)
+            {
+                var here = queue.Dequeue();
+                foreach (var step in new[]
+                         {
+                             new Point(here.X + 1, here.Y), new Point(here.X - 1, here.Y),
+                             new Point(here.X, here.Y + 1), new Point(here.X, here.Y - 1),
+                         })
+                {
+                    if (!left.Remove(step, out var joined)) continue;
+                    // a pad wears the pair number of whichever of its squares
+                    // carries one, so extending a linked pad keeps the link.
+                    // Two DIFFERENT numbers touching is a mistake — one of the
+                    // links is about to be lost — so it is remembered and
+                    // reported rather than resolved by whichever came first.
+                    if (pad.Pair == 0) pad.Pair = joined.Pair;
+                    else if (joined.Pair != 0 && joined.Pair != pad.Pair) pad.Mixed = true;
+                    pad.Tiles.Add(step);
+                    queue.Enqueue(step);
+                }
+            }
+            pads.Add(pad);
+        }
+        return pads;
+    }
+}
+
+/// <summary>One area-transition pad: the squares it covers and who it leads to.</summary>
+public class TransitionPad
+{
+    public List<Point> Tiles { get; } = new();
+
+    /// <summary>Both ends of a trip share this. 0 means it leads nowhere yet.</summary>
+    public int Pair;
+
+    /// <summary>
+    /// True when the squares making up this pad do not agree on their pair
+    /// number. Two separately linked pads have been painted into one, so one of
+    /// those links is now unreachable. Reported rather than quietly resolved.
+    /// </summary>
+    public bool Mixed;
+
+    public bool Covers(Point p) => Tiles.Contains(p);
+
+    /// <summary>
+    /// A name for this pad that survives being recomputed: its lowest square.
+    /// Two pads sharing a Pair need telling apart — the pair alone cannot say
+    /// which END of the trip the party is standing on.
+    /// </summary>
+    public Point Key => Tiles.OrderBy(t => t.Y).ThenBy(t => t.X).First();
+
+    /// <summary>The square a line to this pad should be drawn from — its middle.</summary>
+    public Point Center
+    {
+        get
+        {
+            int x = 0, y = 0;
+            foreach (var t in Tiles) { x += t.X; y += t.Y; }
+            return new Point(x / Math.Max(1, Tiles.Count), y / Math.Max(1, Tiles.Count));
+        }
     }
 }
