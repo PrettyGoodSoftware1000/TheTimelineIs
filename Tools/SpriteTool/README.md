@@ -235,3 +235,36 @@ outlines) and from every colour in the existing art. Turn anti-aliasing off on
 the outer edge so pixels go straight from black to magenta with nothing in
 between; the game scales sprites up at draw time, so the GPU softens the edge
 for you and you never bake a purple fringe into the file.
+
+
+## Removing a background (`cutout`)
+
+Its own step. Extracting frames never does it for you — art comes off a video
+with its background still on, and gets keyed later, deliberately.
+
+    dotnet run --project Tools/SpriteTool -- cutout frames -o cut
+
+Menu option 5 does the same with questions instead of flags.
+
+**The art needs black edges.** That is what makes it exact: where the
+background meets a black outline, the half-covered pixels are a mix of two
+known colours, so how much of each can be read straight back out.
+
+The background is found by spreading in from the edges of the image, not by
+matching colour everywhere. A pale highlight *inside* the art is safe, because
+the outline stops the spread before it gets there.
+
+| Option | What it does |
+|---|---|
+| `--colour C` | `white` (default), `magenta`, `255,0,255`, `#ff00ff` |
+| `--tolerance N` | How far off that colour still counts, 0-255 (default 12) |
+| `--keep-enclosed` | Keep background sealed inside the art; by default it goes |
+| `--out DIR` | Where to write. Otherwise `name_cut.png` beside the original |
+| `--in-place` | Overwrite the originals |
+| `--dry-run` | Report only |
+
+Tolerance: raise it for frames that came through video compression, lower it if
+pale parts of the artwork are being eaten.
+
+A file whose background does not match is **skipped**, not mangled, and the run
+says so at the end.

@@ -38,8 +38,9 @@ public static class Menu
             Console.WriteLine("   2   Build a sprite sheet from pngs");
             Console.WriteLine("   3   Slice a sprite sheet back into pngs");
             Console.WriteLine("   4   Measure a sheet made somewhere else");
-            Console.WriteLine("   5   Check that ffmpeg is installed");
-            Console.WriteLine("   6   Show the command-line options");
+            Console.WriteLine("   5   Remove a background from a folder of pngs");
+            Console.WriteLine("   6   Check that ffmpeg is installed");
+            Console.WriteLine("   7   Show the command-line options");
             Console.WriteLine("   0   Quit");
             Console.WriteLine("  ------------------------------------------------");
             string choice = Ask("choose", "1");
@@ -52,8 +53,9 @@ public static class Menu
                 case "2": DoSheet(); break;
                 case "3": DoSlice(); break;
                 case "4": DoDetect(); break;
-                case "5": CheckFfmpeg(); break;
-                case "6": Program.Usage(); break;
+                case "5": DoCutout(); break;
+                case "6": CheckFfmpeg(); break;
+                case "7": Program.Usage(); break;
                 case "0" or "q" or "quit" or "exit": return 0;
                 default: Console.WriteLine($"  '{choice}' isn't on the menu."); break;
             }
@@ -222,6 +224,87 @@ public static class Menu
 
         Console.WriteLine();
         Detect.Run(o);
+    }
+
+    /// <summary>
+    /// Background removal, a folder at a time. Its own step, never folded into
+    /// extracting frames: art comes off a video with its background still on,
+    /// and is keyed later, once, on purpose.
+    /// </summary>
+    private static void DoCutout()
+    {
+        Console.WriteLine("  Takes a flat background off artwork and gives it real transparency.");
+        Console.WriteLine("  The art needs black edges — that is what makes the soft edge exact.");
+        Console.WriteLine();
+
+        string folder = AskExistingFolder("folder of pngs", _lastFolder);
+        if (folder.Length == 0) return;
+        _lastFolder = Path.GetFullPath(folder);
+
+        var pngs = Directory.GetFiles(folder, "*.png");
+        if (pngs.Length == 0)
+        {
+            Console.WriteLine($"  no .png files in {Path.GetFullPath(folder)}");
+            return;
+        }
+        Console.WriteLine($"  found {pngs.Length} png(s).");
+
+        var o = new Cutout.Options { Inputs = { folder } };
+
+        Console.WriteLine();
+        Console.WriteLine("   1  white background");
+        Console.WriteLine("   2  magenta background");
+        Console.WriteLine("   3  something else");
+        string which = Ask("background colour", "1");
+        o.Key = which switch
+        {
+            "2" => Cutout.ParseColor("magenta"),
+            "3" => AskColor(),
+            _ => Cutout.ParseColor("white"),
+        };
+
+        Console.WriteLine();
+        Console.WriteLine("  Tolerance is how far off that colour still counts as background,");
+        Console.WriteLine("  0 to 255. Higher for art that has been through video compression;");
+        Console.WriteLine("  lower if pale parts of the artwork get eaten.");
+        o.Tolerance = AskInt("tolerance", o.Tolerance, 0);
+
+        o.ClearEnclosed = AskYes(
+            "also clear background sealed inside the art (arm gaps and so on)", true);
+
+        if (AskYes("overwrite the originals", false)) o.InPlace = true;
+        else o.OutDir = AskFolder("folder to write them into",
+            Path.Combine(_lastFolder, "cut"));
+
+        Console.WriteLine();
+        if (AskYes("try one file first and report, without writing anything", true))
+        {
+            var trial = new Cutout.Options
+            {
+                Inputs = { pngs[0] }, Key = o.Key, Tolerance = o.Tolerance,
+                ClearEnclosed = o.ClearEnclosed, DryRun = true,
+            };
+            Cutout.Run(trial);
+            Console.WriteLine();
+            if (!AskYes("go ahead with the rest", true)) { Console.WriteLine("  cancelled."); return; }
+        }
+
+        Console.WriteLine();
+        Cutout.Run(o);
+    }
+
+    private static SixLabors.ImageSharp.PixelFormats.Rgba32 AskColor()
+    {
+        while (true)
+        {
+            string text = Ask("colour (name, 255,0,255 or #ff00ff)", "white");
+            try { return Cutout.ParseColor(text); }
+            catch (ArgumentException ex)
+            {
+                if (_eof) return Cutout.ParseColor("white");
+                Console.WriteLine("  " + ex.Message);
+            }
+        }
     }
 
     private static void CheckFfmpeg()
