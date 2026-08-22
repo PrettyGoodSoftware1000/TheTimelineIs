@@ -264,7 +264,11 @@ is not.
 
 **Menu option 5.** It asks five things and gets on with it. Results go into a
 folder beside the one you pointed at, with `_cutout` on the name — point it at
-`witchcast` and you get `witchcast_cutout`. Nothing is ever overwritten.
+`witchcast` and you get `witchcast_cutout`.
+
+**Nothing is ever overwritten.** Run it again and you get `witchcast_cutout_2`,
+then `_3`. Going again at a different hole size is the normal way to work, and
+the previous attempt is the thing you are comparing against.
 
 This is its own step. Extracting frames never does it for you.
 

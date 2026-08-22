@@ -292,12 +292,30 @@ public static class Menu
         // _cutout on the end, beside the one the frames came from.
         var source = new DirectoryInfo(Path.GetFullPath(folder).TrimEnd(
             Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        o.OutDir = Path.Combine(source.Parent?.FullName ?? source.FullName, source.Name + "_cutout");
+        o.OutDir = FreeFolder(source.Parent?.FullName ?? source.FullName, source.Name + "_cutout");
 
         Console.WriteLine();
         Console.WriteLine($"  writing to {o.OutDir}");
         Console.WriteLine();
         Cutout.Run(o);
+    }
+
+    /// <summary>
+    /// A folder that does not exist yet: "frames_cutout", then
+    /// "frames_cutout_2", "frames_cutout_3" and so on.
+    ///
+    /// A second run at different settings is the normal way to work — the first
+    /// one tells you what the hole sizes actually were, and you go again with a
+    /// better number. Writing over the previous attempt would throw away the
+    /// thing you are comparing against, and worse, a run that produced FEWER
+    /// files would leave stragglers from the last one mixed in with the new.
+    /// </summary>
+    private static string FreeFolder(string parent, string name)
+    {
+        string path = Path.Combine(parent, name);
+        for (int n = 2; Directory.Exists(path) && n < 1000; n++)
+            path = Path.Combine(parent, $"{name}_{n}");
+        return path;
     }
 
     private static SixLabors.ImageSharp.PixelFormats.Rgba32 AskColor()
