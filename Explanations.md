@@ -46,8 +46,12 @@ From the repo root:
 |---|---|
 | `dotnet run --project Desktop` | The game |
 | `dotnet run --project Desktop -- --editor` | The level editor |
-| `dotnet run --project Tools/SpriteTool` | The sprite tool (menu appears) |
+| `dotnet run --project Tools/SpriteTool` | The sprite tool (a menu appears) |
 | `dotnet build` | Compile everything, run nothing |
+
+Or double-click `Tools/SpriteTool/spritetool.bat` for the sprite tool. Its menu
+covers everything it does — extracting frames, sheets, slicing, measuring, and
+removing backgrounds. You never need to type its command-line form.
 
 `--devmap` still works but is no longer needed — **Ctrl+D** turns map placement
 on and off inside the running game.
@@ -189,6 +193,9 @@ it. Once they are, one person stepping back on makes the return trip.
 
 ## ffmpeg
 
+Only *extracting frames from a video* needs it. Sheets, slicing, measuring and
+background removal are all pure code and need nothing installed.
+
 The sprite tool shells out to `ffmpeg` to pull frames from a video. **"on the
 PATH"** means Windows can find it by name from any folder, rather than you
 having to type where it lives.
@@ -196,4 +203,4 @@ having to type where it lives.
 Install: `winget install Gyan.FFmpeg`, then **open a new terminal** — an
 already-open one won't have noticed.
 
-Check it worked: option 5 in the sprite tool menu, or type `ffmpeg -version`.
+Check it worked: option 6 in the sprite tool menu, or type `ffmpeg -version`.

@@ -4,8 +4,9 @@ mp4 → numbered PNGs → sprite sheet → numbered PNGs again.
 
 ## Just run it
 
-**Double-click `Tools/SpriteTool/spritetool.bat`**, or from anywhere in the
-repo:
+**Double-click `Tools/SpriteTool/spritetool.bat`.** That is the whole thing —
+no arguments, no flags. From a terminal anywhere in the repo, this does the
+same:
 
 ```
 dotnet run --project Tools/SpriteTool
@@ -22,16 +23,18 @@ session is mostly Enter.
    2   Build a sprite sheet from pngs
    3   Slice a sprite sheet back into pngs
    4   Measure a sheet made somewhere else
-   5   Check that ffmpeg is installed
-   6   Show the command-line options
+   5   Remove a background from a folder of pngs
+   6   Check that ffmpeg is installed
+   7   Show the command-line options
    0   Quit
 ```
 
-The command line below still works, for scripting or for repeating a run you
-have already worked out.
+**Everything the tool does is on that list.** The command line further down is
+only for scripting and for repeating a run you already worked out — you never
+have to touch it. Menu option 7 prints it if you want to look:
 
 ```
-dotnet run --project Tools/SpriteTool -- --help
+spritetool.bat --help
 ```
 
 ## Filenames
@@ -43,8 +46,10 @@ padding grows to fit.
 
 ## extract — every frame of a video as its own PNG
 
+**Menu option 1.** The command-line form, for scripting:
+
 ```
-dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
+spritetool.bat extract wolf.mp4 werewolf_attack -o out
 ```
 
 writes `out/werewolf_attack001.png` … `werewolf_attack037.png`.
@@ -108,7 +113,7 @@ winget install Gyan.FFmpeg
 ```
 
 Then **close and reopen the terminal** — PATH is read when a window opens, so
-an already-open one won't see the change. Menu option **4** checks whether it
+an already-open one won't see the change. Menu option **6** checks whether it
 worked.
 
 If you would rather not touch PATH, put `ffmpeg.exe` anywhere you like and set
@@ -123,9 +128,11 @@ these instructions instead of failing with a stack trace.
 
 ## sheet — PNGs into one sprite sheet
 
+**Menu option 2.** The command-line form:
+
 ```
-dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
-dotnet run --project Tools/SpriteTool -- sheet out/a1.png out/a2.png -c 4 -o Sheet.png
+spritetool.bat sheet out -o WerewolfAttack.png
+spritetool.bat sheet out/a1.png out/a2.png -c 4 -o Sheet.png
 ```
 
 | option | what it does |
@@ -166,8 +173,10 @@ frame as a percentage of the character it replaces.
 
 ## slice — a sheet back into numbered PNGs
 
+**Menu option 3.** The command-line form:
+
 ```
-dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attack -o frames
+spritetool.bat slice WerewolfAttack.png werewolf_attack -o frames
 ```
 
 Reads the cell size and offset from the companion `.txt` when it's there. When
@@ -176,8 +185,10 @@ there isn't one it offers to measure the sheet for you (see `detect`), or takes
 
 ## detect — measure a sheet somebody else made
 
+**Menu option 4.** The command-line form:
+
 ```
-dotnet run --project Tools/SpriteTool -- detect WerewitchSpell1.png
+spritetool.bat detect WerewitchSpell1.png
 ```
 
 | option | what it does |
@@ -228,43 +239,75 @@ way; `--columns` and `--rows` are the way through.
 
 ## Getting a transparent background
 
-An mp4 essentially never carries alpha, so a sprite extracted from one has a
-solid background. Shoot or render the animation against flat **magenta
-`FF00FF`** and key it out — that colour sits furthest from black (your
-outlines) and from every colour in the existing art. Turn anti-aliasing off on
-the outer edge so pixels go straight from black to magenta with nothing in
-between; the game scales sprites up at draw time, so the GPU softens the edge
-for you and you never bake a purple fringe into the file.
+An mp4 essentially never carries alpha, so a sprite extracted from one arrives
+with a solid background. `cutout` below takes it off.
+
+Two things make that work well, and both are decisions made before the art is
+recorded:
+
+**Keep the anti-aliasing on.** Earlier advice here said to turn it off and use
+magenta; that is no longer right. `cutout` reads a half-covered edge pixel and
+works out how covered it was, so a soft edge becomes a soft alpha edge — which
+is better than a hard one, because the game scales sprites up at draw time and
+a hard edge stays hard when magnified.
+
+**White or magenta, and white is usually the better bet.** The measured
+difference on this project's art is small, and white wins on the thing that
+actually goes wrong: ordinary H.264 stores colour at half resolution, which
+smears a saturated magenta across edges far worse than it smears white. Magenta
+is only clearly better when the art itself is white-heavy — which this project's
+is not.
 
 
-## Removing a background (`cutout`)
+## cutout — take a flat background off artwork
 
-Its own step. Extracting frames never does it for you — art comes off a video
-with its background still on, and gets keyed later, deliberately.
+**Menu option 5.** It asks for the folder, the background colour, the
+tolerance, whether to clear sealed-in areas, and where to put the results — then
+offers to try one file and report before touching the rest.
 
-    dotnet run --project Tools/SpriteTool -- cutout frames -o cut
+This is its own step. Extracting frames never does it for you: art comes off a
+video with its background still on, and gets keyed later, deliberately.
 
-Menu option 5 does the same with questions instead of flags.
-
-**The art needs black edges.** That is what makes it exact: where the
-background meets a black outline, the half-covered pixels are a mix of two
-known colours, so how much of each can be read straight back out.
+**The art needs black edges.** That is what makes it exact. Where the
+background meets a black outline the half-covered pixels are a mix of two known
+colours, so how much of each can be read straight back out and becomes the
+alpha.
 
 The background is found by spreading in from the edges of the image, not by
 matching colour everywhere. A pale highlight *inside* the art is safe, because
-the outline stops the spread before it gets there.
+the outline stops the spread before it ever gets there. The obvious approach —
+"the whiter it is, the more see-through" — turns every white highlight into a
+hole; on this project's own art it puts over a million pixels of one frame
+wrong.
 
-| Option | What it does |
+| the menu asks | what it means |
 |---|---|
-| `--colour C` | `white` (default), `magenta`, `255,0,255`, `#ff00ff` |
-| `--tolerance N` | How far off that colour still counts, 0-255 (default 12) |
-| `--keep-enclosed` | Keep background sealed inside the art; by default it goes |
-| `--out DIR` | Where to write. Otherwise `name_cut.png` beside the original |
-| `--in-place` | Overwrite the originals |
-| `--dry-run` | Report only |
+| background colour | white, magenta, or anything you type: `255,0,255`, `#ff00ff` |
+| tolerance | how far off that colour still counts, 0–255. Default 12 |
+| clear sealed-in areas | the gap between an arm and a body. Yes unless you have white detail inside the art |
+| overwrite the originals | no writes `name_cut.png` beside them, or into a folder you name |
 
 Tolerance: raise it for frames that came through video compression, lower it if
 pale parts of the artwork are being eaten.
 
-A file whose background does not match is **skipped**, not mangled, and the run
-says so at the end.
+A file whose background does not reach the edge of the image is **skipped, not
+mangled**, and the run says so at the end. That is what a wrong colour looks
+like.
+
+Files are keyed across every core, because these arrive 60 to 100 at a time:
+80 frames of 1536x2752 take about 25 seconds.
+
+For scripting, the same job is `cutout`:
+
+```
+spritetool.bat cutout frames -o cut --magenta -t 24
+```
+
+| option | what it does |
+|---|---|
+| `--colour C` | `white` (default), `magenta`, `255,0,255`, `#ff00ff` |
+| `--tolerance N` | 0–255, default 12 |
+| `--keep-enclosed` | keep background sealed inside the art |
+| `--out DIR` | where to write; otherwise `name_cut.png` beside the original |
+| `--in-place` | overwrite the originals |
+| `--dry-run` | report only |
