@@ -58,13 +58,33 @@ public static class Cutout
         public int Tolerance = 12;
 
         /// <summary>
-        /// Also clear background-coloured areas the fill cannot reach from the
-        /// edge of the image — the gap between an arm and a body, say, sealed
-        /// off by the outline around it. On by default because that is nearly
-        /// always wanted; turn it off to keep deliberate white detail inside
-        /// the art.
+        /// The smallest sealed-off pocket of background colour, in pixels, that
+        /// gets cleared. Anything smaller is kept.
+        ///
+        /// Art is full of small background-coloured details the outline seals
+        /// in — the white of an eye, a tooth, a highlight on a boot — and those
+        /// have to survive. The gaps that DO need clearing, between an arm and
+        /// a body or between the legs, are far bigger. Size is what tells them
+        /// apart, because colour cannot.
+        ///
+        /// 0 keeps every pocket whatever its size.
         /// </summary>
-        public bool ClearEnclosed = true;
+        public int MinHole = 500;
+
+        /// <summary>
+        /// Fade glows and gradients out into the background instead of cutting
+        /// them off at a hard line.
+        ///
+        /// Off by default, because it only applies to art that has soft edges
+        /// meeting the background with no outline between — a magic blast
+        /// running from solid purple out through pale lavender to white. Without
+        /// it that blast keeps a white square around it. With it, each of those
+        /// pixels is read as its true colour at partial coverage.
+        ///
+        /// It cannot reach anything an outline encloses, so a character with a
+        /// black line around her is untouched either way.
+        /// </summary>
+        public bool Glow;
 
         /// <summary>Overwrite the input files instead of writing new ones.</summary>
         public bool InPlace;
@@ -83,8 +103,9 @@ public static class Cutout
         }
 
         Console.WriteLine($"keying {files.Count} file(s) against " +
-                          $"rgb({o.Key.R},{o.Key.G},{o.Key.B}) with tolerance {o.Tolerance}" +
-                          (o.ClearEnclosed ? "" : ", keeping enclosed areas"));
+                          $"rgb({o.Key.R},{o.Key.G},{o.Key.B}), tolerance {o.Tolerance}, " +
+                          (o.MinHole > 0 ? $"clearing sealed pockets from {o.MinHole:n0}px" : "keeping every sealed pocket") +
+                          (o.Glow ? ", fading glows out" : ""));
         if (o.OutDir.Length > 0 && !o.DryRun) Directory.CreateDirectory(o.OutDir);
 
         // A hundred frames is a minute and a half one at a time, and every file
@@ -109,10 +130,11 @@ public static class Cutout
                     return;
                 }
                 Interlocked.Increment(ref done);
-                lines[i] = $"  {Path.GetFileName(file),-34} " +
+                lines[i] = $"  {Path.GetFileName(file),-30} " +
                            $"{Percent(report.Cleared, report.Total)} cleared, " +
-                           $"{report.Softened:n0} edge px softened" +
-                           (report.Enclosed > 0 ? $", {report.Enclosed:n0} enclosed" : "");
+                           $"{report.Softened:n0} edges" +
+                           (report.Faded > 0 ? $", {report.Faded:n0} faded" : "") +
+                           report.Holes;
             }
             catch (Exception ex)
             {
@@ -141,9 +163,20 @@ public static class Cutout
     /// turn up by accident against any colour, so counting those too would hide
     /// a wrong answer behind a plausible-looking number.
     /// </summary>
-    private readonly record struct Report(long Total, long Reached, long Softened, long Enclosed)
+    private readonly record struct Report(long Total, long Reached, long Softened, long Enclosed,
+        int HolesCleared, int HolesKept, int BiggestKept, int SmallestCleared, long Faded)
     {
         public long Cleared => Reached + Enclosed;
+
+        /// <summary>
+        /// The two numbers worth seeing when the hole size needs tuning: how big
+        /// the biggest kept pocket was, and how small the smallest cleared one
+        /// was. The right threshold sits between them.
+        /// </summary>
+        public string Holes =>
+            HolesCleared == 0 && HolesKept == 0 ? "" :
+            $", holes {HolesKept} kept" + (BiggestKept > 0 ? $" (to {BiggestKept:n0}px)" : "") +
+            $" / {HolesCleared} cleared" + (SmallestCleared < int.MaxValue ? $" (from {SmallestCleared:n0}px)" : "");
     }
 
     /// <summary>
@@ -173,12 +206,15 @@ public static class Cutout
         // image. Carrying on would clear whatever pockets happen to match and
         // soften their edges — quietly damaging the art. Leave it alone and let
         // the caller say so.
-        if (reached == 0) return new Report(w * (long)h, 0, 0, 0);
+        if (reached == 0)
+            return new Report(w * (long)h, 0, 0, 0, 0, 0, 0, int.MaxValue, 0);
 
-        long enclosed = 0;
-        if (o.ClearEnclosed)
-            for (int i = 0; i < mark.Length; i++)
-                if (mark[i] == 1) { mark[i] = 3; enclosed++; }
+        var holes = Pockets(mark, w, h, o.MinHole);
+        long enclosed = holes.Cleared;
+
+        // the soft fade runs BEFORE the outline pass, so a pixel it has already
+        // accounted for is not then read a second time as an outline blend
+        long faded = o.Glow ? Fade(image, mark, w, h, o.Key) : 0;
 
         long softened = 0;
         image.ProcessPixelRows(rows =>
@@ -190,7 +226,8 @@ public static class Cutout
                 {
                     byte state = mark[y * w + x];
                     if (state is 2 or 3) { row[x] = new Rgba32(0, 0, 0, 0); continue; }
-                    if (state == 1) continue;                    // walled in, and we were told to keep it
+                    if (state is 1 or 6) continue;   // a pocket small enough to be detail
+                    if (state == 4) continue;   // already faded out by the glow pass
 
                     // artwork touching cleared ground is the brush's soft edge:
                     // part outline, part background, and which part is readable
@@ -223,7 +260,8 @@ public static class Cutout
                 TransparentColorMode = PngTransparentColorMode.Preserve,
             });
         }
-        return new Report(w * (long)h, reached, softened, enclosed);
+        return new Report(w * (long)h, reached, softened, enclosed,
+            holes.ClearedCount, holes.KeptCount, holes.BiggestKept, holes.SmallestCleared, faded);
     }
 
     private static bool IsKey(Rgba32 p, Rgba32 key, int tolerance) =>
@@ -259,6 +297,154 @@ public static class Cutout
         return n;
     }
 
+    private readonly record struct HoleReport(long Cleared, int ClearedCount, int KeptCount,
+        int BiggestKept, int SmallestCleared);
+
+    /// <summary>
+    /// Sorts the sealed-off pockets of background colour by size: anything of
+    /// minSize pixels or more is cleared (state 3), anything smaller is left
+    /// alone (state 1) because it is detail the artist drew.
+    ///
+    /// Nothing but size can tell them apart. The white of an eye and the gap
+    /// between an arm and a body are the same colour, both sealed in by the
+    /// same outline, and both unreachable from the edge of the image. One is
+    /// twenty pixels and the other is twenty thousand.
+    /// </summary>
+    private static HoleReport Pockets(byte[] mark, int w, int h, int minSize)
+    {
+        if (minSize <= 0) return new HoleReport(0, 0, 0, 0, int.MaxValue);
+
+        long cleared = 0;
+        int clearedCount = 0, keptCount = 0, biggestKept = 0, smallestCleared = int.MaxValue;
+        var pocket = new List<int>();
+        var queue = new Queue<int>();
+
+        for (int seed = 0; seed < mark.Length; seed++)
+        {
+            if (mark[seed] != 1) continue;
+
+            // gather one pocket whole before deciding what to do with it
+            pocket.Clear();
+            queue.Enqueue(seed);
+            mark[seed] = 5;                       // claimed, decision pending
+            while (queue.Count > 0)
+            {
+                int i = queue.Dequeue();
+                pocket.Add(i);
+                int x = i % w, y = i / w;
+                void Step(int j) { if (mark[j] == 1) { mark[j] = 5; queue.Enqueue(j); } }
+                if (x > 0) Step(i - 1);
+                if (x < w - 1) Step(i + 1);
+                if (y > 0) Step(i - w);
+                if (y < h - 1) Step(i + w);
+            }
+
+            // A kept pocket gets its own state rather than going back to 1.
+            // Restoring it to 1 made the loop rediscover the same pocket from
+            // every one of its other pixels, counting one eye as hundreds.
+            bool clear = pocket.Count >= minSize;
+            foreach (int i in pocket) mark[i] = clear ? (byte)3 : (byte)6;
+            if (clear)
+            {
+                cleared += pocket.Count;
+                clearedCount++;
+                smallestCleared = Math.Min(smallestCleared, pocket.Count);
+            }
+            else
+            {
+                keptCount++;
+                biggestKept = Math.Max(biggestKept, pocket.Count);
+            }
+        }
+        return new HoleReport(cleared, clearedCount, keptCount, biggestKept, smallestCleared);
+    }
+
+    /// <summary>
+    /// Fades a glow out into the background, for art whose edge is a gradient
+    /// rather than a line — a blast running from solid purple, through paler
+    /// and paler lavender, into white.
+    ///
+    /// Such a pixel is the blast's real colour laid over the background at some
+    /// coverage, and both the background and the direction the colour is
+    /// travelling are known, so the coverage can be read back out: the further
+    /// a pixel has moved from the background colour, the more of it there is.
+    /// White goes to nothing, pale lavender becomes purple at low coverage,
+    /// solid purple stays solid.
+    ///
+    /// It spreads outward from ground already cleared and stops on its own the
+    /// moment a pixel is fully opaque — which a black outline always is. That
+    /// is why this cannot eat a character: the line around her stops it, and
+    /// nothing inside is ever reached.
+    /// </summary>
+    private static long Fade(Image<Rgba32> image, byte[] mark, int w, int h, Rgba32 key)
+    {
+        var queue = new Queue<int>();
+        for (int i = 0; i < mark.Length; i++)
+            if (mark[i] is 2 or 3) queue.Enqueue(i);
+
+        long faded = 0;
+        image.ProcessPixelRows(rows =>
+        {
+            Span<int> steps = stackalloc int[4];
+            while (queue.Count > 0)
+            {
+                int i = queue.Dequeue();
+                int x = i % w, y = i / w;
+
+                int n = 0;
+                if (x > 0) steps[n++] = i - 1;
+                if (x < w - 1) steps[n++] = i + 1;
+                if (y > 0) steps[n++] = i - w;
+                if (y < h - 1) steps[n++] = i + w;
+
+                for (int k = 0; k < n; k++)
+                {
+                    int j = steps[k];
+                    if (mark[j] != 0) continue;               // background, a kept pocket, or done
+                    var row = rows.GetRowSpan(j / w);
+                    float alpha = Unmix(row[j % w], key, out var trueColor);
+                    if (alpha >= 0.995f) continue;            // solid: the glow ends here
+
+                    trueColor.A = (byte)Math.Clamp((int)MathF.Round(alpha * 255f), 0, 255);
+                    row[j % w] = trueColor;
+                    mark[j] = 4;
+                    faded++;
+                    queue.Enqueue(j);
+                }
+            }
+        });
+        return faded;
+    }
+
+    /// <summary>
+    /// Reads a pixel as "some colour laid over the background at some coverage"
+    /// and hands back both halves.
+    ///
+    /// Coverage is set by whichever channel has travelled furthest from the
+    /// background colour, since that channel is the one the colour underneath
+    /// is pushing hardest. Over white that is the darkest channel, over black
+    /// the brightest, over magenta whichever of the three has moved most.
+    /// Knowing the coverage, the colour follows by taking the background's
+    /// share back out again.
+    /// </summary>
+    private static float Unmix(Rgba32 p, Rgba32 key, out Rgba32 color)
+    {
+        float Travelled(byte value, byte k) => k >= 128
+            ? (k - value) / (float)Math.Max(1, (int)k)        // away from a bright key means downward
+            : (value - k) / (float)Math.Max(1, 255 - (int)k); // away from a dark key means upward
+
+        float alpha = Math.Clamp(MathF.Max(
+            Travelled(p.R, key.R), MathF.Max(Travelled(p.G, key.G), Travelled(p.B, key.B))), 0f, 1f);
+
+        if (alpha <= 0.001f) { color = new Rgba32(0, 0, 0, 0); return 0f; }
+
+        byte Recover(byte value, byte k) =>
+            (byte)Math.Clamp((int)MathF.Round((value - (1f - alpha) * k) / alpha), 0, 255);
+
+        color = new Rgba32(Recover(p.R, key.R), Recover(p.G, key.G), Recover(p.B, key.B), 255);
+        return alpha;
+    }
+
     /// <summary>Whether any of the eight neighbours has been cleared.</summary>
     private static bool Touches(byte[] mark, int w, int h, int x, int y)
     {
@@ -268,7 +454,7 @@ public static class Cutout
                 if (dx == 0 && dy == 0) continue;
                 int nx = x + dx, ny = y + dy;
                 if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                if (mark[ny * w + nx] is 2 or 3) return true;
+                if (mark[ny * w + nx] is 2 or 3) return true;   // 4 faded, 6 kept: not ground
             }
         return false;
     }

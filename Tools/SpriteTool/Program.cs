@@ -157,7 +157,11 @@ public static class Program
                 case "--magenta": o.Key = Cutout.ParseColor("magenta"); break;
                 case "--tolerance" or "-t":
                     o.Tolerance = Int(Next(a, ref i, "--tolerance"), "--tolerance", 0); break;
-                case "--keep-enclosed": o.ClearEnclosed = false; break;
+                case "--green": o.Key = Cutout.ParseColor("green"); break;
+                case "--min-hole" or "--hole":
+                    o.MinHole = Int(Next(a, ref i, "--min-hole"), "--min-hole", 0); break;
+                case "--keep-enclosed": o.MinHole = 0; break;
+                case "--glow" or "--fade": o.Glow = true; break;
                 case "--in-place": o.InPlace = true; break;
                 case "--dry-run": o.DryRun = true; break;
                 default:
@@ -237,13 +241,22 @@ CUTOUT    take a flat background off artwork and give it real transparency
                        255,0,255 or #ff00ff
     --white            same as --colour white
     --magenta          same as --colour magenta
+    --green            same as --colour green
     --tolerance, -t N  how far off that colour still counts as background,
                        0-255 per channel (default 12). Raise it for art that
                        has been through video compression; lower it if pale
                        parts of the artwork are being eaten
-    --keep-enclosed    leave background-coloured areas the outline seals off,
-                       like the gap between an arm and a body. By default
-                       those are cleared too
+    --min-hole N       the smallest sealed-off pocket of background, in
+                       pixels, that gets cleared (default 500). Small ones are
+                       kept, because they are detail the artist drew: the white
+                       of an eye, a tooth, a highlight. Big ones are gaps that
+                       have to go. Only size can tell them apart
+    --keep-enclosed    same as --min-hole 0: keep every pocket
+    --glow             fade gradients out into the background instead of
+                       cutting them off. For art whose edge is a glow rather
+                       than a line — a blast running from solid purple through
+                       pale lavender to white. An outline stops it, so a
+                       character with a black line around her is unaffected
     --out, -o DIR      write the results here, keeping their names
     --suffix S         when writing beside the originals (default _cut)
     --in-place         overwrite the originals instead
@@ -274,8 +287,9 @@ EXAMPLES
   dotnet run --project Tools/SpriteTool
   dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
   dotnet run --project Tools/SpriteTool -- extract wolf.mp4 -n werewolf_attack --odd -o out
-  dotnet run --project Tools/SpriteTool -- cutout out -o cut
-  dotnet run --project Tools/SpriteTool -- cutout out --magenta -t 24 --in-place
+  spritetool.bat cutout out -o cut
+  spritetool.bat cutout out --green -t 24 --min-hole 2000
+  spritetool.bat cutout blast --glow -o cut
   dotnet run --project Tools/SpriteTool -- sheet cut -o WerewolfAttack.png
   dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attack -o frames
   dotnet run --project Tools/SpriteTool -- detect Content/Cast/PlayerCharacters/Werewitch/WerewitchSpell1/WerewitchSpell1.png

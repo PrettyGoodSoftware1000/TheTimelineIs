@@ -254,12 +254,14 @@ public static class Menu
         Console.WriteLine();
         Console.WriteLine("   1  white background");
         Console.WriteLine("   2  magenta background");
-        Console.WriteLine("   3  something else");
+        Console.WriteLine("   3  green background");
+        Console.WriteLine("   4  something else");
         string which = Ask("background colour", "1");
         o.Key = which switch
         {
             "2" => Cutout.ParseColor("magenta"),
-            "3" => AskColor(),
+            "3" => Cutout.ParseColor("green"),
+            "4" => AskColor(),
             _ => Cutout.ParseColor("white"),
         };
 
@@ -269,26 +271,31 @@ public static class Menu
         Console.WriteLine("  lower if pale parts of the artwork get eaten.");
         o.Tolerance = AskInt("tolerance", o.Tolerance, 0);
 
-        o.ClearEnclosed = AskYes(
-            "also clear background sealed inside the art (arm gaps and so on)", true);
-
-        if (AskYes("overwrite the originals", false)) o.InPlace = true;
-        else o.OutDir = AskFolder("folder to write them into",
-            Path.Combine(_lastFolder, "cut"));
+        Console.WriteLine();
+        Console.WriteLine("  Areas of background sealed inside the art are judged by SIZE.");
+        Console.WriteLine("  Small ones are detail worth keeping — the white of an eye, a tooth,");
+        Console.WriteLine("  a highlight. Big ones are gaps that have to go, like the space");
+        Console.WriteLine("  between an arm and a body. Below is the line between them, in pixels.");
+        Console.WriteLine("  The report says how big the biggest kept and smallest cleared were,");
+        Console.WriteLine("  so a second run can be aimed better. 0 keeps every one of them.");
+        o.MinHole = AskInt("clear sealed areas of at least (px)", o.MinHole, 0);
 
         Console.WriteLine();
-        if (AskYes("try one file first and report, without writing anything", true))
-        {
-            var trial = new Cutout.Options
-            {
-                Inputs = { pngs[0] }, Key = o.Key, Tolerance = o.Tolerance,
-                ClearEnclosed = o.ClearEnclosed, DryRun = true,
-            };
-            Cutout.Run(trial);
-            Console.WriteLine();
-            if (!AskYes("go ahead with the rest", true)) { Console.WriteLine("  cancelled."); return; }
-        }
+        Console.WriteLine("  Some frames have a glow or blast whose edge fades into the");
+        Console.WriteLine("  background instead of stopping at a black line. Fading those out");
+        Console.WriteLine("  reads each pixel as its true colour at partial cover, rather than");
+        Console.WriteLine("  leaving a pale square around it. An outline stops it, so the");
+        Console.WriteLine("  character herself is untouched either way.");
+        o.Glow = AskYes("fade glows and gradients out", false);
 
+        // The destination is not worth asking about: the same folder name with
+        // _cutout on the end, beside the one the frames came from.
+        var source = new DirectoryInfo(Path.GetFullPath(folder).TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        o.OutDir = Path.Combine(source.Parent?.FullName ?? source.FullName, source.Name + "_cutout");
+
+        Console.WriteLine();
+        Console.WriteLine($"  writing to {o.OutDir}");
         Console.WriteLine();
         Cutout.Run(o);
     }

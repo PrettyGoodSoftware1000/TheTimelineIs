@@ -259,55 +259,86 @@ is only clearly better when the art itself is white-heavy — which this project
 is not.
 
 
+
 ## cutout — take a flat background off artwork
 
-**Menu option 5.** It asks for the folder, the background colour, the
-tolerance, whether to clear sealed-in areas, and where to put the results — then
-offers to try one file and report before touching the rest.
+**Menu option 5.** It asks five things and gets on with it. Results go into a
+folder beside the one you pointed at, with `_cutout` on the name — point it at
+`witchcast` and you get `witchcast_cutout`. Nothing is ever overwritten.
 
-This is its own step. Extracting frames never does it for you: art comes off a
-video with its background still on, and gets keyed later, deliberately.
+This is its own step. Extracting frames never does it for you.
 
-**The art needs black edges.** That is what makes it exact. Where the
-background meets a black outline the half-covered pixels are a mix of two known
-colours, so how much of each can be read straight back out and becomes the
-alpha.
+### What it asks
 
-The background is found by spreading in from the edges of the image, not by
-matching colour everywhere. A pale highlight *inside* the art is safe, because
-the outline stops the spread before it ever gets there. The obvious approach —
-"the whiter it is, the more see-through" — turns every white highlight into a
-hole; on this project's own art it puts over a million pixels of one frame
-wrong.
+**Background colour** — white, magenta, green, or anything you type
+(`255,0,255`, `#ff00ff`).
 
-| the menu asks | what it means |
-|---|---|
-| background colour | white, magenta, or anything you type: `255,0,255`, `#ff00ff` |
-| tolerance | how far off that colour still counts, 0–255. Default 12 |
-| clear sealed-in areas | the gap between an arm and a body. Yes unless you have white detail inside the art |
-| overwrite the originals | no writes `name_cut.png` beside them, or into a folder you name |
+**Tolerance** — how far off that colour still counts as background, 0–255.
+Raise it for frames that came through video compression; lower it if pale parts
+of the artwork are being eaten.
 
-Tolerance: raise it for frames that came through video compression, lower it if
-pale parts of the artwork are being eaten.
+**Size of sealed areas to clear** — the interesting one. Art is full of
+background-coloured details the outline seals in: the white of an eye, a tooth,
+a highlight on a boot. Those must survive. The gaps that *do* need clearing —
+between an arm and a body, between the legs — are the same colour, sealed by
+the same outline, and equally unreachable from the edge of the image. **Only
+size tells them apart.** Anything this big or bigger is cleared; anything
+smaller is kept.
 
-A file whose background does not reach the edge of the image is **skipped, not
-mangled**, and the run says so at the end. That is what a wrong colour looks
-like.
-
-Files are keyed across every core, because these arrive 60 to 100 at a time:
-80 frames of 1536x2752 take about 25 seconds.
-
-For scripting, the same job is `cutout`:
+The report says where the line actually fell:
 
 ```
-spritetool.bat cutout frames -o cut --magenta -t 24
+figure.png   77.9% cleared, holes 7 kept (to 736px) / 1 cleared (from 16,213px)
+```
+
+Everything worth keeping topped out at 736px and the gap was 16,213px, so
+anywhere between those two works. If a detail got eaten, raise it; if a gap
+survived, lower it. `0` keeps every sealed area whatever its size.
+
+**Fade glows and gradients out** — off by default, because it only applies to
+some frames. A magic blast running from solid purple, through paler and paler
+lavender, into white has no outline where it meets the background. Without this
+it keeps a pale disc around it. With it, each of those pixels is read as its
+true colour at partial coverage: pale lavender becomes purple at 30% cover,
+white becomes nothing, solid purple stays solid.
+
+It spreads outward from cleared ground and stops the instant a pixel is fully
+opaque — which a black outline always is. Measured on an outlined figure,
+turning it on changed **0 of 640,000 pixels**. It cannot reach anything a line
+encloses, so it is safe to leave on for a character.
+
+### How the background is found
+
+By connection, not by colour. The fill starts at the edges of the image and
+spreads inward; the black outline stops it. Whatever it never reached is
+artwork, however pale. The obvious approach — "the whiter it is, the more
+see-through" — turns every white highlight into a hole; on this project's own
+art it puts over a million pixels of one frame wrong.
+
+Where the fill stops it stops on half-covered pixels, part outline and part
+background. Both ends of that mix are known, so the coverage reads straight
+back out and becomes the alpha. **That is why the art needs black edges.**
+
+A file whose background does not reach the edge of the image is **skipped, not
+mangled**, and the run says so. That is what a wrong colour looks like.
+
+Files are keyed across every core: 80 frames of 1536x2752 take about 25 seconds.
+
+### Command line
+
+```
+spritetool.bat cutout frames -o cut
+spritetool.bat cutout blast --glow --min-hole 2000
 ```
 
 | option | what it does |
 |---|---|
-| `--colour C` | `white` (default), `magenta`, `255,0,255`, `#ff00ff` |
+| `--colour C` | `white` (default), `magenta`, `green`, `255,0,255`, `#ff00ff` |
+| `--white` `--magenta` `--green` | shorthand for those three |
 | `--tolerance N` | 0–255, default 12 |
-| `--keep-enclosed` | keep background sealed inside the art |
+| `--min-hole N` | smallest sealed area to clear, in px (default 500) |
+| `--keep-enclosed` | same as `--min-hole 0` |
+| `--glow` | fade gradients out into the background |
 | `--out DIR` | where to write; otherwise `name_cut.png` beside the original |
 | `--in-place` | overwrite the originals |
 | `--dry-run` | report only |
