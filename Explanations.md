@@ -205,6 +205,35 @@ it. Once they are, one person stepping back on makes the return trip.
 
 ---
 
+## Replays
+
+A record of what happened in a mission: every turn, who moved where, what card
+they played, what it hit and what it killed.
+
+**Save Replay** sits under End Turn from the moment a level loads, so you can
+keep a fight before it is over. A win or a party wipe saves one on its own, so
+forgetting the button costs nothing.
+
+They land in `Replays/` at the repo root, two files per mission:
+
+    TestLevel_2026-08-22_1435.txt         what happened
+    TestLevel_2026-08-22_1435.level.txt   the level, as it was that day
+
+The level is **copied**, not pointed at. Edit a level afterwards and the replay
+still shows what really happened, instead of people walking through new walls.
+
+**To watch one:** Replays on the title screen. It only appears once you have
+saved at least one. Next Turn — or spacebar — plays one whole turn. Press again
+during an animation and it cuts to the end of it.
+
+Nothing is re-simulated on playback. The file says what happened and the screen
+shows that, so a replay can never disagree with the mission it came from.
+
+The files are plain text on purpose: the point is to be able to read them, and
+later to hand a pile of them over to work out what tactics a player favours.
+
+---
+
 ## ffmpeg
 
 Only *extracting frames from a video* needs it. Sheets, slicing, measuring and

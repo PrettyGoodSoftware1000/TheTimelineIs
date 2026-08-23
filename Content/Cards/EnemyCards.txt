@@ -73,3 +73,19 @@ Effect: Single target. 1 times x 12 damage.
 Card Text: A slab of a hand, swung like a door closing.
 Bottom Right: 12 Smashing
 []
+
+[]
+Card Name: Firebolt
+Tags: Imp
+Type: [ranged] Single target, X hits.
+Range: 7
+Action Points: 3
+Projectile Art: Placeholder.png
+Casting Sound: [FireballCast.wav]
+Casting Time: 0.3
+Speed: 26
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 3 damage.
+Card Text: A spat cinder, thrown from somewhere safe.
+Bottom Right: 3 Fire
+[]

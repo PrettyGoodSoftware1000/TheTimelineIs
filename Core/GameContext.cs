@@ -30,6 +30,7 @@ public class GameContext
     public required EnemyLibrary Enemies;
     public required SoundBank Sounds;
     public required ILogStore LogStore;
+    public required IReplayStore ReplayStore;
     public IDevDestinationWriter? DevWriter;
 
     public IScreen Screen = null!;

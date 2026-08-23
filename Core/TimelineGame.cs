@@ -66,6 +66,7 @@ public class TimelineGame : Game
             Enemies = EnemyLibrary.Load(),
             Sounds = new SoundBank(),
             LogStore = _platform.LogStore,
+            ReplayStore = _platform.ReplayStore,
             DevWriter = _platform.DevWriter,
         };
 

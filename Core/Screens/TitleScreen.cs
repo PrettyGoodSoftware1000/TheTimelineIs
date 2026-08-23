@@ -20,6 +20,7 @@ public class TitleScreen : IScreen
 
     private static readonly Rectangle NewGameRect = new(1620, 1250, 600, 180);
     private static readonly Rectangle ContinueRect = new(1620, 1490, 600, 180);
+    private static readonly Rectangle ReplaysRect = new(1620, 1730, 600, 180);
 
     public TitleScreen(GameContext ctx)
     {
@@ -70,6 +71,11 @@ public class TitleScreen : IScreen
         if (_ctx.SaveStore.Exists &&
             Ui.Button(batch, _ctx.Pixel, _ctx.Font, ContinueRect, _ctx.Strings.Get("menu_continue"), _tap))
             _ctx.LoadLastSave();
+
+        // only offered once there is something to watch
+        if (_ctx.ReplayStore.List().Count > 0 &&
+            Ui.Button(batch, _ctx.Pixel, _ctx.Font, ReplaysRect, _ctx.Strings.Get("menu_replays"), _tap))
+            _ctx.SwitchTo(new ReplayListScreen(_ctx));
 
         _tap = null;
     }

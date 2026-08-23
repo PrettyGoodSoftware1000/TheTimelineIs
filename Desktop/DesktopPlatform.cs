@@ -8,6 +8,7 @@ public class DesktopPlatform : IPlatform
 {
     public ISaveStore SaveStore { get; } = new DesktopSaveStore();
     public ILogStore LogStore { get; } = new DesktopLogStore();
+    public IReplayStore ReplayStore { get; } = new DesktopReplayStore();
     public IDevDestinationWriter? DevWriter { get; }
     private readonly bool _editor;
 

@@ -128,13 +128,33 @@ public class LevelData
     public IEnumerable<string> RoomNames =>
         Blocks.Values.Select(b => b.Room).Distinct(StringComparer.OrdinalIgnoreCase);
 
-    public static LevelData Load(string name)
+    public static LevelData Load(string name) =>
+        Read(name, PathFor(name), AssetLoader.ReadNumbered(PathFor(name), PathFor(name)));
+
+    /// <summary>
+    /// The same parser, over text already in hand rather than a file on disk.
+    /// A replay carries its own copy of the level it was played in, so that it
+    /// still shows what happened after the level itself has been edited.
+    /// </summary>
+    public static LevelData FromText(string text, string name, string reportAs)
+    {
+        var numbered = new List<(int, string)>();
+        var lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i].Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            numbered.Add((i + 1, line));
+        }
+        return Read(name, reportAs, numbered);
+    }
+
+    private static LevelData Read(string name, string path, List<(int Line, string Text)> source)
     {
         var level = new LevelData { Name = name };
-        string path = PathFor(name);
         var diag = Diagnostics.Current;
 
-        foreach (var (lineNo, raw) in AssetLoader.ReadNumbered(path, path))
+        foreach (var (lineNo, raw) in source)
         {
             string line = TextUtil.Clean(raw);
             int colon = line.IndexOf(':');

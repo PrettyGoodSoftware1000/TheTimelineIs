@@ -144,6 +144,15 @@ public class CharacterInstance
     /// <summary>Turns still to wait before the channel can be released.</summary>
     public int ChannelTurnsLeft;
 
+    /// <summary>
+    /// Where the channelled card was aimed when it was STARTED. A channelled
+    /// card is aimed once, on the turn it is begun; releasing it on a later
+    /// turn fires it at that spot rather than asking again. What it catches is
+    /// worked out when it lands, so anyone who has wandered into the area since
+    /// is hit and anyone who has left is not.
+    /// </summary>
+    public Point ChannelAim;
+
     public bool IsChannelling => ChannellingCard.Length > 0;
 
     /// <summary>Which shape a shapeshifter currently wears; blank for everyone else.</summary>

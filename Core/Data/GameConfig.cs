@@ -44,6 +44,7 @@ public class GameConfig
             ["Leap"] = 0.18f,
             ["Trigger"] = 0.18f,
             ["Hover"] = 0.35f,
+            ["Selected"] = 0.30f,
         };
 
     public static GameConfig Load()
@@ -88,8 +89,18 @@ public class GameConfig
     /// <summary>Applies to non-cast art: the map and room backgrounds.</summary>
     public float GlobalScale => _scales.TryGetValue("Global", out var v) ? v : 1f;
 
-    /// <summary>Most specific wins: "{name} scale" > "Cast scale" > "Global scale".</summary>
-    public float CastScale(string name) =>
+    /// <summary>
+    /// Most specific wins: "{name} {form} scale" > "{name} scale" > "Cast
+    /// scale" > "Global scale".
+    ///
+    /// A shapeshifter's shapes are drawn from different art and rarely want the
+    /// same size — a wolf on all fours is wider and shorter than the witch it
+    /// turns from. "Werewitch Werewolf scale: 90%" sizes one shape without
+    /// touching the other, and with no such line the class's own line applies
+    /// to both exactly as before.
+    /// </summary>
+    public float CastScale(string name, string form = "") =>
+        form.Length > 0 && _scales.TryGetValue($"{name} {form}", out var f) ? f :
         _scales.TryGetValue(name, out var v) ? v :
         _scales.TryGetValue("Cast", out var c) ? c : GlobalScale;
 

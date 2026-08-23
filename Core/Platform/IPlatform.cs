@@ -15,6 +15,9 @@ public interface IPlatform
     ISaveStore SaveStore { get; }
     ILogStore LogStore { get; }
 
+    /// <summary>Where mission replays are written and read back.</summary>
+    IReplayStore ReplayStore { get; }
+
     /// <summary>Non-null when the game STARTED with --devmap on desktop.</summary>
     IDevDestinationWriter? DevWriter { get; }
 

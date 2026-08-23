@@ -39,7 +39,12 @@ namespace TheTimelineIs.Core.Iso;
 /// </summary>
 public class IsoLevelScreen : IScreen
 {
-    private enum Mode { Explore, FreeMove, PlayerTurn, PlayerTarget, StealPick, EnemyTurn, Acting, Victory }
+    private enum Mode
+    {
+        Explore, FreeMove, PlayerTurn, PlayerTarget, StealPick, EnemyTurn, Acting, Victory,
+        /// <summary>Watching a recording. Nothing is decided here, only shown.</summary>
+        Replay,
+    }
     private enum Act { Casting, Projectile, MeleeWait, Hits }
 
     private const int AggroTiles = 15;
@@ -61,6 +66,20 @@ public class IsoLevelScreen : IScreen
 
     private Mode _mode = Mode.Explore;
     private int _turn = -1;
+
+    /// <summary>
+    /// The running record of this mission, written to a file by the Save Replay
+    /// button or automatically when the mission ends. Recording costs a list
+    /// entry per event and nothing else, so it is always on — a replay nobody
+    /// asked for is far cheaper than one somebody wanted and did not get.
+    /// </summary>
+    private readonly Replay _replay = new();
+
+    /// <summary>Which turn number the recorder is filing events under.</summary>
+    private int _replayTurn;
+
+    /// <summary>Set once the mission's ending has been recorded, so it is only written once.</summary>
+    private bool _ended;
     private CharacterInstance? _selected;
     private readonly HashSet<CharacterInstance> _freeMovers = new();
     private List<Card> _hand = new();
@@ -153,6 +172,12 @@ public class IsoLevelScreen : IScreen
     private const float LogTextScale = 0.30f;
     private const int LogLineH = 46;
     private static readonly Rectangle EndTurnRect = new(3280, 60, 500, 160);
+
+    /// <summary>Save Replay, under End Turn and out of the way of the board.</summary>
+    private static readonly Rectangle SaveReplayRect = new(3280, 240, 500, 120);
+
+    /// <summary>In a replay, the same spot advances a turn.</summary>
+    private static readonly Rectangle NextTurnRect = new(3280, 60, 500, 160);
     private static readonly Rectangle DoneRect = new(3280, 60, 500, 160);
     private static readonly Rectangle WinRect = new(1620, 1250, 600, 180);
     private static readonly Rectangle DialogueBox = new(60, 1560, 3720, 420);
@@ -170,11 +195,36 @@ public class IsoLevelScreen : IScreen
     private static readonly int CardRestY = VirtualViewport.Height - CardH / 2;
     private const float HoverScale = 1.3f;
 
+    /// <summary>
+    /// Set when the screen is showing a recording rather than being played. In
+    /// that state nothing decides anything: no AI runs, no card resolves, no
+    /// turn is taken. The screen only does what the record says was done, one
+    /// turn per press.
+    /// </summary>
+    private readonly bool _replayMode;
+    private Replay? _watching;
+    private int _replayAt;              // how far through the event list
+    private string _replayName = "";
+
     public IsoLevelScreen(GameContext ctx, string levelName)
+        : this(ctx, levelName, LevelData.Load(levelName), null, "") { }
+
+    /// <summary>Watch a recorded mission, in the level as it was at the time.</summary>
+    public IsoLevelScreen(GameContext ctx, string name, Replay replay, string levelText)
+        : this(ctx, replay.Level,
+            LevelData.FromText(levelText, replay.Level, $"Replays/{name}.level.txt"),
+            replay, name) { }
+
+    private IsoLevelScreen(GameContext ctx, string levelName, LevelData level,
+        Replay? watching, string replayName)
     {
         _ctx = ctx;
-        _level = LevelData.Load(levelName);
+        _level = level;
+        _watching = watching;
+        _replayMode = watching != null;
+        _replayName = replayName;
         _dialogue = DialogueLibrary.Load(levelName);
+        _replay.Level = levelName;
         SpawnParty();
         SpawnEnemies();
         foreach (var start in _level.PlayerStarts.Take(_party.Count))
@@ -188,7 +238,16 @@ public class IsoLevelScreen : IScreen
             var focus = IsoMath.ToScreen(_party[0].GX, _party[0].GY, HeightAt(Tile(_party[0])), Vector2.Zero);
             _baseOrigin = new Vector2(VirtualViewport.Width / 2f, VirtualViewport.Height / 2f) - focus;
         }
-        Log(_ctx.Strings.Get("iso_enter"));
+        _replay.Party = _party.Select(p => p.Name).ToList();
+        Log(_ctx.Strings.Get(_replayMode ? "replay_watching" : "iso_enter"));
+
+        if (_replayMode)
+        {
+            // a recording shows the whole level: nothing was hidden from the
+            // person who played it by the time they finished
+            foreach (var b in _level.Blocks.Values) _revealed.Add(b.Room);
+            _mode = Mode.Replay;
+        }
     }
 
     private void SpawnParty()
@@ -283,6 +342,205 @@ public class IsoLevelScreen : IScreen
     /// turns goes here and nowhere else — the log panel is the only place the
     /// player reads it, so the level itself stays uncluttered.
     /// </summary>
+    /// <summary>
+    /// Writes the record so far, plus the level it was played in, under one
+    /// name. The level is copied rather than pointed at: levels get edited, and
+    /// a replay that read the live file would start showing people walking
+    /// through walls the first time somebody moved one.
+    /// </summary>
+    private void SaveReplay(string why)
+    {
+        if (_replayMode) return;
+        _replay.Saved = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        string name = Replay.NameFor(_replay.Level, DateTime.Now);
+        string? where = _ctx.ReplayStore.Save(name, _replay.Serialize(), _level.Serialize());
+        Toast(where == null
+            ? _ctx.Strings.Get("replay_failed")
+            : _ctx.Strings.Format("replay_saved", ("name", name)));
+        Log(_ctx.Strings.Format("replay_saved", ("name", name)) + $" ({why})");
+    }
+
+    /// <summary>
+    /// The mission is over. Recorded once and saved once, however many ways the
+    /// end is noticed — a party wipe reaches this from more than one place.
+    /// </summary>
+    private void FinishMission(string how)
+    {
+        if (_replayMode || _ended) return;
+        _ended = true;
+        Record(ReplayEventKind.End, note: how);
+        SaveReplay(how);
+    }
+
+    // ---------------- watching a recording ----------------
+
+    /// <summary>
+    /// One press of Next Turn, or the spacebar, plays one whole turn of the
+    /// record: the walk, the card, and what it did, in the order they happened.
+    ///
+    /// Pressing again while that is still playing does not queue a second turn.
+    /// It cuts the current one short — the walk snaps to its destination, the
+    /// shot lands, the damage shows — and only then does the next press move on.
+    /// Waiting through an animation you have already seen is not watching.
+    /// </summary>
+    private void UpdateReplay(InputState input, float dt)
+    {
+        bool advance = input.Confirm ||
+                       (_tap is Point p && NextTurnRect.Contains(p));
+        if (_tap != null && NextTurnRect.Contains(_tap.Value)) _tap = null;
+
+        if (_walker != null)
+        {
+            if (advance) SnapWalk();
+            else { UpdateWalk(dt); return; }
+        }
+        if (_act == Act.Projectile && !advance) { UpdateAction(dt); return; }
+        if (!advance) return;
+
+        // a press during an animation spent itself cutting that short
+        if (_act != Act.Hits && _actingCard != null) { EndReplayAction(); return; }
+        PlayReplayTurn();
+    }
+
+    /// <summary>Drops a walk in progress straight onto its last square.</summary>
+    private void SnapWalk()
+    {
+        if (_walker == null) return;
+        if (_walkPath.Count > 0)
+        {
+            var last = _walkPath[^1];
+            _walker.GX = last.X;
+            _walker.GY = last.Y;
+        }
+        _walkPath.Clear();
+        _walker = null;
+        _afterWalk = null;
+        _overlayKey = null;
+    }
+
+    private void EndReplayAction()
+    {
+        _actingCard = null;
+        _projFrom = _projTo = Vector2.Zero;
+        _act = Act.Hits;
+        _actT = _actDur;
+        foreach (var c in Everyone) { c.CastAnim = null; c.CastAnimTime = 0f; }
+    }
+
+    /// <summary>
+    /// Applies every event of the next turn. Movement and shots are shown with
+    /// their animations; damage and deaths are applied outright, because a
+    /// recording is a statement of what happened rather than a re-simulation —
+    /// nothing here is allowed to work out a different answer.
+    /// </summary>
+    private void PlayReplayTurn()
+    {
+        if (_watching == null) return;
+        if (_replayAt >= _watching.Events.Count) { _mode = Mode.Victory; return; }
+
+        // the turn number of the event we are about to play; everything sharing
+        // it belongs to this press
+        int turn = _watching.Events[_replayAt].Turn;
+        Point? walkTo = null;
+        CharacterInstance? walker = null;
+
+        while (_replayAt < _watching.Events.Count && _watching.Events[_replayAt].Turn == turn)
+        {
+            var e = _watching.Events[_replayAt++];
+            var who = Everyone.FirstOrDefault(c =>
+                c.Name.Equals(e.Who, StringComparison.OrdinalIgnoreCase));
+            var target = Everyone.FirstOrDefault(c =>
+                c.Name.Equals(e.Target, StringComparison.OrdinalIgnoreCase));
+
+            switch (e.Kind)
+            {
+                case ReplayEventKind.Turn:
+                    _replayTurn = e.Turn;
+                    if (who != null) _replayActor = who;
+                    Log(_ctx.Strings.Format("battle_turn", ("name", e.Who)));
+                    break;
+
+                case ReplayEventKind.Move when who != null:
+                    // put them back where the walk started, then walk it
+                    who.GX = e.From.X; who.GY = e.From.Y;
+                    walker = who; walkTo = e.To;
+                    break;
+
+                case ReplayEventKind.Card when who != null:
+                    Log(_ctx.Strings.Format("replay_card", ("name", e.Who), ("card", e.Card)));
+                    StartCastAnimation(who);
+                    break;
+
+                case ReplayEventKind.Hit when target != null:
+                    target.Hp = Math.Max(0, target.Hp - e.Amount);
+                    target.ShakeTimer = Recoil.Duration;
+                    Log(_ctx.Strings.Format("battle_hit",
+                        ("target", e.Target), ("dmg", e.Amount.ToString()), ("type", e.Text)));
+                    break;
+
+                case ReplayEventKind.Down when target != null:
+                    target.Hp = 0;
+                    target.Alive = false;
+                    Log(_ctx.Strings.Format("battle_down", ("name", e.Target)));
+                    break;
+
+                case ReplayEventKind.End:
+                    Log(_ctx.Strings.Format("replay_over", ("how", e.Text)));
+                    break;
+            }
+        }
+
+        // the walk is shown last, so the whole turn is on screen while it runs
+        if (walker != null && walkTo is Point goal)
+        {
+            _walker = walker;
+            _walkFrom = Tile(walker);
+            _walkPath = new List<Point> { goal };
+            _walkT = 0f;
+            _afterWalk = null;
+        }
+        _overlayKey = null;
+    }
+
+    /// <summary>Whose turn the recording is currently showing.</summary>
+    private CharacterInstance? _replayActor;
+
+    private void DrawReplayHud(SpriteBatch batch)
+    {
+        Ui.DrawTextCentered(batch, _ctx.Font,
+            _ctx.Strings.Format("replay_title", ("name", _replayName)),
+            new Rectangle(0, 40, VirtualViewport.Width, 90), Color.Gold, 0.4f);
+
+        int turns = _watching?.Turns ?? 0;
+        Ui.DrawTextCentered(batch, _ctx.Font,
+            _replayAt >= (_watching?.Events.Count ?? 0)
+                ? _ctx.Strings.Get("replay_end")
+                : _ctx.Strings.Format("replay_turn",
+                    ("turn", _replayTurn.ToString()), ("total", turns.ToString())),
+            new Rectangle(0, 140, VirtualViewport.Width, 70), Color.White * 0.8f, 0.34f);
+
+        if (_replayActor != null)
+            Ui.DrawTextCentered(batch, _ctx.Font, _replayActor.Name,
+                new Rectangle(0, 210, VirtualViewport.Width, 70), Color.LightGreen, 0.36f);
+
+        if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, NextTurnRect,
+                _ctx.Strings.Get("replay_next"), _tap))
+            PlayReplayTurn();
+    }
+
+    /// <summary>Files one thing that happened under the turn it happened in.</summary>
+    private void Record(ReplayEventKind kind, CharacterInstance? who = null,
+        string card = "", string target = "", Point from = default, Point to = default,
+        int amount = 0, string note = "")
+    {
+        if (_replayMode) return;          // watching a replay does not record another
+        _replay.Events.Add(new ReplayEvent
+        {
+            Kind = kind, Turn = _replayTurn, Who = who?.Name ?? "",
+            Card = card, Target = target, From = from, To = to, Amount = amount, Text = note,
+        });
+    }
+
     private void Log(string text)
     {
         foreach (var line in text.Split('\n'))
@@ -352,6 +610,15 @@ public class IsoLevelScreen : IScreen
     }
 
     /// <summary>Who the current mode lets the player move.</summary>
+    /// <summary>
+    /// The party member the green square sits under: whoever is being moved
+    /// right now, and in a fight the one whose turn it is even while a card is
+    /// resolving. Enemies never get it.
+    /// </summary>
+    private CharacterInstance? Chosen =>
+        ActiveMover is CharacterInstance m && m.IsPlayer ? m :
+        Current is { IsPlayer: true, Alive: true } c ? c : null;
+
     private CharacterInstance? ActiveMover => _mode switch
     {
         Mode.Explore => _selected,
@@ -411,6 +678,7 @@ public class IsoLevelScreen : IScreen
         // right-click always drops the armed card
         if (input.AltTap.HasValue) CancelCard();
 
+        if (_replayMode) { RefreshOverlays(); UpdateReplay(input, dt); return; }
         if (_walker != null) { UpdateWalk(dt); return; }
 
         if (_mode == Mode.Explore) RearmTransitions();
@@ -716,14 +984,14 @@ public class IsoLevelScreen : IScreen
         CancelCard();
         // finishing a turn in the fire catches you, the same as starting one there
         if (Current is CharacterInstance leaving) Ignite(leaving);
-        if (LivingParty.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
+        if (LivingParty.Count == 0) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
         if (!_aggroed.Any(e => e.Alive))
         {
             _aggroed.Clear();
             _order.Clear();
             _turn = -1;
             _overlayKey = null;
-            if (_enemies.All(e => !e.Alive)) { _mode = Mode.Victory; return; }
+            if (_enemies.All(e => !e.Alive)) { FinishMission("victory"); _mode = Mode.Victory; return; }
             _mode = Mode.Explore;
             Log(_ctx.Strings.Get("iso_clear"));
             return;
@@ -738,6 +1006,9 @@ public class IsoLevelScreen : IScreen
             if (_order[_turn].Alive) break;
         }
         var current = Current!;
+        _replayTurn++;
+        Record(ReplayEventKind.Turn, current, amount: current.Hp,
+            note: $"{current.Hp}/{current.MaxHp} hp");
         current.MovePoints = current.MoveMax;
         current.RefreshActionPoints();
         AgeFires(current);
@@ -846,12 +1117,30 @@ public class IsoLevelScreen : IScreen
     private void UpdateAim()
     {
         _blastSet = new HashSet<Point>();
+
+        // While a channel is open the aim is already fixed, so the purple shows
+        // where the shot is going to land instead of following the cursor. It
+        // is the only way to see what was committed to a turn ago.
+        if (Current is CharacterInstance held && held.IsChannelling &&
+            CardNamed(held.ChannellingCard) is Card waiting)
+        {
+            _blastOpacityKey = waiting.Delivery == Delivery.Cone ? "Cone" : "AoE";
+            _blastSet = AreaOf(waiting, Tile(held), held.ChannelAim);
+            return;
+        }
+
         if (_selectedCard is not { TargetsGround: true } card || Current == null) return;
         _blastOpacityKey = card.Delivery == Delivery.Cone ? "Cone" : "AoE";
 
         if (FindTileAt(_pointer.ToVector2()) is Point c && ReachableAim(Current, c, card))
             _blastSet = AreaOf(card, Tile(Current), c);
     }
+
+    /// <summary>The card of that name from whichever deck the holder draws from.</summary>
+    private Card? CardNamed(string name) =>
+        _hand.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+        ?? _ctx.Cards.All.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+        ?? _ctx.EnemyCards.All.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The tiles a card's area covers: a cone from the caster, or a blast radius.</summary>
     private HashSet<Point> AreaOf(Card card, Point from, Point aim)
@@ -1034,6 +1323,9 @@ public class IsoLevelScreen : IScreen
         _walker = mover;
         _walkFrom = Tile(mover);
         _walkPath = Pathfinder.PathTo(parent, _walkFrom, goal);
+        if (_walkPath.Count > 0)
+            Record(ReplayEventKind.Move, mover, from: _walkFrom, to: goal,
+                amount: _walkPath.Count);
         _walkT = 0f;
         _afterWalk = after;
         _overlayKey = null;
@@ -1055,6 +1347,29 @@ public class IsoLevelScreen : IScreen
                 _selectedCard = _hand[i];
                 _targets.Clear();
                 _overlayKey = null;
+
+                // Releasing a channel does NOT ask where to aim. It was aimed
+                // on the turn it was started, and it has been on its way ever
+                // since — being asked again would be a second decision the
+                // caster never got to make.
+                if (Current is CharacterInstance caster && caster.IsChannelling &&
+                    _selectedCard.Name.Equals(caster.ChannellingCard, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (caster.ChannelTurnsLeft > 0)
+                    {
+                        Toast(_ctx.Strings.Format("iso_channel_waiting",
+                            ("card", caster.ChannellingCard),
+                            ("turns", caster.ChannelTurnsLeft.ToString())));
+                        _selectedCard = null;
+                        return true;
+                    }
+                    // what it catches is settled now, where it lands, not when
+                    // it was aimed — anyone who has since moved into the area
+                    // is under it and anyone who has walked out is not
+                    PlayArea(AreaOf(_selectedCard, Tile(caster), caster.ChannelAim), caster.ChannelAim);
+                    return true;
+                }
+
                 // a pure self-cast (changing shape) has nothing to aim at
                 if (_selectedCard.Damage <= 0 &&
                     _selectedCard.Effects.All(e => Data.Effects.IsSelfCast(e.Name)))
@@ -1194,6 +1509,8 @@ public class IsoLevelScreen : IScreen
                 ("card", spent.CardName), ("owner", spent.From?.Name ?? "?")));
         }
 
+        Record(ReplayEventKind.Card, _actor, card: card.Name, to: blastCenter,
+            target: string.Join("/", aimed.Select(v => v.Name)), amount: card.ActionCost);
         _actor!.ActionPoints = Math.Max(0, _actor.ActionPoints - card.ActionCost);
         // changing shape is free of the movement penalty too: a shapeshifter can
         // shift and then still walk, though the shift itself costs its points
@@ -1209,6 +1526,7 @@ public class IsoLevelScreen : IScreen
         {
             _actor.ChannellingCard = card.Name;
             _actor.ChannelTurnsLeft = card.ChannelTurns;
+            _actor.ChannelAim = blastCenter;      // aimed now, fired later
             _actor.MovePoints = 0;
             Log(_ctx.Strings.Format("iso_channel_start",
                 ("name", _actor.Name), ("card", card.Name)));
@@ -1391,11 +1709,16 @@ public class IsoLevelScreen : IScreen
             : _ctx.Strings.Format("battle_hit", ("target", target.Name),
                 ("dmg", through.ToString()), ("type", type)));
 
+        Record(ReplayEventKind.Hit, _actor, target: target.Name, amount: through,
+            note: type + (soaked > 0 ? $", {soaked} soaked" : ""));
+
         if (target.Hp <= 0)
         {
             target.Hp = 0;
             target.Alive = false;
             report.AppendLine(_ctx.Strings.Format("battle_down", ("name", target.Name)));
+            Record(ReplayEventKind.Down, _actor, target: target.Name,
+                to: Tile(target), note: _actingCard?.Name ?? "");
         }
     }
 
@@ -1691,7 +2014,7 @@ public class IsoLevelScreen : IScreen
     {
         var me = Current!;
         var players = LivingParty;
-        if (players.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
+        if (players.Count == 0) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
 
         // an enemy is bound by action points exactly as the party is
         var hand = HandOf(me)
@@ -1801,7 +2124,7 @@ public class IsoLevelScreen : IScreen
         // a body covering N squares a side is drawn N times as tall, so a
         // four-tile enemy looks like it fills the ground it stands on. Cast
         // Scale in Config.txt still trims it either way.
-        float scale = _ctx.Config.CastScale(c.Name) * c.Size;
+        float scale = _ctx.Config.CastScale(c.Name, c.Form) * c.Size;
         int h = (int)(460 * scale);
         int w = (int)(h * tex.Width / (float)tex.Height);
         var foot = FootOf(c);
@@ -1865,6 +2188,15 @@ public class IsoLevelScreen : IScreen
             {
                 Fill(batch, tile, block.Height, Color.Violet * _ctx.Config.Opacity("Trigger"));
                 Edge(batch, tile, block.Height, Color.Violet * 0.8f);
+            }
+
+            // Whose turn it is, or who is picked in Explore: green under their
+            // feet. Drawn before the yellow so the cursor still reads clearly
+            // when it is over the selected character's own square.
+            if (Chosen is CharacterInstance picked && picked.Covers(tile))
+            {
+                Fill(batch, tile, block.Height, Color.LimeGreen * _ctx.Config.Opacity("Selected"));
+                Edge(batch, tile, block.Height, Color.LimeGreen);
             }
 
             if (hovered == tile)
@@ -2141,6 +2473,16 @@ public class IsoLevelScreen : IScreen
             batch.DrawString(_ctx.Font, _toast, new Vector2(80, 260), Color.White,
                 0f, Vector2.Zero, 0.42f, SpriteEffects.None, 0f);
 
+        // Save Replay is up from the moment the level loads, not only at the
+        // end: the interesting part of a mission is often over well before the
+        // mission is, and a fight you want to keep is one you want to keep now.
+        if (!_replayMode && _mode != Mode.Victory &&
+            Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveReplayRect,
+                _ctx.Strings.Get("replay_save"), _tap))
+            SaveReplay("asked for");
+
+        if (_replayMode) { DrawReplayHud(batch); return; }
+
         switch (_mode)
         {
             case Mode.Explore:
@@ -2314,29 +2656,18 @@ public class IsoLevelScreen : IScreen
     /// has been spent this turn. A third pip appears only when a point was
     /// carried over, which is the whole tell that rollover happened.
     /// </summary>
+    /// <summary>
+    /// What the current character has left to spend, written out. Ten hollow
+    /// squares in a row were both wider than the screen wanted and slower to
+    /// read than the number they added up to.
+    /// </summary>
     private void DrawActionPoints(SpriteBatch batch, CharacterInstance who)
     {
-        int slots = Math.Max(CharacterInstance.ActionsPerTurn, who.ActionPoints);
-        const int pip = 46, gap = 16;
-        int total = slots * pip + (slots - 1) * gap;
-        int x = (VirtualViewport.Width - total) / 2;
-        int y = 232;
-
-        for (int i = 0; i < slots; i++)
-        {
-            var box = new Rectangle(x + i * (pip + gap), y, pip, pip);
-            bool full = i < who.ActionPoints;
-            Ui.FillRect(batch, _ctx.Pixel, box, full ? Color.Orange : new Color(60, 45, 30));
-            if (full) continue;
-            // hollow: draw the frame only
-            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X + 5, box.Y + 5, pip - 10, pip - 10),
-                new Color(18, 18, 24));
-        }
         var label = _ctx.Strings.Format("iso_actions_left",
             ("points", who.ActionPoints.ToString()));
-        batch.DrawString(_ctx.Font, label, new Vector2(x + total + 28, y + 4),
-            who.ActionPoints > 0 ? Color.Orange : Color.Gray,
-            0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
+        Ui.DrawTextCentered(batch, _ctx.Font, label,
+            new Rectangle(0, 232, VirtualViewport.Width, 60),
+            who.ActionPoints > 0 ? Color.Orange : Color.Gray, 0.44f);
     }
 
     private void DrawHand(SpriteBatch batch)
@@ -2425,11 +2756,16 @@ public class IsoLevelScreen : IScreen
             spent ? Color.LightBlue * 0.4f : Color.LightBlue, 0f, Vector2.Zero, rangeScale,
             SpriteEffects.None, 0f);
 
-        // the cost, top-right, as one pip per point
-        for (int i = 0; i < card.ActionCost; i++)
-            Ui.FillRect(batch, _ctx.Pixel,
-                new Rectangle((int)(rect.Right - (28 + i * 34) * s), (int)(rect.Y + 22 * s),
-                    (int)(24 * s), (int)(24 * s)),
-                spent ? Color.Orange * 0.4f : Color.Orange);
+        // The cost, top-right. It used to be one orange square per point, which
+        // at ten points a turn ran off the side of the card and had to be
+        // counted anyway. The number says it in less room and at a glance.
+        string cost = _ctx.Strings.Format("iso_card_actions",
+            ("points", card.ActionCost.ToString()));
+        float costScale = Ui.FitScale(_ctx.Font, cost, inner.Width, Pt(CardRangePt) * s);
+        var costSize = _ctx.Font.MeasureString(cost) * costScale;
+        batch.DrawString(_ctx.Font, cost,
+            new Vector2(inner.Right - costSize.X, rect.Y + 18 * s),
+            spent ? Color.Orange * 0.4f : Color.Orange, 0f, Vector2.Zero, costScale,
+            SpriteEffects.None, 0f);
     }
 }

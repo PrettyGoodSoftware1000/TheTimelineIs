@@ -430,6 +430,9 @@ public static class ContentValidator
             "death_title", "death_reload", "death_no_save",
             "devmap_hint", "devmap_name_prompt", "devmap_mission_prompt", "devmap_saved",
             "devmap_on", "devmap_off",
+            "replay_save", "replay_saved", "replay_failed", "replay_watching",
+            "replay_title", "replay_turn", "replay_end", "replay_next", "replay_card",
+            "replay_over", "replay_none", "menu_replays",
             "error_title", "error_continue", "error_more", "error_log", "error_counts",
             "iso_enter", "iso_explore_hint", "iso_spotted", "iso_done", "iso_clear",
             "iso_end_turn", "iso_move_left", "iso_out_of_range",
@@ -439,9 +442,9 @@ public static class ContentValidator
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
             "iso_cursed", "iso_form",
             "iso_stole", "iso_steal_over", "iso_nothing_to_steal", "iso_no_cards", "iso_needs_other",
-            "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_no_actions",
+            "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_card_actions", "iso_no_actions",
             "iso_steal_pick", "iso_steal_pick_form", "iso_empty_square",
-            "iso_channel_start", "iso_channelling", "iso_channel_rooted", "iso_fire_lit",
+            "iso_channel_start", "iso_channelling", "iso_channel_rooted", "iso_channel_waiting", "iso_fire_lit",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

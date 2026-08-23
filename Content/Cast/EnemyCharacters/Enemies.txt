@@ -24,3 +24,8 @@ HP: 40
 Movement: 2
 Size: 2
 Sprites: LivingStone.png
+
+Enemy: Imp
+HP: 10
+Movement: 5
+Sprites: Imp.png
