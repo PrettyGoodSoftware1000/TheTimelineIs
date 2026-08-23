@@ -17,7 +17,8 @@
 #   AoE      - purple, a blast card's explosion radius
 #   Cone     - purple, a cone card's wedge
 #   Trigger  - violet, an unfired dialogue square
-#   Hover    - yellow, the square under the cursor while Ctrl is held
+#   Hover    - yellow, the square under the cursor. Always shown, so long as
+#              the cursor is over a square at all
 
 
 

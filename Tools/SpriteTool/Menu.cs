@@ -38,8 +38,9 @@ public static class Menu
             Console.WriteLine("   2   Build a sprite sheet from pngs");
             Console.WriteLine("   3   Slice a sprite sheet back into pngs");
             Console.WriteLine("   4   Measure a sheet made somewhere else");
-            Console.WriteLine("   5   Check that ffmpeg is installed");
-            Console.WriteLine("   6   Show the command-line options");
+            Console.WriteLine("   5   Remove a background from a folder of pngs");
+            Console.WriteLine("   6   Check that ffmpeg is installed");
+            Console.WriteLine("   7   Show the command-line options");
             Console.WriteLine("   0   Quit");
             Console.WriteLine("  ------------------------------------------------");
             string choice = Ask("choose", "1");
@@ -52,8 +53,9 @@ public static class Menu
                 case "2": DoSheet(); break;
                 case "3": DoSlice(); break;
                 case "4": DoDetect(); break;
-                case "5": CheckFfmpeg(); break;
-                case "6": Program.Usage(); break;
+                case "5": DoCutout(); break;
+                case "6": CheckFfmpeg(); break;
+                case "7": Program.Usage(); break;
                 case "0" or "q" or "quit" or "exit": return 0;
                 default: Console.WriteLine($"  '{choice}' isn't on the menu."); break;
             }
@@ -222,6 +224,112 @@ public static class Menu
 
         Console.WriteLine();
         Detect.Run(o);
+    }
+
+    /// <summary>
+    /// Background removal, a folder at a time. Its own step, never folded into
+    /// extracting frames: art comes off a video with its background still on,
+    /// and is keyed later, once, on purpose.
+    /// </summary>
+    private static void DoCutout()
+    {
+        Console.WriteLine("  Takes a flat background off artwork and gives it real transparency.");
+        Console.WriteLine("  The art needs black edges — that is what makes the soft edge exact.");
+        Console.WriteLine();
+
+        string folder = AskExistingFolder("folder of pngs", _lastFolder);
+        if (folder.Length == 0) return;
+        _lastFolder = Path.GetFullPath(folder);
+
+        var pngs = Directory.GetFiles(folder, "*.png");
+        if (pngs.Length == 0)
+        {
+            Console.WriteLine($"  no .png files in {Path.GetFullPath(folder)}");
+            return;
+        }
+        Console.WriteLine($"  found {pngs.Length} png(s).");
+
+        var o = new Cutout.Options { Inputs = { folder } };
+
+        Console.WriteLine();
+        Console.WriteLine("   1  white background");
+        Console.WriteLine("   2  magenta background");
+        Console.WriteLine("   3  green background");
+        Console.WriteLine("   4  something else");
+        string which = Ask("background colour", "1");
+        o.Key = which switch
+        {
+            "2" => Cutout.ParseColor("magenta"),
+            "3" => Cutout.ParseColor("green"),
+            "4" => AskColor(),
+            _ => Cutout.ParseColor("white"),
+        };
+
+        Console.WriteLine();
+        Console.WriteLine("  Tolerance is how far off that colour still counts as background,");
+        Console.WriteLine("  0 to 255. Higher for art that has been through video compression;");
+        Console.WriteLine("  lower if pale parts of the artwork get eaten.");
+        o.Tolerance = AskInt("tolerance", o.Tolerance, 0);
+
+        Console.WriteLine();
+        Console.WriteLine("  Areas of background sealed inside the art are judged by SIZE.");
+        Console.WriteLine("  Small ones are detail worth keeping — the white of an eye, a tooth,");
+        Console.WriteLine("  a highlight. Big ones are gaps that have to go, like the space");
+        Console.WriteLine("  between an arm and a body. Below is the line between them, in pixels.");
+        Console.WriteLine("  The report says how big the biggest kept and smallest cleared were,");
+        Console.WriteLine("  so a second run can be aimed better. 0 keeps every one of them.");
+        o.MinHole = AskInt("clear sealed areas of at least (px)", o.MinHole, 0);
+
+        Console.WriteLine();
+        Console.WriteLine("  Some frames have a glow or blast whose edge fades into the");
+        Console.WriteLine("  background instead of stopping at a black line. Fading those out");
+        Console.WriteLine("  reads each pixel as its true colour at partial cover, rather than");
+        Console.WriteLine("  leaving a pale square around it. An outline stops it, so the");
+        Console.WriteLine("  character herself is untouched either way.");
+        o.Glow = AskYes("fade glows and gradients out", false);
+
+        // The destination is not worth asking about: the same folder name with
+        // _cutout on the end, beside the one the frames came from.
+        var source = new DirectoryInfo(Path.GetFullPath(folder).TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        o.OutDir = FreeFolder(source.Parent?.FullName ?? source.FullName, source.Name + "_cutout");
+
+        Console.WriteLine();
+        Console.WriteLine($"  writing to {o.OutDir}");
+        Console.WriteLine();
+        Cutout.Run(o);
+    }
+
+    /// <summary>
+    /// A folder that does not exist yet: "frames_cutout", then
+    /// "frames_cutout_2", "frames_cutout_3" and so on.
+    ///
+    /// A second run at different settings is the normal way to work — the first
+    /// one tells you what the hole sizes actually were, and you go again with a
+    /// better number. Writing over the previous attempt would throw away the
+    /// thing you are comparing against, and worse, a run that produced FEWER
+    /// files would leave stragglers from the last one mixed in with the new.
+    /// </summary>
+    private static string FreeFolder(string parent, string name)
+    {
+        string path = Path.Combine(parent, name);
+        for (int n = 2; Directory.Exists(path) && n < 1000; n++)
+            path = Path.Combine(parent, $"{name}_{n}");
+        return path;
+    }
+
+    private static SixLabors.ImageSharp.PixelFormats.Rgba32 AskColor()
+    {
+        while (true)
+        {
+            string text = Ask("colour (name, 255,0,255 or #ff00ff)", "white");
+            try { return Cutout.ParseColor(text); }
+            catch (ArgumentException ex)
+            {
+                if (_eof) return Cutout.ParseColor("white");
+                Console.WriteLine("  " + ex.Message);
+            }
+        }
     }
 
     private static void CheckFfmpeg()

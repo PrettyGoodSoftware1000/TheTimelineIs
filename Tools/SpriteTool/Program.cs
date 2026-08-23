@@ -20,6 +20,7 @@ public static class Program
                 "sheet" or "build" => Sheet.Build(ParseSheet(args)),
                 "slice" => Sheet.Slice(ParseSlice(args)),
                 "detect" or "measure" => Detect.Run(ParseDetect(args)),
+                "cutout" or "key" or "background" => Cutout.Run(ParseCutout(args)),
                 "menu" or "ui" => Menu.Run(),
                 _ => Unknown(args[0]),
             };
@@ -141,6 +142,41 @@ public static class Program
         return o;
     }
 
+    private static Cutout.Options ParseCutout(string[] a)
+    {
+        var o = new Cutout.Options();
+        for (int i = 1; i < a.Length; i++)
+        {
+            switch (a[i].ToLowerInvariant())
+            {
+                case "--out" or "-o": o.OutDir = Next(a, ref i, "--out"); break;
+                case "--suffix": o.Suffix = Next(a, ref i, "--suffix"); break;
+                case "--colour" or "--color" or "-c":
+                    o.Key = Cutout.ParseColor(Next(a, ref i, "--colour")); break;
+                case "--white": o.Key = Cutout.ParseColor("white"); break;
+                case "--magenta": o.Key = Cutout.ParseColor("magenta"); break;
+                case "--tolerance" or "-t":
+                    o.Tolerance = Int(Next(a, ref i, "--tolerance"), "--tolerance", 0); break;
+                case "--green": o.Key = Cutout.ParseColor("green"); break;
+                case "--min-hole" or "--hole":
+                    o.MinHole = Int(Next(a, ref i, "--min-hole"), "--min-hole", 0); break;
+                case "--keep-enclosed": o.MinHole = 0; break;
+                case "--glow" or "--fade": o.Glow = true; break;
+                case "--in-place": o.InPlace = true; break;
+                case "--dry-run": o.DryRun = true; break;
+                default:
+                    if (a[i].StartsWith('-')) throw new ArgumentException($"unknown option '{a[i]}'");
+                    o.Inputs.Add(a[i]);
+                    break;
+            }
+        }
+        if (o.Inputs.Count == 0)
+            throw new ArgumentException("cutout needs some .png files, a folder, or a glob");
+        if (o.Tolerance > 255)
+            throw new ArgumentException("--tolerance goes up to 255; 12 is the usual sort of number");
+        return o;
+    }
+
     private static string Next(string[] a, ref int i, string flag)
     {
         if (i + 1 >= a.Length) throw new ArgumentException($"{flag} needs a value after it");
@@ -199,6 +235,41 @@ SLICE     a sheet back into numbered PNGs
     --frame-width N    cell width, if there is no .txt beside the sheet
     --frame-height N   cell height, likewise
 
+CUTOUT    take a flat background off artwork and give it real transparency
+  cutout <files|folder|glob>... [options]
+    --colour, -c C     the background to remove: white (default), magenta,
+                       255,0,255 or #ff00ff
+    --white            same as --colour white
+    --magenta          same as --colour magenta
+    --green            same as --colour green
+    --tolerance, -t N  how far off that colour still counts as background,
+                       0-255 per channel (default 12). Raise it for art that
+                       has been through video compression; lower it if pale
+                       parts of the artwork are being eaten
+    --min-hole N       the smallest sealed-off pocket of background, in
+                       pixels, that gets cleared (default 500). Small ones are
+                       kept, because they are detail the artist drew: the white
+                       of an eye, a tooth, a highlight. Big ones are gaps that
+                       have to go. Only size can tell them apart
+    --keep-enclosed    same as --min-hole 0: keep every pocket
+    --glow             fade gradients out into the background instead of
+                       cutting them off. For art whose edge is a glow rather
+                       than a line — a blast running from solid purple through
+                       pale lavender to white. An outline stops it, so a
+                       character with a black line around her is unaffected
+    --out, -o DIR      write the results here, keeping their names
+    --suffix S         when writing beside the originals (default _cut)
+    --in-place         overwrite the originals instead
+    --dry-run          report what would happen, write nothing
+
+  Meant for a whole folder at once. The background is found by spreading in
+  from the edges of the image rather than by matching colour everywhere, so a
+  pale highlight INSIDE the art is safe — the black outline stops the spread.
+  Where it stops, the half-covered edge pixels become part-transparent black,
+  which is why the artwork needs black edges.
+
+  This is its own step. Extracting frames never does it for you.
+
 DETECT    measure a sheet somebody else made, and write its .txt
   detect <sheet.png> [options]
     --columns, -c N    force the column count instead of counting the art
@@ -216,7 +287,10 @@ EXAMPLES
   dotnet run --project Tools/SpriteTool
   dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
   dotnet run --project Tools/SpriteTool -- extract wolf.mp4 -n werewolf_attack --odd -o out
-  dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
+  spritetool.bat cutout out -o cut
+  spritetool.bat cutout out --green -t 24 --min-hole 2000
+  spritetool.bat cutout blast --glow -o cut
+  dotnet run --project Tools/SpriteTool -- sheet cut -o WerewolfAttack.png
   dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attack -o frames
   dotnet run --project Tools/SpriteTool -- detect Content/Cast/PlayerCharacters/Werewitch/WerewitchSpell1/WerewitchSpell1.png
 """);
