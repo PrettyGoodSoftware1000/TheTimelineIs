@@ -1829,10 +1829,15 @@ public class IsoLevelScreen : IScreen
         }
 
         bool armed = _cardArmed;
-        // Ctrl fades everything standing on the ground so the grid reads
-        // clearly, and lights the square under the cursor
+        // Ctrl fades everything standing on the ground so the grid reads clearly
         float alpha = _ctrl ? CtrlFade : 1f;
-        var hovered = _ctrl ? FindTileAt(_pointer.ToVector2()) : null;
+
+        // The square under the cursor is lit all the time, not just under Ctrl:
+        // it is how you tell which square a click will land on, and that is
+        // worth knowing whether or not anything is being aimed. FindTileAt
+        // answers null off the edge of the level, so nothing lights up when the
+        // cursor is over empty space.
+        var hovered = FindTileAt(_pointer.ToVector2());
 
         foreach (var block in _level.Blocks.Values
                      .Where(b => _revealed.Contains(b.Room))

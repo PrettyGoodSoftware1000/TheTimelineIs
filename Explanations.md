@@ -118,6 +118,20 @@ Opacity lines are different: `0` there means a real zero — outline, no fill.
 
 ---
 
+## The yellow square
+
+Always on, marking the square under your cursor — it is how you tell where a
+click will land. It disappears only when the cursor is off the level entirely,
+or over a room you have not opened yet.
+
+Holding **Ctrl** is a separate thing: it fades characters and decorations down
+so you can see the grid under them, and switches targeting to squares rather
+than to whatever sprite the cursor is over.
+
+Its strength is `Hover opacity` in `Config.txt`.
+
+---
+
 ## Tap / hold
 
 One key, two behaviours. Used by **Alt** (block heights) and **Space** (room
