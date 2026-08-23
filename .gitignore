@@ -481,3 +481,9 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 *.mgstats 
+
+# Mission replays. Written by the game into Replays/ at the repo root, where
+# they are easy to find and read. They are a record of one person's play
+# session, not part of the game, so they stay on the machine that made them.
+# Delete the line if you ever want to commit a particular one on purpose.
+Replays/

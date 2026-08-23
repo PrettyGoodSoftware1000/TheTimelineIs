@@ -232,6 +232,9 @@ shows that, so a replay can never disagree with the mission it came from.
 The files are plain text on purpose: the point is to be able to read them, and
 later to hand a pile of them over to work out what tactics a player favours.
 
+`Replays/` is gitignored, so they stay on the machine that made them. To keep a
+particular one, move it somewhere else or add it with `git add -f`.
+
 ---
 
 ## ffmpeg
