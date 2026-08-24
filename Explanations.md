@@ -237,6 +237,57 @@ particular one, move it somewhere else or add it with `git add -f`.
 
 ---
 
+## The two numbers in cutout
+
+They sound alike and are not. One is a colour, one is a size.
+
+**Tolerance — a colour distance, 0 to 255. Not pixels.**
+
+How far each of red, green and blue may be off the background colour and still
+count as background. 12 means "within 12 of 255 on each channel", so
+rgb(247,251,255) is background and rgb(240,255,255) is not — one channel is 15
+out. It is checked per channel, so it is a little box around the colour rather
+than a ball.
+
+- Raise it if background survives. Frames from a normal mp4 want 20–30.
+- Lower it if pale artwork gets eaten.
+- 0 demands the colour exactly.
+
+**Min-hole — an AREA in pixels. How many, not how wide.**
+
+A sealed patch of background is measured by counting the pixels in it. 500
+means "500 pixels in total", which is about a 22x22 patch, not a 500-wide one.
+
+| Area | About |
+|---|---|
+| 100 px | 10x10 |
+| 500 px | 22x22 |
+| 5,000 px | 70x70 |
+| 20,000 px | 141x141 |
+
+**Touching means edge to edge**, not corner to corner. Two patches that meet
+only at a diagonal are two patches.
+
+**Picking the number: run it once and read the report.**
+
+```
+figure.png   holes 7 kept (to 736px) / 1 cleared (from 16,213px)
+```
+
+The biggest thing kept was 736 and the smallest cleared was 16,213, so anything
+between them behaves identically. Detail eaten? Raise it. Gap survived? Lower
+it.
+
+Real numbers from Goblin1 at 1536x2752: 477 sealed patches, median **2 px**,
+biggest 1,126. The ten biggest were 61, 72, 152, 186, 219, 333, 362, 460, 826,
+1126. Almost all real detail is tiny; the gaps are the outliers.
+
+**Area grows with the square of the resolution.** Halve the frame size and a
+patch covers a quarter as many pixels. A number tuned on 1920x1080 wants
+dividing by about 4 for 960x540.
+
+---
+
 ## ffmpeg
 
 Only *extracting frames from a video* needs it. Sheets, slicing, measuring and

@@ -266,19 +266,23 @@ public static class Menu
         };
 
         Console.WriteLine();
-        Console.WriteLine("  Tolerance is how far off that colour still counts as background,");
-        Console.WriteLine("  0 to 255. Higher for art that has been through video compression;");
-        Console.WriteLine("  lower if pale parts of the artwork get eaten.");
-        o.Tolerance = AskInt("tolerance", o.Tolerance, 0);
+        Console.WriteLine("  Tolerance is a COLOUR distance, not a size: how far each of red,");
+        Console.WriteLine("  green and blue may be off that colour and still count as background,");
+        Console.WriteLine("  on the usual 0 to 255 scale. 0 demands an exact match. Higher for art");
+        Console.WriteLine("  that has been through video compression; lower if pale parts of the");
+        Console.WriteLine("  artwork get eaten.");
+        o.Tolerance = AskInt("tolerance (0-255 per colour channel)", o.Tolerance, 0);
 
         Console.WriteLine();
-        Console.WriteLine("  Areas of background sealed inside the art are judged by SIZE.");
+        Console.WriteLine("  Areas of background sealed inside the art are judged by AREA — how");
+        Console.WriteLine("  many pixels the patch covers in total, not how wide it is. 500 is");
+        Console.WriteLine("  roughly a 22x22 patch.");
         Console.WriteLine("  Small ones are detail worth keeping — the white of an eye, a tooth,");
         Console.WriteLine("  a highlight. Big ones are gaps that have to go, like the space");
         Console.WriteLine("  between an arm and a body. Below is the line between them, in pixels.");
         Console.WriteLine("  The report says how big the biggest kept and smallest cleared were,");
         Console.WriteLine("  so a second run can be aimed better. 0 keeps every one of them.");
-        o.MinHole = AskInt("clear sealed areas of at least (px)", o.MinHole, 0);
+        o.MinHole = AskInt("clear sealed areas covering at least (total px)", o.MinHole, 0);
 
         Console.WriteLine();
         Console.WriteLine("  Some frames have a glow or blast whose edge fades into the");
