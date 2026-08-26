@@ -1,10 +1,9 @@
 # ========================= ENEMY CARD FORMAT =========================
-# Exactly the same format as PlayerCards.txt - see that file's header for
-# every key. The only difference is who holds the card: "Tags:" here matches
-# an enemy in Enemies.txt (by its name, or by its "Card Tags:" line) instead
-# of a player class.
+# Exactly the same format as PlayerCards.txt -
 #
 # HOW AN ENEMY USES THESE
+# Uses melee if it can. Otherwise ranged.
+
 #   1. If it holds a MELEE card and it can reach a player this turn (its
 #      movement plus that card's range), it walks at the nearest such player
 #      and swings.
@@ -21,12 +20,6 @@
 # card first. As soon as an enemy has a card of its own, it stops using the
 # default - the Goblin has Goblin Claw, so it never smacks anything.
 #
-# An enemy with several melee cards uses the longest-ranged one it can afford;
-# same for ranged. Enemies never play cards that target allies.
-#
-# "Basic Attack Damage", "Sounds" and "Range" are gone from Enemies.txt: how
-# hard an enemy hits, what it sounds like and how far it reaches all live here
-# now. Those lines warn and are ignored if you leave them in an old file.
 # =====================================================================
 
 []
@@ -35,9 +28,9 @@ Tags: Default
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
-Melee Time: 0.35
+Melee Time: 1
 Casting Sound: [Blank.wav]
-Casting Time: 0.15
+Casting Time: 1
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 5 damage.
 Card Text: No technique whatsoever. Still hurts.
@@ -50,9 +43,9 @@ Tags: Goblin
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
-Melee Time: 0.35
+Melee Time: 1
 Casting Sound: [Blank.wav]
-Casting Time: 0.15
+Casting Time: 1
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 5 damage.
 Card Text: A grubby swipe. Nothing personal.
@@ -65,12 +58,12 @@ Tags: Living Stone
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 5
-Melee Time: 0.45
+Melee Time: 2
 Casting Sound: [Blank.wav]
-Casting Time: 0.2
+Casting Time: 2
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 12 damage.
-Card Text: A slab of a hand, swung like a door closing.
+Card Text: Like being bitch-slapped by a mountain.
 Bottom Right: 12 Smashing
 []
 

@@ -15,8 +15,8 @@
 # of its sides, and it is drawn that many times taller.
 
 Enemy: Goblin
-HP: 30
-Movement: 3
+HP: 8
+Movement: 5
 Sprites: Goblin1.png, Goblin2.png, Goblin3.png
 
 Enemy: Living Stone
