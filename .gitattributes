@@ -1,0 +1,27 @@
+# How lines end.
+#
+# Every text file ends each line with a hidden character meaning "new line".
+# Windows writes two of them, everything else writes one. Nobody ever sees
+# either, but git compares files character by character, so the same level
+# saved on two machines reads as though every single line changed. That is
+# what a whole-file conflict over nothing actually is.
+#
+# text=auto settles it: git keeps ONE style in the repository and hands each
+# machine the style it expects on the way out. The editor can go on writing
+# Windows endings and nothing downstream notices.
+* text=auto
+
+# Batch files are read by the Windows command processor, which wants CRLF
+# wherever the file came from.
+*.bat text eol=crlf
+
+# Art, sound and fonts are NOT text. Without these lines git decides for
+# itself, and a picture that happens to look textual enough would have its
+# line endings "corrected" — which is to say, corrupted. Say so explicitly.
+*.png binary
+*.bmp binary
+*.ico binary
+*.wav binary
+*.ttf binary
+*.mp4 binary
+*.xnb binary
