@@ -210,9 +210,13 @@ it. Once they are, one person stepping back on makes the return trip.
 A record of what happened in a mission: every turn, who moved where, what card
 they played, what it hit and what it killed.
 
-**Save Replay** sits under End Turn from the moment a level loads, so you can
-keep a fight before it is over. A win or a party wipe saves one on its own, so
-forgetting the button costs nothing.
+Recording is **off** until you ask for it. The button under End Turn says
+**Start Saving Replay**; press it and it turns red, says **Stop Saving Replay**,
+and a red dot sits beside it. Press again to write the file.
+
+It records from the moment you press, and pins where everyone is standing at
+that point — so starting mid-fight still plays back correctly. If the mission
+ends while it is running, the file is written anyway.
 
 They land in `Replays/` at the repo root, two files per mission:
 

@@ -13,6 +13,13 @@ namespace TheTimelineIs.Core.Data;
 /// </summary>
 public enum ReplayEventKind
 {
+    /// <summary>
+    /// Where somebody was, and how hurt, at the moment recording began.
+    /// Recording can be switched on part-way through a mission, so the record
+    /// has to say where everyone was standing when it started or a playback
+    /// would begin with the party back at the level's entrance.
+    /// </summary>
+    Place,
     /// <summary>A new turn began. Who, and their health at the time.</summary>
     Turn,
     /// <summary>Somebody walked. From and To are the ends of the walk.</summary>
@@ -55,7 +62,7 @@ public class ReplayEvent
         if (Who.Length > 0) sb.Append(" | who ").Append(Who);
         if (Card.Length > 0) sb.Append(" | card ").Append(Card);
         if (Target.Length > 0) sb.Append(" | target ").Append(Target);
-        if (Kind is ReplayEventKind.Move)
+        if (Kind is ReplayEventKind.Move or ReplayEventKind.Place)
             sb.Append(" | from ").Append(From.X).Append(',').Append(From.Y)
               .Append(" | to ").Append(To.X).Append(',').Append(To.Y);
         if (Kind is ReplayEventKind.Card)

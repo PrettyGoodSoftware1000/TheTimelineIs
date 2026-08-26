@@ -78,6 +78,13 @@ public class IsoLevelScreen : IScreen
     /// <summary>Which turn number the recorder is filing events under.</summary>
     private int _replayTurn;
 
+    /// <summary>
+    /// Whether anything is being written down. Off until asked for: most
+    /// missions are not worth keeping, and a folder filling with recordings
+    /// nobody wanted is its own kind of mess.
+    /// </summary>
+    private bool _recording;
+
     /// <summary>Set once the mission's ending has been recorded, so it is only written once.</summary>
     private bool _ended;
     private CharacterInstance? _selected;
@@ -353,6 +360,28 @@ public class IsoLevelScreen : IScreen
     /// player reads it, so the level itself stays uncluttered.
     /// </summary>
     /// <summary>
+    /// Begins writing things down, and pins where everybody is standing right
+    /// now. Without that snapshot a recording begun part-way through a fight
+    /// would play back with the party at the level's entrance, since the only
+    /// other thing that says where anyone is is a Move.
+    /// </summary>
+    private void StartRecording()
+    {
+        _recording = true;
+        _replay.Events.Clear();
+        _replayTurn = _turn >= 0 ? 1 : 0;
+        foreach (var c in Everyone.Where(c => c.Alive))
+            _replay.Events.Add(new ReplayEvent
+            {
+                Kind = ReplayEventKind.Place, Turn = _replayTurn, Who = c.Name,
+                From = Tile(c), To = Tile(c), Amount = c.Hp,
+                Text = c.IsPlayer ? "party" : "enemy",
+            });
+        Toast(_ctx.Strings.Get("replay_started"));
+        Log(_ctx.Strings.Get("replay_started"));
+    }
+
+    /// <summary>
     /// Writes the record so far, plus the level it was played in, under one
     /// name. The level is copied rather than pointed at: levels get edited, and
     /// a replay that read the live file would start showing people walking
@@ -360,7 +389,8 @@ public class IsoLevelScreen : IScreen
     /// </summary>
     private void SaveReplay(string why)
     {
-        if (_replayMode) return;
+        if (_replayMode || !_recording) return;
+        _recording = false;
         _replay.Saved = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
         string name = Replay.NameFor(_replay.Level, DateTime.Now);
         string? where = _ctx.ReplayStore.Save(name, _replay.Serialize(), _level.Serialize());
@@ -377,7 +407,7 @@ public class IsoLevelScreen : IScreen
     /// </summary>
     private void FinishMission(string how)
     {
-        if (_replayMode || _ended) return;
+        if (_replayMode || _ended || !_recording) return;
         _ended = true;
         Record(ReplayEventKind.End, note: how);
         SaveReplay(how);
@@ -465,6 +495,14 @@ public class IsoLevelScreen : IScreen
 
             switch (e.Kind)
             {
+                // where everyone stood when recording began
+                case ReplayEventKind.Place when who != null:
+                    who.GX = e.From.X;
+                    who.GY = e.From.Y;
+                    who.Hp = Math.Max(0, e.Amount);
+                    who.Alive = e.Amount > 0;
+                    break;
+
                 case ReplayEventKind.Turn:
                     _replayTurn = e.Turn;
                     if (who != null) _replayActor = who;
@@ -544,7 +582,7 @@ public class IsoLevelScreen : IScreen
         string card = "", string target = "", Point from = default, Point to = default,
         int amount = 0, string note = "")
     {
-        if (_replayMode) return;          // watching a replay does not record another
+        if (_replayMode || !_recording) return;   // off, or watching one already
         _replay.Events.Add(new ReplayEvent
         {
             Kind = kind, Turn = _replayTurn, Who = who?.Name ?? "",
@@ -2504,11 +2542,27 @@ public class IsoLevelScreen : IScreen
         // practically invisible.
         if (!_replayMode && _mode != Mode.Victory)
         {
+            // Three things this button can be saying: it has just written a
+            // file, it is writing things down, or it is doing nothing.
             bool justSaved = _replaySavedTimer > 0;
+            string label = justSaved ? "replay_done"
+                : _recording ? "replay_stop" : "replay_start";
+            Color? tint = justSaved ? new Color(24, 86, 34, 235)
+                : _recording ? new Color(110, 30, 30, 235) : null;
+
             if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveReplayRect,
-                    _ctx.Strings.Get(justSaved ? "replay_done" : "replay_save"), _tap,
-                    justSaved ? new Color(24, 86, 34, 235) : null))
-                SaveReplay("asked for");
+                    _ctx.Strings.Get(label), _tap, tint))
+            {
+                if (_recording) SaveReplay("asked for");
+                else StartRecording();
+            }
+
+            // a dot beside it while it is running, so a recording left on is
+            // obvious without reading the button
+            if (_recording && !justSaved)
+                Ui.FillRect(batch, _ctx.Pixel,
+                    new Rectangle(SaveReplayRect.X - 46, SaveReplayRect.Y + 44, 32, 32),
+                    Color.Red);
         }
 
         if (_replayMode) { DrawReplayHud(batch); return; }
