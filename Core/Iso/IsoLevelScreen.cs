@@ -136,6 +136,13 @@ public class IsoLevelScreen : IScreen
     private string _toast = "";
     private float _toastTimer;
 
+    /// <summary>
+    /// Counts down after a replay is written. While it runs, the Save Replay
+    /// button says so itself — feedback belongs where the button is, not in the
+    /// far corner of a 3840-wide screen where nobody is looking.
+    /// </summary>
+    private float _replaySavedTimer;
+
     // the combat log: every blow, burn and turn event, hidden behind a + button
     private readonly List<string> _log = new();
     private bool _logOpen;
@@ -178,6 +185,9 @@ public class IsoLevelScreen : IScreen
 
     /// <summary>In a replay, the same spot advances a turn.</summary>
     private static readonly Rectangle NextTurnRect = new(3280, 60, 500, 160);
+
+    /// <summary>Seconds the Save Replay button stays turned green and saying so.</summary>
+    private const float ReplaySavedShown = 2.5f;
     private static readonly Rectangle DoneRect = new(3280, 60, 500, 160);
     private static readonly Rectangle WinRect = new(1620, 1250, 600, 180);
     private static readonly Rectangle DialogueBox = new(60, 1560, 3720, 420);
@@ -357,6 +367,7 @@ public class IsoLevelScreen : IScreen
         Toast(where == null
             ? _ctx.Strings.Get("replay_failed")
             : _ctx.Strings.Format("replay_saved", ("name", name)));
+        _replaySavedTimer = where == null ? 0f : ReplaySavedShown;
         Log(_ctx.Strings.Format("replay_saved", ("name", name)) + $" ({why})");
     }
 
@@ -652,6 +663,7 @@ public class IsoLevelScreen : IScreen
         _ctrl = input.CtrlHeld;
         _camera += input.PanDelta;
         if (_toastTimer > 0) _toastTimer -= dt;
+        if (_replaySavedTimer > 0) _replaySavedTimer -= dt;
         Recoil.Update(Everyone, dt);
         _clock += dt;
         UpdateCastAnimations(dt);
@@ -2469,17 +2481,35 @@ public class IsoLevelScreen : IScreen
 
     private void DrawHud(SpriteBatch batch)
     {
+        // a dark plate behind the toast, because white text alone disappears
+        // over pale ground and this is the game's only way of answering back
         if (_toastTimer > 0 && !DialogueActive)
+        {
+            var size = _ctx.Font.MeasureString(_toast) * 0.42f;
+            var plate = new Rectangle(64, 244, (int)size.X + 32, (int)size.Y + 24);
+            Ui.FillRect(batch, _ctx.Pixel, plate, new Color(12, 12, 20, 210));
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(plate.X, plate.Y, 6, plate.Height), Color.Gold);
             batch.DrawString(_ctx.Font, _toast, new Vector2(80, 260), Color.White,
                 0f, Vector2.Zero, 0.42f, SpriteEffects.None, 0f);
+        }
 
         // Save Replay is up from the moment the level loads, not only at the
         // end: the interesting part of a mission is often over well before the
         // mission is, and a fight you want to keep is one you want to keep now.
-        if (!_replayMode && _mode != Mode.Victory &&
-            Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveReplayRect,
-                _ctx.Strings.Get("replay_save"), _tap))
-            SaveReplay("asked for");
+        //
+        // The button reports its own result for a few seconds. It used to say
+        // nothing at all and leave the news to the toast, which prints small and
+        // plain in the opposite corner of the screen — technically feedback,
+        // practically invisible.
+        if (!_replayMode && _mode != Mode.Victory)
+        {
+            bool justSaved = _replaySavedTimer > 0;
+            if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveReplayRect,
+                    _ctx.Strings.Get(justSaved ? "replay_done" : "replay_save"), _tap,
+                    justSaved ? new Color(24, 86, 34, 235) : null))
+                SaveReplay("asked for");
+        }
 
         if (_replayMode) { DrawReplayHud(batch); return; }
 

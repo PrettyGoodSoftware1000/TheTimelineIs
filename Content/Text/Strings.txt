@@ -94,6 +94,7 @@ iso_no_cards = {name} has nothing to attack with, and wanders off.
 iso_log_empty = Nothing has happened yet.
 iso_log_more = Scrolled back - wheel down to return to the newest.
 replay_save = Save Replay
+replay_done = Replay saved
 replay_saved = Replay saved as {name}.
 replay_failed = Could not write the replay - see the console.
 replay_watching = Watching a replay. Next Turn or SPACE steps through it.

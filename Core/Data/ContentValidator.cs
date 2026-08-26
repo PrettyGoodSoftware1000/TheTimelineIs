@@ -430,7 +430,7 @@ public static class ContentValidator
             "death_title", "death_reload", "death_no_save",
             "devmap_hint", "devmap_name_prompt", "devmap_mission_prompt", "devmap_saved",
             "devmap_on", "devmap_off",
-            "replay_save", "replay_saved", "replay_failed", "replay_watching",
+            "replay_save", "replay_done", "replay_saved", "replay_failed", "replay_watching",
             "replay_title", "replay_turn", "replay_end", "replay_next", "replay_card",
             "replay_over", "replay_none", "menu_replays",
             "error_title", "error_continue", "error_more", "error_log", "error_counts",
