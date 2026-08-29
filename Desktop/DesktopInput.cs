@@ -97,6 +97,15 @@ public class DesktopInput : IInputSource
             state.AltTap = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
 
         state.Submit = Pressed(keys, Keys.Enter);
+
+        // 1..9 then 0 for the tenth card, from the number row or the numpad
+        for (int slot = 1; slot <= 10; slot++)
+        {
+            int digit = slot == 10 ? 0 : slot;
+            if (Pressed(keys, Keys.D0 + digit) || Pressed(keys, Keys.NumPad0 + digit))
+                state.CardKey = slot;
+        }
+        state.EndTurn = Pressed(keys, Keys.End) || Pressed(keys, Keys.Space);
         state.Confirm = state.Submit || Pressed(keys, Keys.Space);
         state.Cancel = Pressed(keys, Keys.Escape);
         state.ToggleRuler = Pressed(keys, Keys.F12);

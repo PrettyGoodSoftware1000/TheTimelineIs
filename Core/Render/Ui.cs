@@ -58,7 +58,11 @@ public static class Ui
         FillRect(batch, pixel, new Rectangle(rect.X, rect.Bottom - 4, rect.Width, 4), Color.White * 0.5f);
         FillRect(batch, pixel, new Rectangle(rect.X, rect.Y, 4, rect.Height), Color.White * 0.5f);
         FillRect(batch, pixel, new Rectangle(rect.Right - 4, rect.Y, 4, rect.Height), Color.White * 0.5f);
-        DrawTextCentered(batch, font, label, rect, Color.White, 0.5f);
+        // The label is shrunk to fit rather than drawn at a fixed size. A long
+        // one — "Stop Saving Replay" — used to run straight out through both
+        // ends of the button, which looks like a bug because it is one.
+        float scale = FitScale(font, label, rect.Width - 32, 0.5f);
+        DrawTextCentered(batch, font, label, rect, Color.White, scale);
         return tap.HasValue && rect.Contains(tap.Value);
     }
 

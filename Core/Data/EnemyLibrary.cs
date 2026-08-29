@@ -10,11 +10,21 @@ public class EnemyDef
     public string Name = "";
     public int Hp = 10;
     public int Movement = 3;
+
     /// <summary>
-    /// How many squares on a side the body covers. 1 is a normal enemy; a
-    /// Living Stone is 2 and so fills four tiles.
+    /// Action points granted each turn once a fight starts. Unspent points
+    /// carry over with no ceiling, so this is a rate rather than a budget.
     /// </summary>
-    public int Size = 1;
+    public int Actions = CharacterInstance.DefaultActionsPerTurn;
+    /// <summary>
+    /// How many squares the body covers, across and down. "Size: 2" is 2x2 —
+    /// a Living Stone. "Size: 2 x 1" is two squares side by side, which is a
+    /// Gator: long rather than square.
+    /// </summary>
+    public int SizeX = 1, SizeY = 1;
+
+    /// <summary>The longer side, for anything that wants one number.</summary>
+    public int Size => Math.Max(SizeX, SizeY);
     public List<string> Sprites = new();
     /// <summary>Which cards in EnemyCards.txt this enemy holds; its own name by default.</summary>
     public List<string> CardTags = new();
@@ -38,6 +48,7 @@ public class EnemyDef
 ///   Enemy: Goblin
 ///   HP: 30
 ///   Movement: 3
+///   Actions: 5                      (optional; points a turn, default 5)
 ///   Size: 2                          (optional; squares per side, so 2 = a
 ///                                     four-tile body. Defaults to 1)
 ///   Sprites: Goblin1.png, Goblin2.png, Goblin3.png
@@ -124,11 +135,27 @@ public class EnemyLibrary
                         $"'{current.Name}': '{key}' moved onto the enemy's cards in " +
                         $"{CardLibrary.EnemyPath} and is ignored here — delete the line");
                     break;
-                // "Size: 2" means a 2x2 body — four tiles — not four tiles in a row
+                // "Size: 2" is 2x2; "Size: 2 x 1" is two squares side by side
                 case "size":
-                    if (int.TryParse(value, out int sz) && sz > 0) current.Size = sz;
+                {
+                    var bits = value.Split('x', StringSplitOptions.RemoveEmptyEntries |
+                                                StringSplitOptions.TrimEntries);
+                    if (bits.Length == 1 && int.TryParse(bits[0], out int sq) && sq > 0)
+                        current.SizeX = current.SizeY = sq;
+                    else if (bits.Length == 2 &&
+                             int.TryParse(bits[0], out int sx) && sx > 0 &&
+                             int.TryParse(bits[1], out int sy) && sy > 0)
+                    { current.SizeX = sx; current.SizeY = sy; }
+                    else
+                        diag.Error(Path, lineNo,
+                            $"'{current.Name}': Size must be a number of squares, or two with an " +
+                            $"x between them like '2 x 1', got '{value}'");
+                    break;
+                }
+                case "actions":
+                    if (int.TryParse(value, out int ap) && ap > 0) current.Actions = ap;
                     else diag.Error(Path, lineNo,
-                        $"'{current.Name}': Size must be a positive number of squares per side, got '{value}'");
+                        $"'{current.Name}': Actions must be a positive number of points a turn, got '{value}'");
                     break;
                 case "sprites":
                     current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();

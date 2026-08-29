@@ -87,6 +87,12 @@ public class Card
     /// </summary>
     public string Form = "";
 
+    /// <summary>
+    /// What a Summon card puts on the board, by name, looked up in the same
+    /// roster the enemies come from. Empty for every other card.
+    /// </summary>
+    public string Summons = "";
+
     /// <summary>Cone and blast cards paint an area, so they can be aimed at bare ground.</summary>
     public bool TargetsGround => Kind == CardKind.AoEDamage || Delivery == Delivery.Cone;
 
@@ -135,12 +141,20 @@ public class Card
     /// <summary>Total damage per target, split across the hit sequence.</summary>
     public int DamagePerTarget => Kind == CardKind.SingleTargetHits ? Damage * Hits : Damage;
 
-    /// <summary>The dynamic bottom-right number: total damage against the current room.</summary>
+    /// <summary>
+    /// The bottom-right number on the card: what ONE target takes.
+    ///
+    /// An area card used to show its damage multiplied by however many enemies
+    /// were currently standing in the blast, so the same card read 15 one
+    /// moment and 60 the next without changing. What a player needs to know is
+    /// whether a hit kills the thing they are aiming at, and that is the
+    /// per-target figure.
+    /// </summary>
     public int TotalDamage(int livingEnemies) => Kind switch
     {
-        CardKind.AoEDamage => Damage * livingEnemies,
+        CardKind.AoEDamage => Damage,
         CardKind.SingleTargetHits => Damage * Hits,
-        _ => Damage * Math.Min(Targets, Math.Max(1, livingEnemies)),
+        _ => Damage,
     };
 
     /// <summary>
@@ -192,7 +206,7 @@ public class CardLibrary
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
         "explosion range", "action points", "sky angle", "effects", "effect", "speed", "range",
-        "form", "tags", "type", "sounds",
+        "summons", "form", "tags", "type", "sounds",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
@@ -337,6 +351,10 @@ public class CardLibrary
 
             case "form":
                 card.Form = value;
+                break;
+
+            case "summons":
+                card.Summons = value;
                 break;
 
             case "action points":

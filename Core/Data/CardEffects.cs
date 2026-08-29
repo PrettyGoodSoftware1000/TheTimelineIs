@@ -37,9 +37,21 @@ public static class Effects
     /// <summary>Leaves burning ground behind wherever the card landed.</summary>
     public const string FireTiles = "FireTiles";
 
+    /// <summary>
+    /// Summon N: brings a creature onto the board under the caster's control.
+    /// The creature's name is the card's "Summons:" line; N is how many.
+    /// </summary>
+    public const string Summon = "Summon";
+
+    /// <summary>
+    /// Guard N: the caster plants themselves — no more movement this turn or
+    /// after — and shoots anything hostile that comes within N squares.
+    /// </summary>
+    public const string Guard = "Guard";
+
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
     public static readonly string[] Known =
-        { Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles };
+        { Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles, Summon, Guard };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
     public const int BurnDamagePerStack = 5;
@@ -84,7 +96,9 @@ public static class Effects
         name.Equals(Channel, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Nimble, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Leap, StringComparison.OrdinalIgnoreCase) ||
-        name.Equals(Form, StringComparison.OrdinalIgnoreCase);
+        name.Equals(Form, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Summon, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Guard, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>These carry a word (a form name) instead of a number.</summary>
     public static bool TakesText(string name) =>

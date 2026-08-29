@@ -121,10 +121,13 @@ public static class ContentValidator
             }
             // a channelled card is paid for twice, but on two different turns,
             // so what matters is that ONE play fits inside one turn's points
-            if (card.IsChannelled && card.ActionCost > CharacterInstance.ActionsPerTurn)
+            // points now pile up across turns with no ceiling, so an expensive
+            // card is a saving-up problem rather than an impossible one. Only a
+            // truly absurd cost is worth mentioning.
+            if (card.ActionCost > CharacterInstance.DefaultActionsPerTurn * 20)
                 diag.Warn(card.Source, card.Line,
-                    $"'{card.Name}': costs {card.ActionCost} to play but a turn only grants " +
-                    $"{CharacterInstance.ActionsPerTurn} points, so it can never be started");
+                    $"'{card.Name}': costs {card.ActionCost} points, which is more than twenty " +
+                    "turns of saving for a normal character");
             if (card.FireTileTurns > 0 && !card.TargetsGround)
                 diag.Warn(card.Source, card.Line,
                     $"'{card.Name}': FireTiles needs ground to burn, so the card should be " +
@@ -297,18 +300,19 @@ public static class ContentValidator
                     diag.Error(path, 0, $"enemy at {enemy.X},{enemy.Y} is floating in the void (no block)");
                 // a big body needs its whole footprint under it, flat and clear,
                 // or it spawns half off the ground and can never move
-                int size = enemies.Get(enemy.Name)?.Size ?? 1;
-                if (size > 1)
+                var body = enemies.Get(enemy.Name);
+                int sizeX = body?.SizeX ?? 1, sizeY = body?.SizeY ?? 1;
+                if (sizeX > 1 || sizeY > 1)
                 {
                     var anchor = new Microsoft.Xna.Framework.Point(enemy.X, enemy.Y);
                     int? floor = null;
-                    foreach (var t in Iso.Pathfinder.Footprint(anchor, size))
+                    foreach (var t in Iso.Pathfinder.Footprint(anchor, sizeX, sizeY))
                     {
                         var under = level.BlockAt(t);
                         if (under == null)
                         {
                             diag.Error(path, 0,
-                                $"'{enemy.Name}' at {enemy.X},{enemy.Y} covers {size}x{size} squares, " +
+                                $"'{enemy.Name}' at {enemy.X},{enemy.Y} covers {sizeX}x{sizeY} squares, " +
                                 $"but {t.X},{t.Y} has no block under it");
                             continue;
                         }
@@ -440,7 +444,8 @@ public static class ContentValidator
             "iso_move_spent", "iso_pick_target", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
-            "iso_cursed", "iso_form",
+            "iso_cursed", "iso_form", "iso_pet_turn", "iso_summoned", "iso_summon_no_room",
+            "iso_guarding", "iso_guard_fires",
             "iso_stole", "iso_steal_over", "iso_nothing_to_steal", "iso_no_cards", "iso_needs_other",
             "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_card_actions", "iso_no_actions",
             "iso_steal_pick", "iso_steal_pick_form", "iso_empty_square",

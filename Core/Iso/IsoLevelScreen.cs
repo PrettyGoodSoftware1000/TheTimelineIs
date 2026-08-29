@@ -187,8 +187,12 @@ public class IsoLevelScreen : IScreen
     private const int LogLineH = 46;
     private static readonly Rectangle EndTurnRect = new(3280, 60, 500, 160);
 
-    /// <summary>Save Replay, under End Turn and out of the way of the board.</summary>
-    private static readonly Rectangle SaveReplayRect = new(3280, 240, 500, 120);
+    /// <summary>
+    /// Recording, to the LEFT of End Turn on the same row. It was underneath at
+    /// 500 wide, which "Stop Saving Replay" ran straight out of — the label is
+    /// the longest thing on the screen, so it gets the width to say it.
+    /// </summary>
+    private static readonly Rectangle SaveReplayRect = new(2380, 60, 840, 160);
 
     /// <summary>In a replay, the same spot advances a turn.</summary>
     private static readonly Rectangle NextTurnRect = new(3280, 60, 500, 160);
@@ -288,6 +292,7 @@ public class IsoLevelScreen : IScreen
                 MaxHp = cls?.Hp ?? 20,
                 Hp = cls?.Hp ?? 20,
                 MoveMax = cls?.Movement ?? 5,
+                ActionsPerTurn = cls?.Actions ?? CharacterInstance.DefaultActionsPerTurn,
                 GX = at.X, GY = at.Y,
             });
         }
@@ -308,7 +313,8 @@ public class IsoLevelScreen : IScreen
                 MaxHp = def.Hp,
                 Hp = def.Hp,
                 MoveMax = def.Movement,
-                Size = def.Size,
+                ActionsPerTurn = def.Actions,
+                SizeX = def.SizeX, SizeY = def.SizeY,
                 GX = spawn.X, GY = spawn.Y,
             });
         }
@@ -330,6 +336,13 @@ public class IsoLevelScreen : IScreen
 
     private IEnumerable<CharacterInstance> Everyone => _party.Concat(_enemies);
     private List<CharacterInstance> LivingParty => _party.Where(p => p.Alive).ToList();
+
+    /// <summary>
+    /// The mission is lost. A summoned pet is not a survivor: it only ever acts
+    /// inside its summoner's turn, so a gator standing over a dead party has no
+    /// turn to take. The party is its real members.
+    /// </summary>
+    private bool PartyWiped => !CharacterInstance.AnyoneStanding(_party);
     private List<CharacterInstance> VisibleEnemies => _enemies.Where(e =>
         e.Alive && _level.BlockAt(Tile(e)) is LevelBlock b && _revealed.Contains(b.Room)).ToList();
 
@@ -668,13 +681,49 @@ public class IsoLevelScreen : IScreen
         ActiveMover is CharacterInstance m && m.IsPlayer ? m :
         Current is { IsPlayer: true, Alive: true } c ? c : null;
 
+    /// <summary>
+    /// Whoever the player is moving right now. In a fight that is normally the
+    /// character whose turn it is — but a summoner and its pets share one turn,
+    /// so it is whichever of that group has been picked.
+    /// </summary>
     private CharacterInstance? ActiveMover => _mode switch
     {
         Mode.Explore => _selected,
         Mode.FreeMove => _selected != null && _freeMovers.Contains(_selected) ? _selected : null,
-        Mode.PlayerTurn or Mode.PlayerTarget => Current,
+        Mode.PlayerTurn or Mode.PlayerTarget =>
+            _petControl is { Alive: true } p && ActsWith(p, Current) ? p : Current,
         _ => null,
     };
+
+    /// <summary>
+    /// The pet the player has clicked, when a summoner's turn is running. Null
+    /// means the summoner themselves is being moved.
+    /// </summary>
+    private CharacterInstance? _petControl;
+
+    /// <summary>
+    /// Whether these two take their turn together: a pet and its owner, or two
+    /// pets of the same owner. Everything else has its own place in the order.
+    /// </summary>
+    private static bool ActsWith(CharacterInstance a, CharacterInstance? b)
+    {
+        if (a == null || b == null) return false;
+        if (a == b) return true;
+        return a.Owner == b || b.Owner == a || (a.Owner != null && a.Owner == b.Owner);
+    }
+
+    /// <summary>
+    /// Whose cards and points a play spends: the pet if one has the controls,
+    /// otherwise whoever's turn it is. Everything about playing a card goes
+    /// through this rather than through Current.
+    /// </summary>
+    private CharacterInstance? Acting => ActiveMover ?? Current;
+
+    /// <summary>Everyone acting on the current turn: whoever it is, plus their pets.</summary>
+    private List<CharacterInstance> ActingGroup() =>
+        Current == null ? new List<CharacterInstance>()
+            : LivingParty.Concat(_enemies.Where(e => e.Alive))
+                .Where(c => ActsWith(c, Current)).ToList();
 
     private Vector2 FootOf(CharacterInstance c)
     {
@@ -688,7 +737,10 @@ public class IsoLevelScreen : IScreen
         }
         // a body wider than one square stands in the middle of its footprint,
         // which in this projection is straight down the screen from its corner
-        at.Y += (c.Size - 1) * (IsoMath.TileH / 2f);
+        // the middle of the footprint, which in this projection is straight
+        // down-screen for a square body and offset sideways for a long one
+        at.X += (c.SizeX - c.SizeY) * (IsoMath.TileW / 2f) / 2f;
+        at.Y += (c.SizeX + c.SizeY - 2) * (IsoMath.TileH / 2f) / 2f;
         return at + new Vector2(0, 26) + Recoil.Offset(c);
     }
 
@@ -729,6 +781,15 @@ public class IsoLevelScreen : IScreen
         if (input.AltTap.HasValue) CancelCard();
 
         if (_replayMode) { RefreshOverlays(); UpdateReplay(input, dt); return; }
+
+        // End or Space finishes the turn, and a number plays that card. Both are
+        // ignored while somebody is talking or a card is mid-flight, since a key
+        // pressed then was meant for the thing on screen, not for the turn.
+        if (!DialogueActive && _walker == null && _mode is Mode.PlayerTurn or Mode.PlayerTarget)
+        {
+            if (input.EndTurn) { NextTurn(); return; }
+            if (input.CardKey is int slot) { PlayCardByNumber(slot); return; }
+        }
         if (_walker != null) { UpdateWalk(dt); return; }
 
         if (_mode == Mode.Explore) RearmTransitions();
@@ -814,6 +875,9 @@ public class IsoLevelScreen : IScreen
             // crossing burning ground catches you as surely as standing in it
             Ignite(_walker);
             if (!_walker.Alive) { _walkPath.Clear(); break; }
+
+            // walking into somebody's field of fire draws it
+            if (CheckGuards(_walker)) { _walkPath.Clear(); break; }
 
             if (_walker.IsPlayer && FireTrigger(arrived)) { _walkPath.Clear(); break; }
 
@@ -925,7 +989,7 @@ public class IsoLevelScreen : IScreen
     }
 
     private bool Fits(CharacterInstance who, Point at, IReadOnlySet<Point> taken) =>
-        Pathfinder.Fits(_level, at, who.Size, _revealed,
+        Pathfinder.Fits(_level, at, who.SizeX, who.SizeY, _revealed,
             OccupiedExcept(who).Concat(taken).ToHashSet());
 
     /// <summary>The closest square to a pad that this character actually fits on.</summary>
@@ -958,6 +1022,39 @@ public class IsoLevelScreen : IScreen
         foreach (var pad in _level.TransitionPads())
             if (_disarmed.Contains(pad.Key) && !PartyOn(pad))
                 _disarmed.Remove(pad.Key);
+    }
+
+    /// <summary>
+    /// Anyone standing their ground shoots whoever walks into range. One
+    /// approach draws one volley: the walker is remembered, so crossing back
+    /// and forth in front of a planted gun does not farm it for shots. Returns
+    /// true if the walk should stop, which it does when the walker dies.
+    /// </summary>
+    private bool CheckGuards(CharacterInstance walker)
+    {
+        foreach (var guard in Everyone.Where(g =>
+                     g.Alive && g.GuardRange > 0 && g.IsPlayer != walker.IsPlayer))
+        {
+            if (guard.DistanceTo(walker) > guard.GuardRange) continue;
+            if (guard.GuardedAgainst.Contains(walker)) continue;
+
+            guard.GuardedAgainst.Add(walker);
+            var report = new StringBuilder();
+            report.AppendLine(_ctx.Strings.Format("iso_guard_fires",
+                ("name", guard.Name), ("target", walker.Name),
+                ("shots", guard.GuardShots.ToString())));
+
+            var was = _actor;
+            _actor = guard;                       // so the shots are credited to the guard
+            for (int i = 0; i < guard.GuardShots && walker.Alive; i++)
+                ApplyHit(walker, guard.GuardDamage, "Gunfire", report);
+            _actor = was;
+
+            _ctx.Sounds.Play("hitbasic.wav");
+            Log(report.ToString().TrimEnd());
+            if (!walker.Alive) return true;
+        }
+        return false;
     }
 
     /// <summary>Stepping on a trigger square plays its dialogue, once.</summary>
@@ -1012,10 +1109,26 @@ public class IsoLevelScreen : IScreen
         return true;
     }
 
+    /// <summary>
+    /// Points saved up belong to one fight. Cleared when combat opens so a
+    /// previous battle cannot bankroll this one, and cleared again when it ends
+    /// so the walk to the next fight is not spent hoarding.
+    /// </summary>
+    private void ClearSavedActions()
+    {
+        foreach (var c in Everyone)
+        {
+            c.ResetActionPoints();
+            c.GuardRange = c.GuardShots = c.GuardDamage = 0;
+            c.GuardedAgainst.Clear();
+        }
+    }
+
     private void StartCombat()
     {
+        ClearSavedActions();
         _order.Clear();
-        var players = LivingParty.OrderBy(_ => Rng.Next()).ToList();
+        var players = LivingParty.Where(p => !p.IsPet).OrderBy(_ => Rng.Next()).ToList();
         var foes = _aggroed.Where(e => e.Alive).OrderBy(_ => Rng.Next()).ToList();
         bool playersFirst = Rng.Next(2) == 0;
         var first = playersFirst ? players : foes;
@@ -1034,9 +1147,10 @@ public class IsoLevelScreen : IScreen
         CancelCard();
         // finishing a turn in the fire catches you, the same as starting one there
         if (Current is CharacterInstance leaving) Ignite(leaving);
-        if (LivingParty.Count == 0) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
+        if (PartyWiped) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
         if (!_aggroed.Any(e => e.Alive))
         {
+            ClearSavedActions();
             _aggroed.Clear();
             _order.Clear();
             _turn = -1;
@@ -1055,11 +1169,16 @@ public class IsoLevelScreen : IScreen
             _turn = (_turn + 1) % _order.Count;
             if (_order[_turn].Alive) break;
         }
+        // a guard's memory is per approach: once somebody is out of range again
+        // they can be shot for coming back
+        foreach (var g in Everyone.Where(g => g.GuardRange > 0))
+            g.GuardedAgainst.RemoveAll(t => !t.Alive || g.DistanceTo(t) > g.GuardRange);
+
         var current = Current!;
         _replayTurn++;
         Record(ReplayEventKind.Turn, current, amount: current.Hp,
             note: $"{current.Hp}/{current.MaxHp} hp");
-        current.MovePoints = current.MoveMax;
+        current.MovePoints = current.GuardRange > 0 ? 0 : current.MoveMax;
         current.RefreshActionPoints();
         AgeFires(current);
         _overlayKey = null;
@@ -1076,6 +1195,14 @@ public class IsoLevelScreen : IScreen
         if (!BurnAtTurnStart(current)) { NextTurn(); return; }
         if (current.IsPlayer)
         {
+            // a summoner's turn is also its pets': they get their points and
+            // movement now, and the player picks between them by clicking
+            _petControl = null;
+            foreach (var pet in LivingParty.Where(p => p.Owner == current))
+            {
+                pet.MovePoints = pet.GuardRange > 0 ? 0 : pet.MoveMax;
+                pet.RefreshActionPoints();
+            }
             _hand = HandOf(current);
             _mode = Mode.PlayerTurn;
         }
@@ -1125,7 +1252,7 @@ public class IsoLevelScreen : IScreen
         int budget = _mode == Mode.Explore ? 9999 : mover.MovePoints + (card?.LeapBonus ?? 0);
         _moveSet = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed,
             OccupiedExcept(mover), card?.IgnoresHeight ?? false, PassThroughFor(mover),
-            mover.Size).Cost;
+            mover.SizeX, mover.SizeY).Cost;
         if (card == null || _mode == Mode.Explore) return;
 
         // a Leap card's reach covers a lot of ground, so it gets its own,
@@ -1171,7 +1298,7 @@ public class IsoLevelScreen : IScreen
         // While a channel is open the aim is already fixed, so the purple shows
         // where the shot is going to land instead of following the cursor. It
         // is the only way to see what was committed to a turn ago.
-        if (Current is CharacterInstance held && held.IsChannelling &&
+        if (Acting is CharacterInstance held && held.IsChannelling &&
             CardNamed(held.ChannellingCard) is Card waiting)
         {
             _blastOpacityKey = waiting.Delivery == Delivery.Cone ? "Cone" : "AoE";
@@ -1179,11 +1306,11 @@ public class IsoLevelScreen : IScreen
             return;
         }
 
-        if (_selectedCard is not { TargetsGround: true } card || Current == null) return;
+        if (_selectedCard is not { TargetsGround: true } card || Acting == null) return;
         _blastOpacityKey = card.Delivery == Delivery.Cone ? "Cone" : "AoE";
 
-        if (FindTileAt(_pointer.ToVector2()) is Point c && ReachableAim(Current, c, card))
-            _blastSet = AreaOf(card, Tile(Current), c);
+        if (FindTileAt(_pointer.ToVector2()) is Point c && ReachableAim(Acting, c, card))
+            _blastSet = AreaOf(card, Tile(Acting), c);
     }
 
     /// <summary>The card of that name from whichever deck the holder draws from.</summary>
@@ -1269,6 +1396,7 @@ public class IsoLevelScreen : IScreen
             {
                 if (_mode == Mode.Explore) { _selected = c; _overlayKey = null; }
                 else if (_mode == Mode.FreeMove && _freeMovers.Contains(c)) { _selected = c; _overlayKey = null; }
+                else if (_mode is Mode.PlayerTurn or Mode.PlayerTarget) TakeControlOf(c);
             }
             return;
         }
@@ -1306,7 +1434,7 @@ public class IsoLevelScreen : IScreen
             if (who == null) { Toast(_ctx.Strings.Get("iso_empty_square")); return; }
             if (aiming.TargetsAnyone)
             {
-                if (who != Current) TryTarget(who);
+                if (who != Acting) TryTarget(who);
                 else Toast(_ctx.Strings.Get("iso_needs_other"));
                 return;
             }
@@ -1320,6 +1448,7 @@ public class IsoLevelScreen : IScreen
             if (_mode == Mode.Explore) { _selected = who; _overlayKey = null; }
             else if (_mode == Mode.FreeMove && _freeMovers.Contains(who))
             { _selected = who; _overlayKey = null; }
+            else if (_mode is Mode.PlayerTurn or Mode.PlayerTarget) TakeControlOf(who);
             return;
         }
 
@@ -1369,7 +1498,7 @@ public class IsoLevelScreen : IScreen
     {
         int budget = _mode == Mode.Explore ? 9999 : mover.MoveMax + (via?.LeapBonus ?? 0);
         var (_, parent) = Pathfinder.Reachable(_level, Tile(mover), budget, _revealed,
-            OccupiedExcept(mover), via?.IgnoresHeight ?? false, PassThroughFor(mover), mover.Size);
+            OccupiedExcept(mover), via?.IgnoresHeight ?? false, PassThroughFor(mover), mover.SizeX, mover.SizeY);
         _walker = mover;
         _walkFrom = Tile(mover);
         _walkPath = Pathfinder.PathTo(parent, _walkFrom, goal);
@@ -1381,56 +1510,88 @@ public class IsoLevelScreen : IScreen
         _overlayKey = null;
     }
 
+    /// <summary>
+    /// Hands the turn's controls to one of the characters sharing it — the
+    /// summoner or one of its pets. Clicking anybody else does nothing, since
+    /// they do not act on this turn.
+    /// </summary>
+    private void TakeControlOf(CharacterInstance who)
+    {
+        if (!ActsWith(who, Current)) return;
+        _petControl = who == Current ? null : who;
+        CancelCard();
+        _hand = HandOf(ActiveMover ?? who);
+        _overlayKey = null;
+    }
+
+    /// <summary>
+    /// Plays the card in a numbered slot, exactly as clicking it would. The
+    /// number is what is printed over the card, counting from 1.
+    /// </summary>
+    private void PlayCardByNumber(int slot)
+    {
+        if (slot < 1 || slot > _hand.Count) return;
+        SelectCard(_hand[slot - 1]);
+    }
+
     private bool HandleCardClick(Point press)
     {
         var rects = HandRects();
         for (int i = 0; i < _hand.Count; i++)
             if (rects[i].Contains(press))
             {
-                if (Current is CharacterInstance holder && holder.ActionPoints < _hand[i].ActionCost)
-                {
-                    Toast(_ctx.Strings.Format("iso_no_actions",
-                        ("cost", _hand[i].ActionCost.ToString()),
-                        ("points", holder.ActionPoints.ToString())));
-                    return true;
-                }
-                _selectedCard = _hand[i];
-                _targets.Clear();
-                _overlayKey = null;
-
-                // Releasing a channel does NOT ask where to aim. It was aimed
-                // on the turn it was started, and it has been on its way ever
-                // since — being asked again would be a second decision the
-                // caster never got to make.
-                if (Current is CharacterInstance caster && caster.IsChannelling &&
-                    _selectedCard.Name.Equals(caster.ChannellingCard, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (caster.ChannelTurnsLeft > 0)
-                    {
-                        Toast(_ctx.Strings.Format("iso_channel_waiting",
-                            ("card", caster.ChannellingCard),
-                            ("turns", caster.ChannelTurnsLeft.ToString())));
-                        _selectedCard = null;
-                        return true;
-                    }
-                    // what it catches is settled now, where it lands, not when
-                    // it was aimed — anyone who has since moved into the area
-                    // is under it and anyone who has walked out is not
-                    PlayArea(AreaOf(_selectedCard, Tile(caster), caster.ChannelAim), caster.ChannelAim);
-                    return true;
-                }
-
-                // a pure self-cast (changing shape) has nothing to aim at
-                if (_selectedCard.Damage <= 0 &&
-                    _selectedCard.Effects.All(e => Data.Effects.IsSelfCast(e.Name)))
-                {
-                    PlayCard(new List<CharacterInstance>(), Tile(Current!));
-                    return true;
-                }
-                _mode = Mode.PlayerTarget;
+                SelectCard(_hand[i]);
                 return true;
             }
         return false;
+    }
+
+    /// <summary>
+    /// Arming a card, however it was chosen — clicked, or named by its number
+    /// key. Everything the two ways in have in common lives here so they cannot
+    /// drift apart: the same affordability check, the same channel release, the
+    /// same shortcut for a card with nothing to aim at.
+    /// </summary>
+    private void SelectCard(Card card)
+    {
+        if (Acting is CharacterInstance holder && holder.ActionPoints < card.ActionCost)
+        {
+            Toast(_ctx.Strings.Format("iso_no_actions",
+                ("cost", card.ActionCost.ToString()),
+                ("points", holder.ActionPoints.ToString())));
+            return;
+        }
+        _selectedCard = card;
+        _targets.Clear();
+        _overlayKey = null;
+
+        // Releasing a channel does NOT ask where to aim. It was aimed on the
+        // turn it was started, and it has been on its way ever since — being
+        // asked again would be a second decision the caster never got to make.
+        if (Acting is CharacterInstance caster && caster.IsChannelling &&
+            card.Name.Equals(caster.ChannellingCard, StringComparison.OrdinalIgnoreCase))
+        {
+            if (caster.ChannelTurnsLeft > 0)
+            {
+                Toast(_ctx.Strings.Format("iso_channel_waiting",
+                    ("card", caster.ChannellingCard),
+                    ("turns", caster.ChannelTurnsLeft.ToString())));
+                _selectedCard = null;
+                return;
+            }
+            // what it catches is settled now, where it lands, not when it was
+            // aimed — anyone who has since moved into the area is under it
+            PlayArea(AreaOf(card, Tile(caster), caster.ChannelAim), caster.ChannelAim);
+            return;
+        }
+
+        // a pure self-cast (changing shape) has nothing to aim at
+        if (card.Damage <= 0 && card.Effects.All(e => Data.Effects.IsSelfCast(e.Name)))
+        {
+            PlayCard(new List<CharacterInstance>(), Tile(Acting!));
+            return;
+        }
+        _mode = Mode.PlayerTarget;
     }
 
     /// <summary>
@@ -1440,7 +1601,7 @@ public class IsoLevelScreen : IScreen
     private void TryTarget(CharacterInstance enemy)
     {
         var card = _selectedCard!;
-        var me = Current!;
+        var me = Acting!;
         int wanted = TargetsWanted(card);
         if (_targets.Contains(enemy)) return;   // already picked; ignore the repeat
 
@@ -1467,7 +1628,7 @@ public class IsoLevelScreen : IScreen
     private void TryTargetGround(Point tile)
     {
         var card = _selectedCard!;
-        var me = Current!;
+        var me = Acting!;
         if (!ReachableAim(me, tile, card)) { Toast(_ctx.Strings.Get("iso_out_of_range")); return; }
         PlayArea(AreaOf(card, Tile(me), tile), tile);
     }
@@ -1544,7 +1705,7 @@ public class IsoLevelScreen : IScreen
     {
         var card = _selectedCard;
         if (card == null) return;
-        _actor = Current;
+        _actor = Acting;
         _actingCard = card;
         _victims = aimed;
         _selectedCard = null;
@@ -1698,7 +1859,7 @@ public class IsoLevelScreen : IScreen
         _actingCard = null;
         _victims.Clear();
         _overlayKey = null;
-        if (LivingParty.Count == 0) { _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
+        if (PartyWiped) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
 
         // a Steal held the thief's choice back until the card finished; make
         // them pick now, before the turn moves on. _actor stays set for it.
@@ -1720,7 +1881,8 @@ public class IsoLevelScreen : IScreen
         var mover = Current;
         if (mover is { Alive: true })
         {
-            if (mover.IsPlayer && (mover.ActionPoints > 0 || mover.MovePoints > 0))
+            if (mover.IsPlayer &&
+                ActingGroup().Any(c => c.ActionPoints > 0 || c.MovePoints > 0))
             {
                 _mode = Mode.PlayerTurn;
                 return;
@@ -1769,7 +1931,73 @@ public class IsoLevelScreen : IScreen
             report.AppendLine(_ctx.Strings.Format("battle_down", ("name", target.Name)));
             Record(ReplayEventKind.Down, _actor, target: target.Name,
                 to: Tile(target), note: _actingCard?.Name ?? "");
+
+            // a pet only acts on its summoner's turn, so one left behind would
+            // never move again. It goes down with the hand that called it.
+            foreach (var pet in _party.Where(p => p.Alive && p.Owner == target).ToList())
+            {
+                pet.Hp = 0;
+                pet.Alive = false;
+                report.AppendLine(_ctx.Strings.Format("battle_down", ("name", pet.Name)));
+                Record(ReplayEventKind.Down, _actor, target: pet.Name, to: Tile(pet));
+            }
         }
+    }
+
+    /// <summary>
+    /// Puts a summoned creature on the board beside its summoner, under the
+    /// player's control. It joins the party rather than the enemy list, so
+    /// everything that already knows about sides treats it correctly, but it
+    /// never joins the turn ORDER — a pet acts inside its owner's turn.
+    /// </summary>
+    private void SummonPet(CharacterInstance owner, Card card, int howMany, StringBuilder report)
+    {
+        var def = _ctx.Enemies.Get(card.Summons);
+        if (def == null)
+        {
+            _ctx.ReportProblem(CardLibrary.PlayerPath,
+                $"'{card.Name}' summons '{card.Summons}', which is not in {EnemyLibrary.Path}");
+            return;
+        }
+
+        for (int n = 0; n < Math.Max(1, howMany); n++)
+        {
+            var taken = OccupiedExcept(null);
+            var spot = NearestFreeFor(Tile(owner), def.SizeX, def.SizeY, taken);
+            if (spot is not Point at)
+            {
+                report.AppendLine(_ctx.Strings.Format("iso_summon_no_room", ("name", def.Name)));
+                return;
+            }
+            var pet = new CharacterInstance
+            {
+                Name = def.Name,
+                OccurrenceIndex = _party.Count(p => p.Name.Equals(def.Name, StringComparison.OrdinalIgnoreCase)),
+                IsPlayer = true,
+                Owner = owner,
+                SpriteFile = def.SpriteFiles[0],
+                MaxHp = def.Hp, Hp = def.Hp,
+                MoveMax = def.Movement, MovePoints = def.Movement,
+                ActionsPerTurn = def.Actions,
+                SizeX = def.SizeX, SizeY = def.SizeY,
+                GX = at.X, GY = at.Y,
+            };
+            pet.RefreshActionPoints();
+            _party.Add(pet);
+            report.AppendLine(_ctx.Strings.Format("iso_summoned",
+                ("owner", owner.Name), ("name", def.Name)));
+        }
+        _overlayKey = null;
+    }
+
+    /// <summary>The closest square to a point where a body of this shape fits.</summary>
+    private Point? NearestFreeFor(Point around, int sizeX, int sizeY, IReadOnlySet<Point> taken)
+    {
+        foreach (var t in _level.Blocks.Keys
+                     .Where(t => Pathfinder.Fits(_level, t, sizeX, sizeY, _revealed, taken))
+                     .OrderBy(t => IsoMath.GridDistance(t, around)))
+            return t;
+        return null;
     }
 
     /// <summary>Runs a card's Effects against everything it hit.</summary>
@@ -1786,6 +2014,24 @@ public class IsoLevelScreen : IScreen
                     _actor.MovePoints += effect.Amount;
                     report.AppendLine(_ctx.Strings.Format("iso_nimble",
                         ("name", _actor.Name), ("points", effect.Amount.ToString())));
+                }
+                else if (effect.Is(Data.Effects.Summon))
+                {
+                    SummonPet(_actor, card, effect.Amount, report);
+                }
+                else if (effect.Is(Data.Effects.Guard))
+                {
+                    // planting yourself is the whole cost: no more walking, this
+                    // turn or any turn after, until the fight ends
+                    _actor.GuardRange = effect.Amount;
+                    _actor.GuardShots = Math.Max(1, card.Hits);
+                    _actor.GuardDamage = card.Damage;
+                    _actor.MovePoints = 0;
+                    _actor.GuardedAgainst.Clear();
+                    report.AppendLine(_ctx.Strings.Format("iso_guarding",
+                        ("name", _actor.Name), ("range", effect.Amount.ToString()),
+                        ("shots", _actor.GuardShots.ToString()),
+                        ("dmg", _actor.GuardDamage.ToString())));
                 }
                 else if (effect.Is(Data.Effects.Form))
                 {
@@ -2063,20 +2309,23 @@ public class IsoLevelScreen : IScreen
     private void EnemyAct()
     {
         var me = Current!;
+        // a pet is a legitimate target even when it is the last one standing,
+        // so enemies aim at the whole living party — but the mission is lost
+        // once the real members are gone
         var players = LivingParty;
-        if (players.Count == 0) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
+        if (PartyWiped) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
 
         // an enemy is bound by action points exactly as the party is
         var hand = HandOf(me)
             .Where(c => !c.TargetsAllies && c.ActionCost <= me.ActionPoints).ToList();
         var reach = Pathfinder.Reachable(_level, Tile(me), me.MovePoints, _revealed,
-            OccupiedExcept(me), size: me.Size).Cost;
+            OccupiedExcept(me), sizeX: me.SizeX, sizeY: me.SizeY).Cost;
         var stands = reach.Keys.Append(Tile(me)).ToList();
 
         // how far a target would be if this enemy's body were anchored on a
         // given square — the whole body counts, not just its corner
         int GapFrom(Point square, CharacterInstance target) =>
-            Pathfinder.Footprint(square, me.Size).Min(t => IsoMath.GridDistance(t, Tile(target)));
+            Pathfinder.Footprint(square, me.SizeX, me.SizeY).Min(t => IsoMath.GridDistance(t, Tile(target)));
 
         // longest reach first within each kind, so a spear beats a fist
         foreach (var card in hand.Where(c => c.Delivery == Delivery.Melee)
@@ -2109,7 +2358,7 @@ public class IsoLevelScreen : IScreen
             var near = players.OrderBy(p => me.DistanceTo(p)).First();
             int wanted = hand.Max(c => c.Range);
             var goal = Pathfinder.StepToward(_level, Tile(me), Tile(near), me.MovePoints,
-                wanted, _revealed, OccupiedExcept(me), out var path, me.Size);
+                wanted, _revealed, OccupiedExcept(me), out var path, me.SizeX, me.SizeY);
             me.MovePoints = 0;
             if (goal != null && path.Count > 0)
             {
@@ -2196,7 +2445,7 @@ public class IsoLevelScreen : IScreen
             // keyed on the FAR corner of the body, so every square it stands on
             // is already painted by the time the sprite goes down over them
             var anchor = c == _walker && _walkPath.Count > 0 ? _walkPath[0] : Tile(c);
-            var key = new Point(anchor.X + c.Size - 1, anchor.Y + c.Size - 1);
+            var key = new Point(anchor.X + c.SizeX - 1, anchor.Y + c.SizeY - 1);
             if (!byTile.TryGetValue(key, out var list)) byTile[key] = list = new List<CharacterInstance>();
             list.Add(c);
         }
@@ -2582,7 +2831,7 @@ public class IsoLevelScreen : IScreen
             case Mode.PlayerTurn:
             case Mode.PlayerTarget:
                 DrawTurnStrip(batch);
-                if (Current is CharacterInstance me)
+                if (Acting is CharacterInstance me)
                 {
                     Ui.DrawTextCentered(batch, _ctx.Font,
                         me.MovePoints <= 0
@@ -2730,7 +2979,10 @@ public class IsoLevelScreen : IScreen
 
         if (Current != null)
             batch.DrawString(_ctx.Font,
-                _ctx.Strings.Format("battle_turn", ("name", Current.Name)),
+                _petControl is CharacterInstance pet && pet.Alive
+                    ? _ctx.Strings.Format("iso_pet_turn",
+                        ("owner", Current.Name), ("name", pet.Name))
+                    : Current.Name,
                 new Vector2(TurnStrip.X, TurnStrip.Bottom + 12), Color.Gold,
                 0f, Vector2.Zero, 0.38f, SpriteEffects.None, 0f);
     }
@@ -2770,7 +3022,22 @@ public class IsoLevelScreen : IScreen
             DrawCard(batch, _hand[hovered], new Rectangle(
                 rects[hovered].Center.X - w / 2, VirtualViewport.Height - h - 30, w, h), true);
         }
+
+        // The key that plays each card, over its top edge. Drawn after the
+        // cards so a raised hovered card cannot cover its own number.
+        for (int i = 0; i < _hand.Count && i < HandKeys.Length; i++)
+            Ui.DrawTextCentered(batch, _ctx.Font, HandKeys[i].ToString(),
+                new Rectangle(rects[i].X, rects[i].Y - 62, rects[i].Width, 56),
+                Acting is CharacterInstance who && who.ActionPoints >= _hand[i].ActionCost
+                    ? Color.White : Color.White * 0.35f,
+                0.42f);
     }
+
+    /// <summary>
+    /// Which key plays which card: 1 to 9, then 0 for the tenth. A hand longer
+    /// than ten has no key for the rest, which is what the length check is for.
+    /// </summary>
+    private static readonly char[] HandKeys = { '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' };
 
     private void DrawCard(SpriteBatch batch, Card card, Rectangle rect, bool hovered)
     {
@@ -2782,7 +3049,7 @@ public class IsoLevelScreen : IScreen
         float s = rect.Width / (float)CardW;
         // a card the holder cannot currently afford is greyed out card by card,
         // so with 1 point left the cheap ones stay lit and the dear ones dim
-        bool spent = Current == null || Current.ActionPoints < card.ActionCost;
+        bool spent = Acting == null || Acting.ActionPoints < card.ActionCost;
         Ui.FillRect(batch, _ctx.Pixel, rect,
             spent ? new Color(20, 20, 26, 250) : new Color(24, 24, 40, 250));
         var border = card == _selectedCard ? Color.Gold
@@ -2802,7 +3069,10 @@ public class IsoLevelScreen : IScreen
         // "Beg, Borrow, but Mostly Steal" takes two lines instead of running
         // off both sides, and pushes the text under it down rather than
         // being drawn through it.
-        float nameTop = rect.Y + 18 * s;
+        // The name starts below the cost line rather than beside it. At the old
+        // 18px both were drawn across the top of the card and "Pew Pew" ran
+        // straight through "Actions 5".
+        float nameTop = rect.Y + 74 * s;
         float nameHeight = Ui.DrawWrappedCentered(batch, _ctx.Font, card.Name,
             new Rectangle(inner.X, (int)nameTop, inner.Width, 0), ink, Pt(CardNamePt) * s);
 
@@ -2848,7 +3118,7 @@ public class IsoLevelScreen : IScreen
         float costScale = Ui.FitScale(_ctx.Font, cost, inner.Width, Pt(CardRangePt) * s);
         var costSize = _ctx.Font.MeasureString(cost) * costScale;
         batch.DrawString(_ctx.Font, cost,
-            new Vector2(inner.Right - costSize.X, rect.Y + 18 * s),
+            new Vector2(inner.Right - costSize.X, rect.Y + 20 * s),
             spent ? Color.Orange * 0.4f : Color.Orange, 0f, Vector2.Zero, costScale,
             SpriteEffects.None, 0f);
     }

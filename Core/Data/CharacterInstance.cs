@@ -50,27 +50,30 @@ public class CharacterInstance
     public int GX, GY;
 
     /// <summary>
-    /// How many squares on a side the body covers. 1 for everyone normal; a
-    /// Living Stone is 2, so it fills a 2x2 block of four tiles. Only square
-    /// footprints exist, which keeps the body the same shape whichever way it
-    /// is facing and spares every rule from having to know about rotation.
+    /// How many squares the body covers, across and down. 1x1 for everyone
+    /// normal; a Living Stone is 2x2 and a Gator 2x1 — long rather than square,
+    /// which is what forced these apart. The rectangle never rotates, so no
+    /// rule has to know which way anything is facing.
     /// </summary>
-    public int Size = 1;
+    public int SizeX = 1, SizeY = 1;
+
+    /// <summary>The longer side, for anything that wants one number.</summary>
+    public int Size => Math.Max(SizeX, SizeY);
 
     /// <summary>Every square the body currently covers, anchor first.</summary>
     public IEnumerable<Point> Footprint
     {
         get
         {
-            for (int y = 0; y < Size; y++)
-                for (int x = 0; x < Size; x++)
+            for (int y = 0; y < SizeY; y++)
+                for (int x = 0; x < SizeX; x++)
                     yield return new Point(GX + x, GY + y);
         }
     }
 
     /// <summary>Whether the body covers a given square.</summary>
     public bool Covers(Point p) =>
-        p.X >= GX && p.X < GX + Size && p.Y >= GY && p.Y < GY + Size;
+        p.X >= GX && p.X < GX + SizeX && p.Y >= GY && p.Y < GY + SizeY;
 
     /// <summary>
     /// Grid distance from a square to the nearest part of this body. A big
@@ -78,8 +81,8 @@ public class CharacterInstance
     /// tiles, not just of things near its anchor corner.
     /// </summary>
     public int DistanceTo(Point p) =>
-        Math.Max(0, p.X < GX ? GX - p.X : p.X - (GX + Size - 1)) +
-        Math.Max(0, p.Y < GY ? GY - p.Y : p.Y - (GY + Size - 1));
+        Math.Max(0, p.X < GX ? GX - p.X : p.X - (GX + SizeX - 1)) +
+        Math.Max(0, p.Y < GY ? GY - p.Y : p.Y - (GY + SizeY - 1));
 
     /// <summary>Grid distance between the nearest parts of two bodies.</summary>
     public int DistanceTo(CharacterInstance other)
@@ -101,18 +104,26 @@ public class CharacterInstance
     /// </summary>
     public int ActionPoints;
 
-    /// <summary>Fresh points granted at the start of every turn.</summary>
-    public const int ActionsPerTurn = 10;
+    /// <summary>
+    /// Fresh points granted at the start of every turn, from the "Actions:"
+    /// line in Classes.txt or Enemies.txt. Everyone gets this many; nobody has
+    /// a ceiling.
+    /// </summary>
+    public int ActionsPerTurn = DefaultActionsPerTurn;
 
-    /// <summary>The most that can be carried into the next turn unspent.</summary>
-    public const int ActionRollover = 1;
+    /// <summary>What a class or enemy gets without an "Actions:" line of its own.</summary>
+    public const int DefaultActionsPerTurn = 5;
 
     /// <summary>
-    /// Turn start: keep up to one unspent point, then add this turn's two. A
-    /// character who did nothing last turn opens the next one with three.
+    /// Turn start: this turn's points are ADDED to whatever is left over, with
+    /// no cap. Saving up is a real option — three quiet turns buy a card that
+    /// no single turn could pay for — and the pile is only cleared when the
+    /// fight ends, so nothing carries between battles.
     /// </summary>
-    public void RefreshActionPoints() =>
-        ActionPoints = Math.Min(ActionPoints, ActionRollover) + ActionsPerTurn;
+    public void RefreshActionPoints() => ActionPoints += ActionsPerTurn;
+
+    /// <summary>Back to nothing saved up. Called when a fight begins and when it ends.</summary>
+    public void ResetActionPoints() => ActionPoints = 0;
 
     // --- status effects ---
     /// <summary>
@@ -158,6 +169,38 @@ public class CharacterInstance
     /// <summary>Which shape a shapeshifter currently wears; blank for everyone else.</summary>
     public string Form = "";
 
+    /// <summary>
+    /// Who summoned this, if anybody. A pet has no turn of its own: it acts
+    /// during its owner's, and the player picks whichever of the two they want
+    /// to move by clicking on it.
+    /// </summary>
+    public CharacterInstance? Owner;
+
+    /// <summary>True for something summoned onto the board rather than placed in the level.</summary>
+    public bool IsPet => Owner != null;
+
+    /// <summary>
+    /// Whether a party still has somebody who can take a turn. A pet acts only
+    /// inside its summoner's turn, so a gator left standing over a dead party
+    /// is not a survivor — nothing would ever move again. Counting it would
+    /// hang the mission instead of ending it.
+    /// </summary>
+    public static bool AnyoneStanding(IEnumerable<CharacterInstance> party) =>
+        party.Any(p => p.Alive && !p.IsPet);
+
+    /// <summary>
+    /// How far this character shoots anything hostile that comes near, or 0
+    /// when they are not standing their ground. Set by a Guard card, and it
+    /// costs them their movement for as long as it lasts.
+    /// </summary>
+    public int GuardRange;
+
+    /// <summary>Shots fired at whoever walks into that range, and the damage each does.</summary>
+    public int GuardShots, GuardDamage;
+
+    /// <summary>Who has already been shot for coming close, so one approach draws one volley.</summary>
+    public List<CharacterInstance> GuardedAgainst = new();
+
     /// <summary>Cards lifted off somebody else and playable until the clock runs out.</summary>
     public List<StolenCard> Stolen = new();
 
@@ -201,6 +244,7 @@ public class CharacterInstance
         copy.Curses = new List<(int, int)>(Curses);
         copy.Stolen = new List<StolenCard>(Stolen);
         copy.Lost = new List<StolenCard>(Lost);
+        copy.GuardedAgainst = new List<CharacterInstance>(GuardedAgainst);
         return copy;
     }
 }

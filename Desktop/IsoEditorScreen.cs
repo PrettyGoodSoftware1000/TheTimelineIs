@@ -931,8 +931,8 @@ public partial class IsoEditorScreen : IScreen
     /// </summary>
     private int FootprintGaps(LevelEnemy e)
     {
-        int size = _ctx.Enemies.Get(e.Name)?.Size ?? 1;
-        return Pathfinder.Footprint(new Point(e.X, e.Y), size)
+        var def = _ctx.Enemies.Get(e.Name);
+        return Pathfinder.Footprint(new Point(e.X, e.Y), def?.SizeX ?? 1, def?.SizeY ?? 1)
             .Count(t => _level.BlockAt(t) == null);
     }
 
@@ -1183,8 +1183,9 @@ public partial class IsoEditorScreen : IScreen
         // and an invisible enemy is a worse way to find that out.
         foreach (var e in _level.Enemies)
         {
-            int size = _ctx.Enemies.Get(e.Name)?.Size ?? 1;
-            var far = new Point(e.X + size - 1, e.Y + size - 1);
+            var d0 = _ctx.Enemies.Get(e.Name);
+            int size = d0?.Size ?? 1;
+            var far = new Point(e.X + (d0?.SizeX ?? 1) - 1, e.Y + (d0?.SizeY ?? 1) - 1);
             if (_level.BlockAt(far) != null) continue;
             if (_ctx.Enemies.Get(e.Name) is not EnemyDef def || def.SpriteFiles.Count == 0) continue;
             Cast(batch, $"{def.Folder}/{def.SpriteFiles[0]}", e.Name, new Point(e.X, e.Y),
@@ -1263,8 +1264,8 @@ public partial class IsoEditorScreen : IScreen
     private IEnumerable<LevelEnemy> EnemiesEndingAt(Point tile) =>
         _level.Enemies.Where(e =>
         {
-            int size = _ctx.Enemies.Get(e.Name)?.Size ?? 1;
-            return e.X + size - 1 == tile.X && e.Y + size - 1 == tile.Y;
+            var d = _ctx.Enemies.Get(e.Name);
+            return e.X + (d?.SizeX ?? 1) - 1 == tile.X && e.Y + (d?.SizeY ?? 1) - 1 == tile.Y;
         });
 
     private static bool InSpan(Point? from, Point? to, Point tile) =>

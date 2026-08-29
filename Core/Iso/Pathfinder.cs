@@ -37,24 +37,28 @@ public static class Pathfinder
     /// Every square a size x size body anchored at <paramref name="anchor"/>
     /// covers. Size 1 is the ordinary case and yields the anchor alone.
     /// </summary>
-    public static IEnumerable<Point> Footprint(Point anchor, int size)
+    public static IEnumerable<Point> Footprint(Point anchor, int sizeX, int sizeY)
     {
-        for (int y = 0; y < size; y++)
-            for (int x = 0; x < size; x++)
+        for (int y = 0; y < sizeY; y++)
+            for (int x = 0; x < sizeX; x++)
                 yield return new Point(anchor.X + x, anchor.Y + y);
     }
+
+    /// <summary>A square footprint, for callers that only have one number.</summary>
+    public static IEnumerable<Point> Footprint(Point anchor, int size) =>
+        Footprint(anchor, size, size);
 
     /// <summary>
     /// Whether a body of the given size fits with its corner on this square.
     /// Every tile under it has to be standable, clear of other people, and at
     /// the same height — a four-tile body cannot straddle a step.
     /// </summary>
-    public static bool Fits(LevelData level, Point anchor, int size,
+    public static bool Fits(LevelData level, Point anchor, int sizeX, int sizeY,
         IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied,
         IReadOnlySet<Point>? passThrough = null)
     {
         int? height = null;
-        foreach (var tile in Footprint(anchor, size))
+        foreach (var tile in Footprint(anchor, sizeX, sizeY))
         {
             if (!Standable(level, tile, revealedRooms)) return false;
             if (occupied.Contains(tile) && !(passThrough?.Contains(tile) ?? false)) return false;
@@ -72,7 +76,8 @@ public static class Pathfinder
     public static (Dictionary<Point, int> Cost, Dictionary<Point, Point> Parent) Reachable(
         LevelData level, Point from, int budget,
         IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied,
-        bool ignoreHeight = false, IReadOnlySet<Point>? passThrough = null, int size = 1)
+        bool ignoreHeight = false, IReadOnlySet<Point>? passThrough = null,
+        int sizeX = 1, int sizeY = 1)
     {
         var cost = new Dictionary<Point, int> { [from] = 0 };
         var parent = new Dictionary<Point, Point>();
@@ -89,9 +94,9 @@ public static class Pathfinder
                 var next = new Point(here.X + dx, here.Y + dy);
                 // friends can be squeezed past, but not stood on — see the trim below
                 bool crossable = passThrough != null && passThrough.Contains(next);
-                if (size > 1)
+                if (sizeX > 1 || sizeY > 1)
                 {
-                    if (!Fits(level, next, size, revealedRooms, occupied, passThrough)) continue;
+                    if (!Fits(level, next, sizeX, sizeY, revealedRooms, occupied, passThrough)) continue;
                 }
                 else
                 {
@@ -135,14 +140,15 @@ public static class Pathfinder
     /// <summary>Best reachable tile adjacent-enough to a target: enemies chase with this.</summary>
     public static Point? StepToward(LevelData level, Point from, Point target, int budget,
         int stopAtRange, IReadOnlySet<string> revealedRooms, IReadOnlySet<Point> occupied,
-        out List<Point> path, int size = 1)
+        out List<Point> path, int sizeX = 1, int sizeY = 1)
     {
         path = new List<Point>();
-        var (cost, parent) = Reachable(level, from, budget, revealedRooms, occupied, size: size);
+        var (cost, parent) = Reachable(level, from, budget, revealedRooms, occupied,
+            sizeX: sizeX, sizeY: sizeY);
 
         // distance from the whole body, not just its corner, so a big enemy
         // stops as soon as any part of it is close enough
-        int Gap(Point anchor) => Footprint(anchor, size).Min(t => IsoMath.GridDistance(t, target));
+        int Gap(Point anchor) => Footprint(anchor, sizeX, sizeY).Min(t => IsoMath.GridDistance(t, target));
 
         int here = Gap(from);
         if (here <= stopAtRange) return null;   // already close enough?

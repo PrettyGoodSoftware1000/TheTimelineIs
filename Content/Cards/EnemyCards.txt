@@ -82,3 +82,18 @@ Effect: Single target. 1 times x 3 damage.
 Card Text: A spat cinder, thrown from somewhere safe.
 Bottom Right: 3 Fire
 []
+
+[]
+Card Name: Bite
+Tags: Gator
+Type: [melee] Single target, X hits.
+Range: 1
+Action Points: 5
+Melee Time: 0.4
+Casting Sound: [Blank.wav]
+Casting Time: 0.2
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 8 damage.
+Card Text: Snap. Not much of a plan, but it works.
+Bottom Right: 8 Chomp
+[]

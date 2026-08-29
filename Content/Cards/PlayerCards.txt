@@ -290,3 +290,38 @@ Effect: AoE 15 fire damage to enemies
 Card Text: Play it once to start channelling - 10 points, and you cannot move. Play it again next turn for 10 more to bring it down out of the sky. 15 fire damage over a wide blast, and the ground burns for 3 turns.
 Bottom Right: 15 Fire
 []
+
+[]
+Card Name: Gatormancy
+Tags: Florida Man
+Type: [ranged] Single target, X hits.
+Action Points: 10
+Range: 1
+Effects: Summon 1
+Summons: Gator
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.5
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Call up a gator. It moves on your turn and bites for you.
+Bottom Right: 0 Gator
+[]
+
+[]
+Card Name: Stand Your Ground State
+Tags: Florida Man
+Type: [ranged] Single target, X hits.
+Action Points: 3
+Range: 4
+Effects: Guard 4
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.4
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 5 times x 2 damage.
+Card Text: Plant your feet. Anything that steps within 4 eats five shots.
+Bottom Right: 2 Gunfire
+[]

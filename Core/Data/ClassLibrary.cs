@@ -16,6 +16,12 @@ public class PlayerClass
     public string Name = "";
     public int Hp = 20;
     public int Movement = 5;
+
+    /// <summary>
+    /// Action points granted each turn once a fight starts. Unspent points
+    /// carry over with no ceiling, so this is a rate rather than a budget.
+    /// </summary>
+    public int Actions = CharacterInstance.DefaultActionsPerTurn;
     public List<string> Sprites = new();   // defaults to {Name}.png
     public List<string> CardTags = new();  // defaults to the class's own name
     /// <summary>Declared with "Form: Name, Art.png". The first one is where the class starts.</summary>
@@ -72,6 +78,7 @@ public class PlayerClass
 ///   Class: Dirtbag
 ///   HP: 15
 ///   Movement: 8
+///   Actions: 5                 (optional; points a turn, default 5)
 ///   Sprites: Dirtbag.png            (optional; defaults to {Name}.png)
 ///   Card Tags: Dirtbag, 'Mancer     (optional; defaults to the class name)
 ///   Cast Animation: Spell/Spell.png (optional; the sheet played while this
@@ -143,6 +150,11 @@ public class ClassLibrary
                 case "movement":
                     if (int.TryParse(value, out int mv) && mv > 0) current.Movement = mv;
                     else diag.Error(Path, lineNo, $"'{current.Name}': Movement must be a positive number, got '{value}'");
+                    break;
+                case "actions":
+                    if (int.TryParse(value, out int ap) && ap > 0) current.Actions = ap;
+                    else diag.Error(Path, lineNo,
+                        $"'{current.Name}': Actions must be a positive number of points a turn, got '{value}'");
                     break;
                 case "sprites":
                     current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();

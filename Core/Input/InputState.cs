@@ -91,6 +91,17 @@ public struct InputState
     /// <summary>Ctrl+D this frame: turns the map's dev placement mode on and off.</summary>
     public bool ToggleDevMap;
 
+    /// <summary>
+    /// A number pressed this frame, 1 to 9 then 0 for the tenth: the card it
+    /// names is played. Null when no number was pressed. Both the number row
+    /// and the numpad report the same thing, since which one somebody reaches
+    /// for is not a decision the game should care about.
+    /// </summary>
+    public int? CardKey;
+
+    /// <summary>End or Space this frame: finish the turn.</summary>
+    public bool EndTurn;
+
     /// <summary>Middle click this frame: the editor's eyedropper.</summary>
     public Point? MiddleTap;
 }
