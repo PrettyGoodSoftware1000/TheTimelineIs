@@ -124,7 +124,7 @@ Bottom Right: 12 Stabby
 Card Name: Pew Pew
 Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
-Action Points: 5
+Action Points: 3
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -132,14 +132,14 @@ Speed: 20
 Hit Sound: [hitbasic.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys for 5 damage.
-Bottom Right: 10 Energy
+Bottom Right: 5 Energy
 []
 
 []
 Card Name: Hot Lead
 Tags: Gun-O-Mancer
 Type: [cone] AoE damage
-Action Points: 7
+Action Points: 4
 Range: 3
 Effects: Burning 1
 Casting Sound: [Blank.wav]
@@ -157,7 +157,7 @@ Tags: Cyborg
 Type: [ranged] Single target, X hits.
 Action Points: 5
 Range: 3
-Effects: Armor 5
+Effects: Armor 8
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -165,14 +165,14 @@ Speed: 20
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Bolt a plate onto a friend. Adds 5 Armor.
-Bottom Right: 0 Armor
+Bottom Right: 8 Armor
 []
 
 []
 Card Name: Toss-A-Knife
 Tags: Dirtbag
 Type: [ranged] Single target, X hits.
-Action Points: 1
+Action Points: 3
 Range: 5
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
@@ -233,7 +233,7 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: Drop back onto four legs and keep running - 5 more spaces.
+Card Text: Return to your real form. Move fast.
 Bottom Right: 0 Change
 []
 
@@ -261,7 +261,7 @@ Tags: Dirtbag
 Type: [ranged] Single target, X hits.
 Action Points: 5
 Effects: Steal 3
-Range: 4
+Range: 1
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -296,7 +296,7 @@ Card Name: Gatormancy
 Tags: Florida Man
 Type: [ranged] Single target, X hits.
 Action Points: 10
-Range: 1
+Range: 2
 Effects: Summon 1
 Summons: Gator
 Projectile Art: Placeholder.png
@@ -305,7 +305,7 @@ Casting Time: 0.5
 Speed: 20
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: Call up a gator. It moves on your turn and bites for you.
+Card Text: Invoke the fury of the swamp to call forth 'Gator.
 Bottom Right: 0 Gator
 []
 
@@ -318,10 +318,10 @@ Range: 4
 Effects: Guard 4
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
-Casting Time: 0.4
+Casting Time: 0.2
 Speed: 20
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 5 times x 2 damage.
-Card Text: Plant your feet. Anything that steps within 4 eats five shots.
+Card Text: Shoot anything that gets close, just like Jesus did.
 Bottom Right: 2 Gunfire
 []
