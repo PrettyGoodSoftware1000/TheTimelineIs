@@ -4,17 +4,17 @@
 # "Card Tags:" is optional; without it a class plays cards tagged with its name.
 
 Class: Dirtbag
-HP: 15
+HP: 30
 Movement: 8
-Actions: 5
+Actions: 7
 
 Class: Gun-O-Mancer
-HP: 10
+HP: 20
 Movement: 4
-Actions: 5
+Actions: 6
 
 Class: Cyborg
-HP: 20
+HP: 50
 Movement: 5
 Actions: 5
 
@@ -27,8 +27,8 @@ Actions: 5
 # the sprite from the moment a card is played. Each shape casts its own way:
 # the wolf has no sheet yet, so it just stands there and swings as before.
 Class: Werewitch
-HP: 18
-Movement: 6
+HP: 80
+Movement: 8
 Actions: 5
 Form: Werewolf, WerewitchWerewolf.png
 Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png
@@ -37,6 +37,6 @@ Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png
 # own to pick at the party screen, so it lives in Enemies.txt with the rest
 # of the roster and is brought onto the board by Gatormancy.
 Class: Florida Man
-HP: 22
-Movement: 5
+HP: 50
+Movement: 4
 Actions: 5
