@@ -34,7 +34,29 @@ public class PlayerClass
     public string CastAnimation = "";
     public int Line;
 
-    public string Folder => $"Content/Cast/PlayerCharacters/{Name}";
+    /// <summary>
+    /// The class that calls this creature onto the board, for a block declared
+    /// with "Summon:" instead of "Class:". Empty for an ordinary class.
+    ///
+    /// A summon is a player character in every way that matters — it is on your
+    /// side, it holds player cards, it moves when you tell it to — so it lives
+    /// here rather than in Enemies.txt. What it is NOT is pickable: it never
+    /// appears at the party screen, because you get it by playing the card.
+    /// </summary>
+    public string SummonedBy = "";
+
+    public bool IsSummon => SummonedBy.Length > 0;
+
+    /// <summary>How many squares this body covers, set by "Size: 2 x 1".</summary>
+    public int SizeX = 1, SizeY = 1;
+
+    /// <summary>
+    /// Where this class's art lives. A summon has no folder of its own: its art
+    /// sits with its summoner's, since it is that character's creature and is
+    /// drawn by whoever drew them.
+    /// </summary>
+    public string Folder =>
+        $"Content/Cast/PlayerCharacters/{(IsSummon ? SummonedBy : Name)}";
 
     /// <summary>Sprites the class can wear: its forms' art, or its plain sprite list.</summary>
     public IReadOnlyList<string> SpriteFiles =>
@@ -89,11 +111,25 @@ public class PlayerClass
 ///   Form: Witch, Witch.png, Cast/Cast.png
 ///                                   (a third field gives that shape its own
 ///                                    casting animation, beating the class's)
+///
+/// A creature a class summons is written the same way, with "Summon:" in place
+/// of "Class:" and a line naming who calls it:
+///
+///   Summon: Gator
+///   Summoned By: Florida Man        (required; also where its art lives)
+///   HP: 14
+///   Movement: 6
+///   Size: 2 x 1                     (optional; defaults to one square)
+///   Sprites: Gator.png              (found in the SUMMONER's folder)
+///
+/// A summon is on the player's side and holds player cards, so it belongs in
+/// this file and not in Enemies.txt. It is simply left out of the party picker.
 /// </summary>
 public class ClassLibrary
 {
     private readonly Dictionary<string, PlayerClass> _classes = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _order = new();
+    private readonly List<PlayerClass> _needsSummoner = new();
 
     public const string Path = "Content/Cast/PlayerCharacters/Classes.txt";
 
@@ -122,9 +158,15 @@ public class ClassLibrary
             string key = line[..colon].Trim().ToLowerInvariant();
             string value = line[(colon + 1)..].Trim();
 
-            if (key == "class")
+            // "Class:" and "Summon:" both open a block; the only difference is
+            // that a summon is not offered at the party screen
+            if (key is "class" or "summon")
             {
-                if (value.Length == 0) { diag.Error(Path, lineNo, "'Class:' has no name"); continue; }
+                if (value.Length == 0)
+                {
+                    diag.Error(Path, lineNo, $"'{line[..colon]}:' has no name");
+                    continue;
+                }
                 if (lib._classes.ContainsKey(value))
                 {
                     diag.Warn(Path, lineNo, $"class '{value}' is declared twice");
@@ -132,6 +174,10 @@ public class ClassLibrary
                     continue;
                 }
                 current = new PlayerClass { Name = value, Line = lineNo };
+                // marked provisionally so a "Summon:" block missing its
+                // "Summoned By:" line can be caught below rather than quietly
+                // passing itself off as a playable class
+                if (key == "summon") lib._needsSummoner.Add(current);
                 lib._classes[value] = current;
                 lib._order.Add(value);
                 continue;
@@ -175,6 +221,21 @@ public class ClassLibrary
                 case "cast animation":
                     current.CastAnimation = value;
                     break;
+                case "summoned by":
+                    current.SummonedBy = value;
+                    break;
+                case "size":
+                    // "2 x 1" is two squares side by side; a bare "2" is square
+                    var span = value.Split('x', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (span.Length == 1 && int.TryParse(span[0], out int both) && both > 0)
+                        current.SizeX = current.SizeY = both;
+                    else if (span.Length == 2 && int.TryParse(span[0], out int sx) && sx > 0
+                             && int.TryParse(span[1], out int sy) && sy > 0)
+                    { current.SizeX = sx; current.SizeY = sy; }
+                    else
+                        diag.Error(Path, lineNo, $"'{current.Name}': Size must be a number of squares " +
+                            $"like '2' or '2 x 1', got '{value}'");
+                    break;
                 case "card tags":
                     current.CardTags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
                     break;
@@ -183,6 +244,21 @@ public class ClassLibrary
                     break;
             }
         }
+
+        // A summon whose summoner is missing or misspelled would look for its
+        // art in a folder that isn't there and come out as a magenta
+        // checkerboard, with nothing said about why. Say it here instead.
+        foreach (var s in lib._needsSummoner)
+        {
+            if (s.SummonedBy.Length == 0)
+                diag.Error(Path, s.Line, $"'{s.Name}' is a Summon but has no 'Summoned By:' line " +
+                    "naming the class that calls it — that is also the folder its art lives in");
+            else if (lib.Get(s.SummonedBy) is not { IsSummon: false })
+                diag.Error(Path, s.Line,
+                    $"'{s.Name}' is summoned by '{s.SummonedBy}', which is not a class in this file");
+        }
+        lib._needsSummoner.Clear();
+
         Current = lib;
         return lib;
     }
@@ -199,8 +275,16 @@ public class ClassLibrary
     public HashSet<string> AllPlayableTags() =>
         new(_order.SelectMany(CardTagsFor), StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Declared classes whose first sprite actually exists — the party picker's roster.</summary>
+    /// <summary>
+    /// Declared classes whose first sprite actually exists — the party picker's
+    /// roster. Summons are left out: you get one by playing the card that calls
+    /// it, not by choosing it before the mission.
+    /// </summary>
     public List<string> PlayableClasses() =>
-        _order.Where(n => Get(n) is PlayerClass c &&
+        _order.Where(n => Get(n) is PlayerClass c && !c.IsSummon &&
             AssetLoader.Exists($"{c.Folder}/{c.SpriteFiles[0]}")).ToList();
+
+    /// <summary>Creatures declared with "Summon:" — everything a card can call up.</summary>
+    public List<string> SummonNames() =>
+        _order.Where(n => Get(n) is { IsSummon: true }).ToList();
 }

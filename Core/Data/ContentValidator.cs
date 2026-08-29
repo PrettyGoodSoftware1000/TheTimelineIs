@@ -146,6 +146,27 @@ public static class ContentValidator
     /// <summary>Form gating only means anything for the player deck.</summary>
     private static void ValidateCardsAgainstClasses(CardLibrary cards, ClassLibrary classes, Diagnostics diag)
     {
+        // A summon card naming a creature nobody declared used to reach the
+        // board as a magenta checkerboard with no explanation. Caught here now,
+        // at startup, with the name that was actually asked for.
+        foreach (var card in cards.All.Where(c => c.IsSummon))
+        {
+            if (card.Summons.Length == 0)
+                diag.Error(card.Source, card.Line,
+                    $"'{card.Name}': has a Summon effect but no 'Summons:' line saying what it calls");
+            else if (classes.Get(card.Summons) is not { IsSummon: true })
+                diag.Error(card.Source, card.Line,
+                    $"'{card.Name}': summons '{card.Summons}', which is not a 'Summon:' block in " +
+                    $"{ClassLibrary.Path}" +
+                    (classes.SummonNames().Count > 0
+                        ? $" (there is: {string.Join(", ", classes.SummonNames())})"
+                        : " (that file declares no summons at all)"));
+        }
+        foreach (var card in cards.All.Where(c => c.Summons.Length > 0 && !c.IsSummon))
+            diag.Warn(card.Source, card.Line,
+                $"'{card.Name}': names a 'Summons:' creature but has no 'Effects: Summon N' line, " +
+                "so nothing is ever called up");
+
         foreach (var card in cards.All.Where(c => c.Form.Length > 0))
         {
             var owners = classes.ClassNames

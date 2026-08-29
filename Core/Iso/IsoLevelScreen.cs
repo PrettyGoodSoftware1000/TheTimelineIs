@@ -101,6 +101,13 @@ public class IsoLevelScreen : IScreen
     private Point _skyTarget;
 
     /// <summary>
+    /// The square the card in flight was aimed at. Kept because the effects run
+    /// long after the aim has been cleared, and a summon needs to know where
+    /// the player pointed.
+    /// </summary>
+    private Point _aimPoint;
+
+    /// <summary>
     /// Burning ground: a square, and how many more turns it stays alight.
     /// Anyone who STARTS their turn on one takes damage, so walking across a
     /// fire and off it again is free — standing in it is not.
@@ -765,6 +772,18 @@ public class IsoLevelScreen : IScreen
             _tap = null;
             return;
         }
+
+        // The record button is answered here, before anything else looks at the
+        // tap. It used to be answered where it is DRAWN — after the board had
+        // already eaten the click — so it never fired on any screen you play
+        // on. Handling it up here also means it works in every mode it appears
+        // in, including while an enemy is taking its turn.
+        if (_tap is Point recTap && ReplayButtonUp && SaveReplayRect.Contains(recTap))
+        {
+            _tap = null;
+            if (_recording) SaveReplay("asked for"); else StartRecording();
+            return;
+        }
         // the wheel scrolls the log back through history while it is open
         if (_logOpen && LogPanel.Contains(_pointer) && input.ScrollDelta != 0)
             _logScroll = Math.Clamp(_logScroll + input.ScrollDelta,
@@ -1310,7 +1329,14 @@ public class IsoLevelScreen : IScreen
         _blastOpacityKey = card.Delivery == Delivery.Cone ? "Cone" : "AoE";
 
         if (FindTileAt(_pointer.ToVector2()) is Point c && ReachableAim(Acting, c, card))
+        {
+            // For a summon the purple is the creature's own outline, and it is
+            // only drawn where the creature will actually go. Painting it over
+            // a square the body cannot fit on would promise a placement the
+            // click then refuses, which reads as a bug.
+            if (card.IsSummon && !SummonFits(card, c)) return;
             _blastSet = AreaOf(card, Tile(Acting), c);
+        }
     }
 
     /// <summary>The card of that name from whichever deck the holder draws from.</summary>
@@ -1322,6 +1348,15 @@ public class IsoLevelScreen : IScreen
     /// <summary>The tiles a card's area covers: a cone from the caster, or a blast radius.</summary>
     private HashSet<Point> AreaOf(Card card, Point from, Point aim)
     {
+        // a summon paints the shape of the thing being summoned, so a body two
+        // squares long shows both squares before it is committed to
+        if (card.IsSummon)
+        {
+            var body = _ctx.Classes.Get(card.Summons);
+            return new HashSet<Point>(Pathfinder.Footprint(aim,
+                body?.SizeX ?? 1, body?.SizeY ?? 1));
+        }
+
         var set = new HashSet<Point>();
         foreach (var block in _level.Blocks.Values)
         {
@@ -1370,59 +1405,25 @@ public class IsoLevelScreen : IScreen
         if (_mode is Mode.PlayerTurn or Mode.PlayerTarget && HandleCardClick(press)) return;
         if (HitButton(press)) return;
 
-        // Ctrl aims at the SQUARE rather than at whatever sprite happens to be
-        // over it, which is the only way to reach somebody standing behind a
-        // tree or under a taller neighbour
-        if (_ctrl)
-        {
-            if (FindTileAt(press.ToVector2()) is Point square) ClickSquare(square);
-            return;
-        }
-
-        foreach (var c in Everyone.Reverse())
-        {
-            if (!c.Alive || !SpriteRect(c).Contains(press)) continue;
-            if (_mode == Mode.PlayerTarget && _selectedCard is Card aiming)
-            {
-                if (aiming.TargetsGround) TryTargetGround(Tile(c));
-                // stealing works on anyone, so it skips the side check entirely
-                else if (aiming.TargetsAnyone && c != Current) TryTarget(c);
-                else if (aiming.TargetsAnyone) Toast(_ctx.Strings.Get("iso_needs_other"));
-                else if (c.IsPlayer == aiming.TargetsAllies) TryTarget(c);
-                else Toast(_ctx.Strings.Get(aiming.TargetsAllies ? "iso_needs_ally" : "iso_needs_enemy"));
-                return;
-            }
-            if (c.IsPlayer)
-            {
-                if (_mode == Mode.Explore) { _selected = c; _overlayKey = null; }
-                else if (_mode == Mode.FreeMove && _freeMovers.Contains(c)) { _selected = c; _overlayKey = null; }
-                else if (_mode is Mode.PlayerTurn or Mode.PlayerTarget) TakeControlOf(c);
-            }
-            return;
-        }
-
-        if (FindTileAt(press.ToVector2()) is Point tile)
-        {
-            if (_level.DoorAt(tile) is LevelDoor door && !door.Open && _mode is Mode.Explore &&
-                LivingParty.Any(p => p.DistanceTo(tile) <= DoorReach))
-            {
-                OpenDoor(door);
-                return;
-            }
-            // an area card can be aimed at bare ground, no enemy required
-            if (_mode == Mode.PlayerTarget && _selectedCard is { TargetsGround: true })
-            {
-                TryTargetGround(tile);
-                return;
-            }
-            HandleTileClick(tile);
-        }
+        // Everything on the board is resolved by SQUARE, never by which sprite
+        // the cursor happens to be over. The yellow square under the cursor is
+        // what a click acts on, so what you see marked is what you get — and
+        // somebody standing behind a tree or under a taller neighbour is
+        // reachable, which clicking sprites could never manage. This used to be
+        // what Ctrl did; now it is simply how clicking works, and Ctrl is left
+        // to fade the board so the grid reads clearly.
+        if (FindTileAt(press.ToVector2()) is Point square) ClickSquare(square);
     }
 
     /// <summary>
-    /// A click resolved by square, under Ctrl. With a card up it plays exactly
-    /// as if whoever stands there had been clicked; without one it is a move,
-    /// or a selection when a party member is standing on the square.
+    /// A click resolved by square — the one the yellow cursor is sitting on.
+    /// With a card up it plays on whoever stands there; without one it is a
+    /// move, or a selection when a party member is on the square.
+    ///
+    /// This is how every board click works now. It used to need Ctrl held, and
+    /// a plain click hunted for a sprite under the cursor instead — which meant
+    /// aiming at a head rather than at a square, and left anyone behind a tree
+    /// or under a taller neighbour unclickable.
     /// </summary>
     private void ClickSquare(Point tile)
     {
@@ -1585,8 +1586,11 @@ public class IsoLevelScreen : IScreen
             return;
         }
 
-        // a pure self-cast (changing shape) has nothing to aim at
-        if (card.Damage <= 0 && card.Effects.All(e => Data.Effects.IsSelfCast(e.Name)))
+        // A pure self-cast (changing shape, planting your feet) has nothing to
+        // aim at. A summon is the exception: it acts on the caster, but WHERE
+        // the creature lands is the player's call, so it still asks.
+        if (card.Damage <= 0 && !card.IsSummon &&
+            card.Effects.All(e => Data.Effects.IsSelfCast(e.Name)))
         {
             PlayCard(new List<CharacterInstance>(), Tile(Acting!));
             return;
@@ -1630,14 +1634,33 @@ public class IsoLevelScreen : IScreen
         var card = _selectedCard!;
         var me = Acting!;
         if (!ReachableAim(me, tile, card)) { Toast(_ctx.Strings.Get("iso_out_of_range")); return; }
+        // a creature needs somewhere to stand: say so on the spot rather than
+        // spending the points and quietly putting it somewhere else
+        if (card.IsSummon && !SummonFits(card, tile))
+        {
+            Toast(_ctx.Strings.Format("iso_summon_no_room", ("name", card.Summons)));
+            return;
+        }
         PlayArea(AreaOf(card, Tile(me), tile), tile);
+    }
+
+    /// <summary>Whether the creature a card summons has room to stand on that square.</summary>
+    private bool SummonFits(Card card, Point at)
+    {
+        var body = _ctx.Classes.Get(card.Summons);
+        return Pathfinder.Fits(_level, at, body?.SizeX ?? 1, body?.SizeY ?? 1,
+            _revealed, OccupiedExcept(null));
     }
 
     private void PlayArea(HashSet<Point> area, Point aim)
     {
         var card = _selectedCard;
         if (card == null) return;
-        var caught = (card.TargetsAllies ? (IEnumerable<CharacterInstance>)LivingParty : VisibleEnemies)
+        // a summon paints a square to stand on, not a blast: it hits nobody,
+        // however many people happen to be near where the creature lands
+        var caught = card.IsSummon
+            ? new List<CharacterInstance>()
+            : (card.TargetsAllies ? (IEnumerable<CharacterInstance>)LivingParty : VisibleEnemies)
             .Where(c => c.Footprint.Any(area.Contains)).ToList();
         // the ground the card covered is remembered here, because by the time
         // the hits resolve the aim and the area are gone
@@ -1699,6 +1722,9 @@ public class IsoLevelScreen : IScreen
         return false;
     }
 
+    /// <summary>Whether the record button is on screen, so drawing and clicking agree.</summary>
+    private bool ReplayButtonUp => !_replayMode && _mode != Mode.Victory;
+
     // ---------------- card + enemy actions ----------------
 
     private void PlayCard(List<CharacterInstance> aimed, Point blastCenter)
@@ -1708,6 +1734,7 @@ public class IsoLevelScreen : IScreen
         _actor = Acting;
         _actingCard = card;
         _victims = aimed;
+        _aimPoint = blastCenter;
         _selectedCard = null;
         _targets.Clear();
         _blastSet.Clear();
@@ -1945,25 +1972,34 @@ public class IsoLevelScreen : IScreen
     }
 
     /// <summary>
-    /// Puts a summoned creature on the board beside its summoner, under the
-    /// player's control. It joins the party rather than the enemy list, so
-    /// everything that already knows about sides treats it correctly, but it
-    /// never joins the turn ORDER — a pet acts inside its owner's turn.
+    /// Puts a summoned creature on the board under the player's control. It
+    /// joins the party rather than the enemy list, so everything that already
+    /// knows about sides treats it correctly, but it never joins the turn
+    /// ORDER — a pet acts inside its owner's turn.
+    ///
+    /// <paramref name="where"/> is the square the player aimed at. The first
+    /// creature lands there; any others after it fill in around, and if that
+    /// square has since been taken the nearest one that fits is used, so a
+    /// summon never simply fails for want of an inch.
     /// </summary>
-    private void SummonPet(CharacterInstance owner, Card card, int howMany, StringBuilder report)
+    private void SummonPet(CharacterInstance owner, Card card, int howMany, Point where,
+        StringBuilder report)
     {
-        var def = _ctx.Enemies.Get(card.Summons);
-        if (def == null)
+        var def = _ctx.Classes.Get(card.Summons);
+        if (def is not { IsSummon: true })
         {
             _ctx.ReportProblem(CardLibrary.PlayerPath,
-                $"'{card.Name}' summons '{card.Summons}', which is not in {EnemyLibrary.Path}");
+                $"'{card.Name}' summons '{card.Summons}', which is not a 'Summon:' block " +
+                $"in {ClassLibrary.Path}");
             return;
         }
 
         for (int n = 0; n < Math.Max(1, howMany); n++)
         {
             var taken = OccupiedExcept(null);
-            var spot = NearestFreeFor(Tile(owner), def.SizeX, def.SizeY, taken);
+            var spot = n == 0 && Pathfinder.Fits(_level, where, def.SizeX, def.SizeY, _revealed, taken)
+                ? where
+                : NearestFreeFor(where, def.SizeX, def.SizeY, taken);
             if (spot is not Point at)
             {
                 report.AppendLine(_ctx.Strings.Format("iso_summon_no_room", ("name", def.Name)));
@@ -2017,7 +2053,7 @@ public class IsoLevelScreen : IScreen
                 }
                 else if (effect.Is(Data.Effects.Summon))
                 {
-                    SummonPet(_actor, card, effect.Amount, report);
+                    SummonPet(_actor, card, effect.Amount, _aimPoint, report);
                 }
                 else if (effect.Is(Data.Effects.Guard))
                 {
@@ -2789,7 +2825,7 @@ public class IsoLevelScreen : IScreen
         // nothing at all and leave the news to the toast, which prints small and
         // plain in the opposite corner of the screen — technically feedback,
         // practically invisible.
-        if (!_replayMode && _mode != Mode.Victory)
+        if (ReplayButtonUp)
         {
             // Three things this button can be saying: it has just written a
             // file, it is writing things down, or it is doing nothing.
@@ -2799,12 +2835,9 @@ public class IsoLevelScreen : IScreen
             Color? tint = justSaved ? new Color(24, 86, 34, 235)
                 : _recording ? new Color(110, 30, 30, 235) : null;
 
-            if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveReplayRect,
-                    _ctx.Strings.Get(label), _tap, tint))
-            {
-                if (_recording) SaveReplay("asked for");
-                else StartRecording();
-            }
+            // the press is handled in HitButton; this only paints it
+            Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveReplayRect,
+                _ctx.Strings.Get(label), null, tint);
 
             // a dot beside it while it is running, so a recording left on is
             // obvious without reading the button

@@ -228,8 +228,15 @@ public class CharacterInstance
         ? ClassLibrary.Current.Get(Name)?.CastAnimationPath(Form)
         : EnemyLibrary.Current.Get(Name)?.CastAnimationPath;
 
+    /// <summary>
+    /// Where this character's art lives. Asked of the class rather than built
+    /// from the name, because a summoned creature keeps its art in its
+    /// summoner's folder — a Gator's picture sits with the Florida Man's, since
+    /// it is his. Falls back to the by-name folder for anything the libraries
+    /// have never heard of.
+    /// </summary>
     public string Folder => IsPlayer
-        ? $"Content/Cast/PlayerCharacters/{Name}"
+        ? ClassLibrary.Current.Get(Name)?.Folder ?? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";
     public string SpritePath => $"{Folder}/{SpriteFile}";
     /// <summary>Optional: Goblin1.png -> Goblin1Thumb.png. Falls back to the full sprite.</summary>

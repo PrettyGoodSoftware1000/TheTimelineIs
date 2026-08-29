@@ -32,13 +32,3 @@ HP: 10
 Movement: 5
 Actions: 5
 Sprites: Imp.png
-
-# Summoned by the Florida Man's Gatormancy rather than placed in a level.
-# Two squares side by side, which is what 'Size: 2 x 1' means - long, not
-# square like the Living Stone.
-Enemy: Gator
-HP: 14
-Movement: 6
-Actions: 5
-Size: 2 x 1
-Sprites: Gator.png

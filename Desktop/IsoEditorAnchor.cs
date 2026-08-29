@@ -275,6 +275,22 @@ public partial class IsoEditorScreen
         }
     }
 
+    /// <summary>
+    /// The four sides of a grid diamond, one pixel thick, whatever the zoom.
+    /// The corners are the middles of the bounding box's sides.
+    /// </summary>
+    private void DrawDiamondEdge(SpriteBatch batch, Rectangle box, Color color)
+    {
+        var top = new Vector2(box.Center.X, box.Y);
+        var right = new Vector2(box.Right, box.Center.Y);
+        var bottom = new Vector2(box.Center.X, box.Bottom);
+        var left = new Vector2(box.X, box.Center.Y);
+        Line(batch, top, right, color, 1f);
+        Line(batch, right, bottom, color, 1f);
+        Line(batch, bottom, left, color, 1f);
+        Line(batch, left, top, color, 1f);
+    }
+
     private void DrawAnchorTool(SpriteBatch batch)
     {
         if (!_anchoring || _anchorPiece is not GroundPiece piece) return;
@@ -302,8 +318,12 @@ public partial class IsoEditorScreen
             (int)(AnchorOrigin.X - dw / 2f), (int)(AnchorOrigin.Y - dh / 2f), dw, dh);
         batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayTop.png"), diamond,
             new Color(120, 200, 255) * 0.20f);
-        batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayEdge.png"), diamond,
-            new Color(120, 200, 255) * 0.95f);
+        // The outline is drawn as four hairlines rather than by stretching
+        // OverlayEdge.png over the diamond. That texture's border is a few
+        // pixels wide at 1x, so magnifying it to the preview zoom magnified the
+        // border too — a fat band that swallowed the very edge it was there to
+        // show. Four lines stay one pixel at any zoom.
+        DrawDiamondEdge(batch, diamond, new Color(120, 200, 255) * 0.95f);
 
         // the crosshair: one pixel each way, right across the screen, so the
         // exact anchor is readable against any art

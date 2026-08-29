@@ -88,13 +88,20 @@ public class Card
     public string Form = "";
 
     /// <summary>
-    /// What a Summon card puts on the board, by name, looked up in the same
-    /// roster the enemies come from. Empty for every other card.
+    /// What a Summon card puts on the board, by name, looked up among the
+    /// "Summon:" blocks in Classes.txt. Empty for every other card.
     /// </summary>
     public string Summons = "";
 
-    /// <summary>Cone and blast cards paint an area, so they can be aimed at bare ground.</summary>
-    public bool TargetsGround => Kind == CardKind.AoEDamage || Delivery == Delivery.Cone;
+    /// <summary>
+    /// A card that puts a creature on the board. It is aimed like a blast — at
+    /// a square rather than at a body — because the question it asks is where
+    /// to stand the creature, and the player is the one who should answer it.
+    /// </summary>
+    public bool IsSummon => Effects.Exists(e => e.Is(Data.Effects.Summon));
+
+    /// <summary>Cone, blast and summon cards are aimed at a square, not at a body.</summary>
+    public bool TargetsGround => Kind == CardKind.AoEDamage || Delivery == Delivery.Cone || IsSummon;
 
     /// <summary>A card that only helps (Armor, no damage) is aimed at the party instead.</summary>
     public bool TargetsAllies => Damage <= 0 && Effects.Exists(e => Effects_IsFriendly(e));

@@ -33,10 +33,20 @@ Actions: 5
 Form: Werewolf, WerewitchWerewolf.png
 Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png
 
-# The Gator he summons is a creature, not a class: it has no cards of its
-# own to pick at the party screen, so it lives in Enemies.txt with the rest
-# of the roster and is brought onto the board by Gatormancy.
+# The Gator he summons is on OUR side: it holds player cards and takes orders,
+# so it is written here rather than in Enemies.txt. "Summon:" opens the block
+# instead of "Class:", which keeps it out of the party picker - you get one by
+# playing Gatormancy, not by choosing it before the mission. Its art lives in
+# its summoner's folder, since it is his creature.
 Class: Florida Man
 HP: 50
 Movement: 4
 Actions: 5
+
+Summon: Gator
+Summoned By: Florida Man
+HP: 14
+Movement: 6
+Actions: 5
+Size: 2 x 1
+Sprites: Gator.png

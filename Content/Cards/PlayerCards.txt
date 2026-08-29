@@ -325,3 +325,21 @@ Effect: Single target. 5 times x 2 damage.
 Card Text: Shoot anything that gets close, just like Jesus did.
 Bottom Right: 2 Gunfire
 []
+
+# The Gator's card. A summoned creature is on the player's side, so what it
+# holds is a PLAYER card tagged with its name - the same way any class picks
+# up its own cards. Nothing about it belongs in EnemyCards.txt.
+[]
+Card Name: Bite
+Tags: Gator
+Type: [melee] Single target, X hits.
+Range: 1
+Action Points: 4
+Melee Time: 0.4
+Casting Sound: [Blank.wav]
+Casting Time: 0.2
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 8 damage.
+Card Text: Snap. Not much of a plan, but it works.
+Bottom Right: 8 Chomp
+[]
