@@ -28,9 +28,9 @@ Tags: Default
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
-Melee Time: 1
+Melee Time: 0.2
 Casting Sound: [Blank.wav]
-Casting Time: 1
+Casting Time: 0.5
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 5 damage.
 Card Text: No technique whatsoever. Still hurts.
@@ -42,14 +42,14 @@ Card Name: Goblin Claw
 Tags: Goblin
 Type: [melee] Single target, X hits.
 Range: 1
-Action Points: 1
-Melee Time: 1
+Action Points: 4
+Melee Time: 0.2
 Casting Sound: [Blank.wav]
-Casting Time: 1
+Casting Time: 0.2
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 5 damage.
 Card Text: A grubby swipe. Nothing personal.
-Bottom Right: 5 Stabby
+Bottom Right: 3 Stabby
 []
 
 []
@@ -57,10 +57,10 @@ Card Name: Stone Slap
 Tags: Living Stone
 Type: [melee] Single target, X hits.
 Range: 1
-Action Points: 5
-Melee Time: 2
+Action Points: 6
+Melee Time: 0.5
 Casting Sound: [Blank.wav]
-Casting Time: 2
+Casting Time: 0.75
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 12 damage.
 Card Text: Like being bitch-slapped by a mountain.
@@ -72,7 +72,7 @@ Card Name: Firebolt
 Tags: Imp
 Type: [ranged] Single target, X hits.
 Range: 7
-Action Points: 3
+Action Points: 4
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.3
@@ -88,7 +88,7 @@ Card Name: Bite
 Tags: Gator
 Type: [melee] Single target, X hits.
 Range: 1
-Action Points: 5
+Action Points: 4
 Melee Time: 0.4
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
