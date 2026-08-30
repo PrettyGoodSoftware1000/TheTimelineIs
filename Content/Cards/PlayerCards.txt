@@ -97,8 +97,8 @@
 Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
-Action Points: 6
-Friendly Fire: No
+Action Points: 1
+Friendly Fire: Yes
 Explosion Range: 3
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]
@@ -114,7 +114,7 @@ Bottom Right: 15 Fire
 Card Name: Shank
 Tags: Dirtbag
 Type: [melee] Single target, X hits.
-Action Points: 4
+Action Points: 1
 Friendly Fire: No
 Effects: Nimble 4
 Casting Sound: [Blank.wav]
@@ -131,7 +131,7 @@ Bottom Right: 12 Stabby
 Card Name: Pew Pew
 Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
-Action Points: 3
+Action Points: 1
 Friendly Fire: No
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
@@ -147,7 +147,7 @@ Bottom Right: 5 Energy
 Card Name: Hot Lead
 Tags: Gun-O-Mancer
 Type: [cone] AoE damage
-Action Points: 4
+Action Points: 1
 Friendly Fire: No
 Range: 3
 Effects: Burning 1
@@ -164,7 +164,7 @@ Bottom Right: 5 Stabby
 Card Name: Reinforce
 Tags: Cyborg
 Type: [ranged] Single target, X hits.
-Action Points: 5
+Action Points: 1
 Friendly Fire: No
 Range: 3
 Effects: Armor 8
@@ -182,7 +182,7 @@ Bottom Right: 8 Armor
 Card Name: Toss-A-Knife
 Tags: Dirtbag
 Type: [ranged] Single target, X hits.
-Action Points: 3
+Action Points: 1
 Friendly Fire: No
 Range: 5
 Projectile Art: Placeholder.png
@@ -200,7 +200,7 @@ Card Name: Claw 'Em
 Tags: Werewitch
 Form: Werewolf
 Type: [melee] Single target, X hits.
-Action Points: 3
+Action Points: 1
 Friendly Fire: No
 Effects: Leap 5
 Casting Sound: [Blank.wav]
@@ -218,7 +218,7 @@ Card Name: Witch Form
 Tags: Werewitch
 Form: Werewolf
 Type: [ranged] Single target, X hits.
-Action Points: 2
+Action Points: 1
 Friendly Fire: No
 Effects: Form Witch
 Range: 1
@@ -237,7 +237,7 @@ Card Name: Wolf Form
 Tags: Werewitch
 Form: Witch
 Type: [ranged] Single target, X hits.
-Action Points: 2
+Action Points: 1
 Friendly Fire: No
 Effects: Form Werewolf, Nimble 5
 Range: 1
@@ -256,7 +256,7 @@ Card Name: Curse
 Tags: Werewitch
 Form: Witch
 Type: [ranged] Single target, X hits.
-Action Points: 2
+Action Points: 1
 Friendly Fire: No
 Effects: Curse 3
 Range: 6
@@ -274,7 +274,7 @@ Bottom Right: 0 Cursed
 Card Name: Beg, Borrow, but Mostly Steal
 Tags: Dirtbag
 Type: [ranged] Single target, X hits.
-Action Points: 5
+Action Points: 1
 Friendly Fire: No
 Effects: Steal 3
 Range: 1
@@ -292,7 +292,7 @@ Bottom Right: 0 Stolen
 Card Name: Magic Tomahawk Missile
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
-Action Points: 10
+Action Points: 1
 Friendly Fire: No
 Explosion Range: 5
 Range: 12
@@ -312,7 +312,7 @@ Bottom Right: 15 Fire
 Card Name: Gatormancy
 Tags: Florida Man
 Type: [ranged] Single target, X hits.
-Action Points: 10
+Action Points: 1
 Friendly Fire: No
 Range: 2
 Effects: Summon 1
@@ -335,7 +335,7 @@ Bottom Right: 0 Gator
 Card Name: Stand Your Ground State
 Tags: Florida Man
 Type: [ranged] Single target, X hits.
-Action Points: 3
+Action Points: 1
 Friendly Fire: Yes
 Range: 4
 Effects: Guard 4
@@ -357,7 +357,7 @@ Card Name: Bite
 Tags: Gator
 Type: [melee] Single target, X hits.
 Range: 1
-Action Points: 4
+Action Points: 1
 Friendly Fire: No
 Melee Time: 0.4
 Casting Sound: [Blank.wav]
@@ -375,7 +375,7 @@ Bottom Right: 8 Chomp
 Card Name: Swamp Wise
 Tags: Florida Man
 Type: [ranged] Single target, X hits.
-Action Points: 2
+Action Points: 1
 Friendly Fire: No
 Range: 8
 Effects: Vulnerable 3
@@ -404,7 +404,7 @@ Bottom Right: 0 Marked
 Card Name: Lawnmower with a Chainsaw
 Tags: Florida Man
 Type: [ranged] Single target, X hits.
-Action Points: 7
+Action Points: 1
 Friendly Fire: Yes
 Range: 15
 Explosion Range: 3
