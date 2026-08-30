@@ -1,4 +1,4 @@
 # name              x     y     level
 Test1                   4266    2299    TestLevel1
-Not Ohio                4247    2004    TestLevel2
-TestLevel               5579    3113    TestLevel
+Not Ohio                4247    2004    Not Ohio
+Fartstankil             5579    3113    Fartstankil
