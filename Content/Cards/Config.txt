@@ -27,7 +27,7 @@
 Global scale: 0%
 Cast scale: 0%
 Werewitch Werewolf scale: 90%
-
+Gator scale: 30%
 
 Movement opacity: 20%
 Range opacity: 18%
