@@ -109,6 +109,11 @@ public static class ContentValidator
             if (card.Kind == CardKind.MultiTarget && card.Targets < 1)
                 diag.Error(card.Source, card.Line, $"'{card.Name}': needs at least one target");
 
+            if (!card.FriendlyFireDeclared)
+                diag.Warn(card.Source, card.Line,
+                    $"'{card.Name}': has no 'Friendly Fire:' line, so it is treated as No and " +
+                    "will never touch its caster's own side");
+
             foreach (var effect in card.Effects)
             {
                 if (effect.Amount <= 0)
@@ -448,7 +453,7 @@ public static class ContentValidator
     {
         string[] required =
         {
-            "title", "title_scramble_word", "menu_new_game", "menu_continue",
+            "title", "title_scramble_word", "version", "menu_new_game", "menu_continue",
             "map_save", "saved",
             "party_title", "party_start", "party_slot_empty",
             "battle_win", "battle_turn", "battle_hit", "battle_down",
@@ -471,6 +476,7 @@ public static class ContentValidator
             "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_card_actions", "iso_no_actions",
             "iso_steal_pick", "iso_steal_pick_form", "iso_empty_square",
             "iso_channel_start", "iso_channelling", "iso_channel_rooted", "iso_channel_waiting", "iso_fire_lit",
+            "iso_vulnerable", "iso_vulnerable_hit",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

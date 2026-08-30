@@ -45,6 +45,7 @@ public class GameConfig
             ["Trigger"] = 0.18f,
             ["Hover"] = 0.35f,
             ["Selected"] = 0.30f,
+            ["Guard"] = 0.28f,
         };
 
     public static GameConfig Load()

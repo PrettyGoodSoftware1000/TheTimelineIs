@@ -77,6 +77,12 @@ public class TitleScreen : IScreen
             Ui.Button(batch, _ctx.Pixel, _ctx.Font, ReplaysRect, _ctx.Strings.Get("menu_replays"), _tap))
             _ctx.SwitchTo(new ReplayListScreen(_ctx));
 
+        // Small and dim in the corner: enough to read off a screenshot, not
+        // enough to be part of the picture.
+        batch.DrawString(_ctx.Font, _ctx.Strings.Get("version"),
+            new Vector2(40, VirtualViewport.Height - 60), Color.White * 0.35f,
+            0f, Vector2.Zero, 0.28f, SpriteEffects.None, 0f);
+
         _tap = null;
     }
 }

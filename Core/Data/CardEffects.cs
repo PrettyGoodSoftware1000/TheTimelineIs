@@ -44,14 +44,37 @@ public static class Effects
     public const string Summon = "Summon";
 
     /// <summary>
-    /// Guard N: the caster plants themselves — no more movement this turn or
-    /// after — and shoots anything hostile that comes within N squares.
+    /// Guard N: the caster plants themselves for the rest of the turn and
+    /// marks out the ground within N squares. Anyone who steps onto it, their
+    /// own side included, stops and is shot before walking on.
     /// </summary>
     public const string Guard = "Guard";
 
+    /// <summary>
+    /// Vulnerable N: the next damage the victim takes is worse. It adds half
+    /// again, and it makes any roll for variable damage come up at its highest
+    /// — so a card that would have done "1 to 20" does 20, and then 30. One
+    /// hit uses it up. N is how many of the victim's turns it waits around for.
+    /// </summary>
+    public const string Vulnerable = "Vulnerable";
+
+    /// <summary>How much more a vulnerable target takes, as a fraction of the blow.</summary>
+    public const float VulnerableBonus = 0.5f;
+
+    /// <summary>
+    /// Mower N: sends a machine off in a straight line for up to N squares. It
+    /// chews whatever it touches, drives on through anything it kills, glances
+    /// off anything it doesn't, wanders as it goes, and goes up at the end —
+    /// or sooner. See <see cref="Iso.MowerRun"/> for the rules it follows.
+    /// </summary>
+    public const string Mower = "Mower";
+
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
     public static readonly string[] Known =
-        { Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles, Summon, Guard };
+    {
+        Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles,
+        Summon, Guard, Vulnerable, Mower,
+    };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
     public const int BurnDamagePerStack = 5;

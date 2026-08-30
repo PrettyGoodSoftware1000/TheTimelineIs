@@ -17,6 +17,11 @@
 #                                            everyone; the click only aims it)
 #                    "Multiple Projectiles" - one shot per target (default))
 # Action Points:  (What the card costs to play. 1 action point carries over.)
+# Friendly Fire: (Yes or No. Yes means the card hurts whoever it reaches,
+#                  side regardless - a blast catches your own party, and a
+#                  single shot can be aimed at them. Sides are read from the
+#                  CASTER, so an enemy card with friendly fire hurts other
+#                  enemies too. No is the default, and every card should say.)
 # Projectile Art: (File in Content/Images/Effects/. Art must point RIGHT;
 #                  it is rotated to match the shot's travel angle, so a shot
 #                  heading down-right appears rotated clockwise.)
@@ -93,6 +98,7 @@ Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
 Action Points: 6
+Friendly Fire: No
 Explosion Range: 3
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]
@@ -109,6 +115,7 @@ Card Name: Shank
 Tags: Dirtbag
 Type: [melee] Single target, X hits.
 Action Points: 4
+Friendly Fire: No
 Effects: Nimble 4
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -125,6 +132,7 @@ Card Name: Pew Pew
 Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
 Action Points: 3
+Friendly Fire: No
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -140,6 +148,7 @@ Card Name: Hot Lead
 Tags: Gun-O-Mancer
 Type: [cone] AoE damage
 Action Points: 4
+Friendly Fire: No
 Range: 3
 Effects: Burning 1
 Casting Sound: [Blank.wav]
@@ -156,6 +165,7 @@ Card Name: Reinforce
 Tags: Cyborg
 Type: [ranged] Single target, X hits.
 Action Points: 5
+Friendly Fire: No
 Range: 3
 Effects: Armor 8
 Projectile Art: Placeholder.png
@@ -173,6 +183,7 @@ Card Name: Toss-A-Knife
 Tags: Dirtbag
 Type: [ranged] Single target, X hits.
 Action Points: 3
+Friendly Fire: No
 Range: 5
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
@@ -190,6 +201,7 @@ Tags: Werewitch
 Form: Werewolf
 Type: [melee] Single target, X hits.
 Action Points: 3
+Friendly Fire: No
 Effects: Leap 5
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -207,6 +219,7 @@ Tags: Werewitch
 Form: Werewolf
 Type: [ranged] Single target, X hits.
 Action Points: 2
+Friendly Fire: No
 Effects: Form Witch
 Range: 1
 Projectile Art: Placeholder.png
@@ -225,6 +238,7 @@ Tags: Werewitch
 Form: Witch
 Type: [ranged] Single target, X hits.
 Action Points: 2
+Friendly Fire: No
 Effects: Form Werewolf, Nimble 5
 Range: 1
 Projectile Art: Placeholder.png
@@ -243,6 +257,7 @@ Tags: Werewitch
 Form: Witch
 Type: [ranged] Single target, X hits.
 Action Points: 2
+Friendly Fire: No
 Effects: Curse 3
 Range: 6
 Projectile Art: Placeholder.png
@@ -260,6 +275,7 @@ Card Name: Beg, Borrow, but Mostly Steal
 Tags: Dirtbag
 Type: [ranged] Single target, X hits.
 Action Points: 5
+Friendly Fire: No
 Effects: Steal 3
 Range: 1
 Projectile Art: Placeholder.png
@@ -277,6 +293,7 @@ Card Name: Magic Tomahawk Missile
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
 Action Points: 10
+Friendly Fire: No
 Explosion Range: 5
 Range: 12
 Effects: Channel 1, FireTiles 2
@@ -296,6 +313,7 @@ Card Name: Gatormancy
 Tags: Florida Man
 Type: [ranged] Single target, X hits.
 Action Points: 10
+Friendly Fire: No
 Range: 2
 Effects: Summon 1
 Summons: Gator
@@ -310,10 +328,15 @@ Bottom Right: 0 Gator
 []
 
 []
+# Planting your feet: no target is asked for, the ground inside 'Guard 4' is
+# marked with skulls, and anybody who steps onto it - ours or theirs - stops
+# where they are, takes the three shots, and then carries on walking. The
+# marks stay until the Florida Man dies or his next turn comes round.
 Card Name: Stand Your Ground State
 Tags: Florida Man
 Type: [ranged] Single target, X hits.
 Action Points: 3
+Friendly Fire: Yes
 Range: 4
 Effects: Guard 4
 Projectile Art: Placeholder.png
@@ -321,7 +344,7 @@ Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Speed: 20
 Hit Sound: [hitbasic.wav]
-Effect: Single target. 5 times x 2 damage.
+Effect: Single target. 3 times x 2 damage.
 Card Text: Shoot anything that gets close, just like Jesus did.
 Bottom Right: 2 Gunfire
 []
@@ -335,6 +358,7 @@ Tags: Gator
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 4
+Friendly Fire: No
 Melee Time: 0.4
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
@@ -342,4 +366,56 @@ Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 8 damage.
 Card Text: Snap. Not much of a plan, but it works.
 Bottom Right: 8 Chomp
+[]
+
+# Marks a target instead of hurting one. The bullseye under their bar says the
+# next blow to land on them does half again - and anything whose damage is
+# written as a range comes up at the top of it first. One hit spends the mark.
+[]
+Card Name: Swamp Wise
+Tags: Florida Man
+Type: [ranged] Single target, X hits.
+Action Points: 2
+Friendly Fire: No
+Range: 8
+Effects: Vulnerable 3
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.3
+Speed: 24
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: You know what that one's about to do. Everybody hit it there.
+Bottom Right: 0 Marked
+[]
+
+# 'Mower 15' sends the machine off down a straight line - never a diagonal -
+# for up to fifteen squares. It runs over whatever it touches for the 1 to 20
+# on the Effect line, drives straight through anything it kills, and glances
+# off in some random direction from anything it doesn't. Past the fourth
+# square it starts to wander: a 5% chance per square of drifting one across
+# before carrying on. Every contact is a 2-in-5 chance of the whole thing
+# going up early; if it never does, it goes up at the end of the run either
+# way, for the 'Blast:' range over 'Explosion Range' squares.
+#
+# Friendly Fire is Yes and means it: this thing does not know whose side it
+# is on, and it does not steer.
+[]
+Card Name: Lawnmower with a Chainsaw
+Tags: Florida Man
+Type: [ranged] Single target, X hits.
+Action Points: 7
+Friendly Fire: Yes
+Range: 15
+Explosion Range: 3
+Effects: Mower 15
+Blast: 1 to 15
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.4
+Speed: 20
+Hit Sound: [FireballBoom.wav]
+Effect: Single target. 1 times x 1 to 20 damage.
+Card Text: A feat of redneck engineering that's as predictable as it sounds.
+Bottom Right: 20 Chainsaw
 []

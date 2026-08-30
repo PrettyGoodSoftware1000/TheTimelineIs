@@ -45,7 +45,7 @@ public class IsoLevelScreen : IScreen
         /// <summary>Watching a recording. Nothing is decided here, only shown.</summary>
         Replay,
     }
-    private enum Act { Casting, Projectile, MeleeWait, Hits }
+    private enum Act { Casting, Projectile, MeleeWait, Hits, Mowing }
 
     private const int AggroTiles = 15;
 
@@ -130,6 +130,13 @@ public class IsoLevelScreen : IScreen
     // overlays, recomputed only when the mover, position, or card changes
     private Dictionary<Point, int> _moveSet = new();
     private HashSet<Point> _rangeSet = new();
+
+    /// <summary>
+    /// Squares under somebody's guard, rebuilt each frame for drawing: the live
+    /// zones plus whatever the card in hand would add.
+    /// </summary>
+    private readonly HashSet<Point> _watchedGround = new();
+
     private bool _cardArmed;          // a card is selected or hovered: red replaces blue
     private string _rangeOpacityKey = "Range";   // "Leap" when the card jumps
     private string _blastOpacityKey = "AoE";     // "Cone" for a wedge
@@ -167,6 +174,13 @@ public class IsoLevelScreen : IScreen
     private List<Point> _walkPath = new();
     private Point _walkFrom;
     private float _walkT;
+
+    /// <summary>
+    /// Seconds the walk is holding still for. A guard's volley stops the walker
+    /// where they stand for a moment so the shots read as landing on them, and
+    /// then they carry on to where they were going.
+    /// </summary>
+    private float _walkPause;
     private Action? _afterWalk;
 
     // card / enemy action timing
@@ -566,6 +580,7 @@ public class IsoLevelScreen : IScreen
             _walkFrom = Tile(walker);
             _walkPath = new List<Point> { goal };
             _walkT = 0f;
+            _walkPause = 0f;
             _afterWalk = null;
         }
         _overlayKey = null;
@@ -880,6 +895,13 @@ public class IsoLevelScreen : IScreen
     private void UpdateWalk(float dt)
     {
         if (_walker == null) return;
+        // held still while a guard's shots land on us; the walk resumes after
+        if (_walkPause > 0f)
+        {
+            _walkPause -= dt;
+            if (_walkPause > 0f) return;
+            _walkPause = 0f;
+        }
         _walkT += dt * WalkTilesPerSec;
         while (_walkT >= 1f && _walkPath.Count > 0)
         {
@@ -895,8 +917,12 @@ public class IsoLevelScreen : IScreen
             Ignite(_walker);
             if (!_walker.Alive) { _walkPath.Clear(); break; }
 
-            // walking into somebody's field of fire draws it
+            // Stepping onto watched ground draws a volley. It only ENDS the
+            // walk if it kills; otherwise the walker stands still for a moment
+            // and then carries on to where it was going, which is what the
+            // pause below is for.
             if (CheckGuards(_walker)) { _walkPath.Clear(); break; }
+            if (_walkPause > 0f) break;
 
             if (_walker.IsPlayer && FireTrigger(arrived)) { _walkPath.Clear(); break; }
 
@@ -916,6 +942,9 @@ public class IsoLevelScreen : IScreen
                 break;
             }
         }
+        // a volley landing on the last step still gets its moment before
+        // whatever the walk was leading up to happens
+        if (_walkPause > 0f) return;
         if (_walkPath.Count == 0)
         {
             var done = _afterWalk;
@@ -1043,18 +1072,44 @@ public class IsoLevelScreen : IScreen
                 _disarmed.Remove(pad.Key);
     }
 
+    /// <summary>The ground a planted character covers: every revealed square within reach.</summary>
+    private HashSet<Point> GuardZoneAround(Point centre, int reach)
+    {
+        var zone = new HashSet<Point>();
+        foreach (var block in _level.Blocks.Values)
+        {
+            var tile = new Point(block.X, block.Y);
+            if (_revealed.Contains(block.Room) && IsoMath.GridDistance(tile, centre) <= reach)
+                zone.Add(tile);
+        }
+        return zone;
+    }
+
+    /// <summary>Whether any part of a body is standing on a guard's ground.</summary>
+    private static bool InGuardZone(CharacterInstance guard, CharacterInstance who) =>
+        who.Footprint.Any(guard.GuardZone.Contains);
+
     /// <summary>
-    /// Anyone standing their ground shoots whoever walks into range. One
-    /// approach draws one volley: the walker is remembered, so crossing back
-    /// and forth in front of a planted gun does not farm it for shots. Returns
-    /// true if the walk should stop, which it does when the walker dies.
+    /// Anyone who steps onto ground somebody is covering gets shot for it —
+    /// their own side included, since a planted gun does not check badges.
+    ///
+    /// Stepping IN is what fires it. Whoever is already inside is remembered,
+    /// so crossing the rest of the zone draws nothing more; walk out and back
+    /// in and it fires again. Returns true if the walk should stop for good,
+    /// which it does only when the walker dies — otherwise the walk pauses for
+    /// the volley and then carries on to where it was going.
     /// </summary>
     private bool CheckGuards(CharacterInstance walker)
     {
-        foreach (var guard in Everyone.Where(g =>
-                     g.Alive && g.GuardRange > 0 && g.IsPlayer != walker.IsPlayer))
+        foreach (var guard in Everyone.Where(g => g.Alive && g.IsGuarding && g != walker).ToList())
         {
-            if (guard.DistanceTo(walker) > guard.GuardRange) continue;
+            bool inside = InGuardZone(guard, walker);
+            if (!inside)
+            {
+                // stepped back out: the next step in is a fresh approach
+                guard.GuardedAgainst.Remove(walker);
+                continue;
+            }
             if (guard.GuardedAgainst.Contains(walker)) continue;
 
             guard.GuardedAgainst.Add(walker);
@@ -1071,9 +1126,149 @@ public class IsoLevelScreen : IScreen
 
             _ctx.Sounds.Play("hitbasic.wav");
             Log(report.ToString().TrimEnd());
+            // the volley reads as a pause in the walk rather than a stop: hold
+            // the walker still long enough to see it land, then let them finish
+            _walkPause = GuardPause;
             if (!walker.Alive) return true;
         }
         return false;
+    }
+
+    /// <summary>How long a walk holds still while a guard's volley lands on it.</summary>
+    private const float GuardPause = 0.45f;
+
+    // ---------------- the lawnmower ----------------
+
+    /// <summary>The run being played back, a square at a time.</summary>
+    private MowerRun? _mower;
+    private int _mowerBeat;
+    private float _mowerTimer;
+
+    /// <summary>Seconds the machine spends on each square it crosses.</summary>
+    private const float MowerTileTime = 0.11f;
+
+    /// <summary>
+    /// Works out the whole run up front, then hands it to the update loop to
+    /// play back. Deciding it all at once means the damage is settled before
+    /// any of it is drawn, so nothing can go differently depending on frame
+    /// rate — and the rules live in MowerRun, where a test can reach them.
+    /// </summary>
+    private void StartMower()
+    {
+        var card = _actingCard!;
+        var driver = _actor!;
+        var from = Tile(driver);
+        var report = new StringBuilder();
+
+        _mower = MowerRun.Drive(
+            from,
+            MowerRun.HeadingToward(from, _aimPoint),
+            card.MowerTiles,
+            ground: t => _level.BlockAt(t) is LevelBlock b && _revealed.Contains(b.Room),
+            // Only somebody this card is allowed to touch counts as something
+            // to hit. With Friendly Fire that is everyone, the driver included:
+            // a bounce can send the thing back through the man who started it,
+            // which is the whole character of the card.
+            occupant: t => WhoIsOn(t) is CharacterInstance c && MayTarget(driver, card, c)
+                ? Key(c) : null,
+            strike: (t, key) =>
+            {
+                var victim = FindByKey(key);
+                if (victim == null) return (0, false);
+                int dmg = RollDamage(card, victim);
+                ApplyHit(victim, dmg, card.DamageType, report);
+                return (dmg, !victim.Alive);
+            },
+            Rng);
+
+        if (report.Length > 0) Log(report.ToString().TrimEnd());
+        _mowerBeat = 0;
+        _mowerTimer = 0f;
+        EnterAct(Act.Mowing, 0f);
+    }
+
+    /// <summary>
+    /// A name that picks out one body on the board, since two goblins share a
+    /// name. The mower only needs to hand a reference back to itself, and this
+    /// keeps MowerRun free of any knowledge of what a character is.
+    /// </summary>
+    private static string Key(CharacterInstance c) => $"{c.Name}#{c.OccurrenceIndex}";
+
+    private CharacterInstance? FindByKey(string key) =>
+        Everyone.FirstOrDefault(c => Key(c) == key);
+
+    /// <summary>
+    /// Plays the run back one square at a time. All the damage on the way has
+    /// already been dealt; this is the picture of it. The blast at the end is
+    /// the exception — it is rolled and applied when the machine gets there,
+    /// so that anything killed on the way is already down and not counted.
+    /// </summary>
+    private void UpdateMower(float dt)
+    {
+        if (_mower == null) { FinishAction(); return; }
+        _mowerTimer -= dt;
+        if (_mowerTimer > 0f) return;
+
+        if (_mowerBeat >= _mower.Beats.Count)
+        {
+            _mower = null;
+            FinishAction();
+            return;
+        }
+
+        var beat = _mower.Beats[_mowerBeat++];
+        _mowerTimer = MowerTileTime;
+
+        switch (beat.What)
+        {
+            case MowerStep.Through:
+            case MowerStep.Bounced:
+                _ctx.Sounds.Play("hitbasic.wav");
+                break;
+            case MowerStep.Exploded:
+                BlowUpMower(beat.Tile);
+                break;
+        }
+    }
+
+    /// <summary>The blast at the end of the run: its own roll, over its own little area.</summary>
+    private void BlowUpMower(Point where)
+    {
+        var card = _actingCard!;
+        var report = new StringBuilder();
+        var area = new HashSet<Point>();
+        foreach (var block in _level.Blocks.Values)
+        {
+            var tile = new Point(block.X, block.Y);
+            if (_revealed.Contains(block.Room) &&
+                IsoMath.GridDistance(tile, where) <= Math.Max(1, card.ExplosionRange))
+                area.Add(tile);
+        }
+
+        _ctx.Sounds.Play(card.HitEvents.FirstOrDefault()?.Sound);
+        foreach (var victim in CatchableBy(_actor, card)
+                     .Where(c => c.Alive && c.Footprint.Any(area.Contains)).ToList())
+        {
+            // a marked target takes the top of the range, like any other roll
+            int dmg = victim.IsVulnerable
+                ? card.BlastMax
+                : Rng.Next(card.BlastMin, card.BlastMax + 1);
+            ApplyHit(victim, dmg, card.DamageType, report);
+        }
+        if (report.Length > 0) Log(report.ToString().TrimEnd());
+        _blastSet = area;      // leave the purple up while the last beat plays
+    }
+
+    /// <summary>
+    /// What one blow from this card is worth against this target. A card with a
+    /// fixed number always does it; one written as a range rolls. A vulnerable
+    /// target turns that roll into its highest value — the extra half is added
+    /// afterwards, in ApplyHit, so it applies to fixed damage too.
+    /// </summary>
+    private int RollDamage(Card card, CharacterInstance target)
+    {
+        if (!card.VariableDamage) return card.Damage;
+        return target.IsVulnerable ? card.Damage : Rng.Next(card.DamageMin, card.Damage + 1);
     }
 
     /// <summary>Stepping on a trigger square plays its dialogue, once.</summary>
@@ -1138,9 +1333,16 @@ public class IsoLevelScreen : IScreen
         foreach (var c in Everyone)
         {
             c.ResetActionPoints();
-            c.GuardRange = c.GuardShots = c.GuardDamage = 0;
-            c.GuardedAgainst.Clear();
+            StopGuarding(c);
         }
+    }
+
+    /// <summary>Lifts a guard zone: the ground stops being watched and the marks come off.</summary>
+    private static void StopGuarding(CharacterInstance c)
+    {
+        c.GuardZone.Clear();
+        c.GuardShots = c.GuardDamage = 0;
+        c.GuardedAgainst.Clear();
     }
 
     private void StartCombat()
@@ -1188,16 +1390,21 @@ public class IsoLevelScreen : IScreen
             _turn = (_turn + 1) % _order.Count;
             if (_order[_turn].Alive) break;
         }
-        // a guard's memory is per approach: once somebody is out of range again
-        // they can be shot for coming back
-        foreach (var g in Everyone.Where(g => g.GuardRange > 0))
-            g.GuardedAgainst.RemoveAll(t => !t.Alive || g.DistanceTo(t) > g.GuardRange);
+        // a guard forgets anybody who is no longer standing in the zone, so
+        // walking back in is a fresh approach and draws another volley
+        foreach (var g in Everyone.Where(g => g.IsGuarding))
+            g.GuardedAgainst.RemoveAll(t => !t.Alive || !InGuardZone(g, t));
 
         var current = Current!;
         _replayTurn++;
         Record(ReplayEventKind.Turn, current, amount: current.Hp,
             note: $"{current.Hp}/{current.MaxHp} hp");
-        current.MovePoints = current.GuardRange > 0 ? 0 : current.MoveMax;
+
+        // Standing your ground lasts until your next turn comes round. It cost
+        // you the rest of THAT turn's movement; it does not cost you every
+        // turn after, so the zone lifts here and you walk again.
+        if (current.IsGuarding) StopGuarding(current);
+        current.MovePoints = current.MoveMax;
         current.RefreshActionPoints();
         AgeFires(current);
         _overlayKey = null;
@@ -1219,7 +1426,8 @@ public class IsoLevelScreen : IScreen
             _petControl = null;
             foreach (var pet in LivingParty.Where(p => p.Owner == current))
             {
-                pet.MovePoints = pet.GuardRange > 0 ? 0 : pet.MoveMax;
+                if (pet.IsGuarding) StopGuarding(pet);
+                pet.MovePoints = pet.MoveMax;
                 pet.RefreshActionPoints();
             }
             _hand = HandOf(current);
@@ -1289,11 +1497,15 @@ public class IsoLevelScreen : IScreen
         var stands = card.LeapBonus > 0
             ? _moveSet.Keys.Append(here).ToList()
             : new List<Point> { here };
+        // a card that plants its caster shows the ground it will WATCH, which
+        // is measured by the Guard amount rather than by how far the card
+        // reaches — the same number the zone itself is built from
+        int reach = card.IsGuard ? card.GuardReach : card.Range;
         foreach (var block in _level.Blocks.Values)
         {
             if (!_revealed.Contains(block.Room)) continue;
             var tile = new Point(block.X, block.Y);
-            if (stands.Any(s => IsoMath.GridDistance(s, tile) <= card.Range))
+            if (stands.Any(s => IsoMath.GridDistance(s, tile) <= reach))
                 _rangeSet.Add(tile);
         }
     }
@@ -1355,6 +1567,24 @@ public class IsoLevelScreen : IScreen
             var body = _ctx.Classes.Get(card.Summons);
             return new HashSet<Point>(Pathfinder.Footprint(aim,
                 body?.SizeX ?? 1, body?.SizeY ?? 1));
+        }
+
+        // A mower shows the lane it is being pointed down: straight, no
+        // diagonals, as far as it could go. Where it ACTUALLY ends up is
+        // another matter — it wanders, and it bounces — but the lane is the
+        // decision the player is being asked to make.
+        if (card.IsMower)
+        {
+            var lane = new HashSet<Point>();
+            var step = MowerRun.HeadingToward(from, aim);
+            var at = from;
+            for (int i = 0; i < card.MowerTiles; i++)
+            {
+                at = new Point(at.X + step.X, at.Y + step.Y);
+                if (_level.BlockAt(at) is not LevelBlock b || !_revealed.Contains(b.Room)) break;
+                lane.Add(at);
+            }
+            return lane;
         }
 
         var set = new HashSet<Point>();
@@ -1439,7 +1669,9 @@ public class IsoLevelScreen : IScreen
                 else Toast(_ctx.Strings.Get("iso_needs_other"));
                 return;
             }
-            if (who.IsPlayer == aiming.TargetsAllies) TryTarget(who);
+            // with Friendly Fire this lets both sides through, so a card that
+            // does not care whose side it hits can be pointed at your own
+            if (MayTarget(Acting, aiming, who)) TryTarget(who);
             else Toast(_ctx.Strings.Get(aiming.TargetsAllies ? "iso_needs_ally" : "iso_needs_enemy"));
             return;
         }
@@ -1507,6 +1739,7 @@ public class IsoLevelScreen : IScreen
             Record(ReplayEventKind.Move, mover, from: _walkFrom, to: goal,
                 amount: _walkPath.Count);
         _walkT = 0f;
+        _walkPause = 0f;
         _afterWalk = after;
         _overlayKey = null;
     }
@@ -1589,8 +1822,12 @@ public class IsoLevelScreen : IScreen
         // A pure self-cast (changing shape, planting your feet) has nothing to
         // aim at. A summon is the exception: it acts on the caster, but WHERE
         // the creature lands is the player's call, so it still asks.
-        if (card.Damage <= 0 && !card.IsSummon &&
-            card.Effects.All(e => Data.Effects.IsSelfCast(e.Name)))
+        //
+        // A guard card goes off immediately even though it carries a damage
+        // number, because that number is what the ground does to whoever walks
+        // onto it later — there is nobody to point at now.
+        if (card.IsGuard || (card.Damage <= 0 && !card.IsSummon &&
+            card.Effects.All(e => Data.Effects.IsSelfCast(e.Name))))
         {
             PlayCard(new List<CharacterInstance>(), Tile(Acting!));
             return;
@@ -1652,16 +1889,38 @@ public class IsoLevelScreen : IScreen
             _revealed, OccupiedExcept(null));
     }
 
+    /// <summary>
+    /// Who a card is allowed to touch. Normally the other side; with Friendly
+    /// Fire it is everyone standing there, the caster's own team included.
+    ///
+    /// Sides are read from the CASTER, not from the player, so an enemy's
+    /// friendly-fire blast catches the goblin next to it exactly the way one
+    /// of ours catches the Cyborg.
+    /// </summary>
+    private IEnumerable<CharacterInstance> CatchableBy(CharacterInstance? caster, Card card)
+    {
+        if (card.FriendlyFire)
+            return LivingParty.Concat(VisibleEnemies);
+        bool casterIsPlayer = caster?.IsPlayer ?? true;
+        bool wantsPlayers = card.TargetsAllies == casterIsPlayer;
+        return wantsPlayers ? LivingParty : VisibleEnemies;
+    }
+
+    /// <summary>Whether this card may be aimed at that character, given who is casting.</summary>
+    private bool MayTarget(CharacterInstance? caster, Card card, CharacterInstance who) =>
+        CatchableBy(caster, card).Contains(who);
+
     private void PlayArea(HashSet<Point> area, Point aim)
     {
         var card = _selectedCard;
         if (card == null) return;
-        // a summon paints a square to stand on, not a blast: it hits nobody,
-        // however many people happen to be near where the creature lands
-        var caught = card.IsSummon
+        // A summon paints a square to stand on, not a blast: it hits nobody,
+        // however many people happen to be near where the creature lands. A
+        // mower catches people too, but only once it has driven into them —
+        // who that turns out to be is settled by the run, not by the aim.
+        var caught = card.IsSummon || card.IsMower
             ? new List<CharacterInstance>()
-            : (card.TargetsAllies ? (IEnumerable<CharacterInstance>)LivingParty : VisibleEnemies)
-            .Where(c => c.Footprint.Any(area.Contains)).ToList();
+            : CatchableBy(Acting, card).Where(c => c.Footprint.Any(area.Contains)).ToList();
         // the ground the card covered is remembered here, because by the time
         // the hits resolve the aim and the area are gone
         _burnArea = card.FireTileTurns > 0 ? new HashSet<Point>(area) : new HashSet<Point>();
@@ -1685,10 +1944,9 @@ public class IsoLevelScreen : IScreen
                 ("count", lit.ToString()), ("turns", turns.ToString())));
     }
 
-    /// <summary>How many enemies this card needs clicked before it can fire.</summary>
+    /// <summary>How many bodies this card needs clicked before it can fire.</summary>
     private int TargetsWanted(Card card) => card.Kind == CardKind.MultiTarget
-        ? Math.Max(1, Math.Min(card.Targets,
-            card.TargetsAllies ? LivingParty.Count : VisibleEnemies.Count))
+        ? Math.Max(1, Math.Min(card.Targets, CatchableBy(Acting, card).Count()))
         : 1;
 
     private void Commit(CharacterInstance me, Card card)
@@ -1801,12 +2059,19 @@ public class IsoLevelScreen : IScreen
     private void UpdateAction(float dt)
     {
         if (_act == Act.Hits) { UpdateHits(dt); return; }
+        if (_act == Act.Mowing) { UpdateMower(dt); return; }
 
         _actT += dt;
         if (_actDur > 0 && _actT < _actDur) return;
 
         switch (_act)
         {
+            // the machine is started once the casting is done, and then drives
+            // itself: no projectile, no hit sequence, its own phase
+            case Act.Casting when _actingCard is { IsMower: true }:
+                StartMower();
+                break;
+
             case Act.Casting when _actingCard is { Delivery: Delivery.Ranged } ranged:
                 // a shot out of the sky needs no target on the ground and no
                 // caster to leave from - it falls onto the square that was aimed at
@@ -1857,9 +2122,16 @@ public class IsoLevelScreen : IScreen
         var report = new StringBuilder();
         var struck = _victims.Where(v => v.Alive).ToList();
         foreach (var v in struck)
+        {
+            // a card written as a range rolls separately for each target, so
+            // one blast is not the same number to everybody under it
+            int blow = card.VariableDamage
+                ? RollDamage(card, v) / Math.Max(1, card.HitEvents.Count)
+                : dmg;
             // a curse makes every melee blow land harder on its victim
-            ApplyHit(v, dmg + (card.Delivery == Delivery.Melee ? v.CurseBonus : 0),
+            ApplyHit(v, blow + (card.Delivery == Delivery.Melee ? v.CurseBonus : 0),
                 card.DamageType, report);
+        }
 
         _hitIndex++;
         bool lastBlow = _hitIndex >= card.HitEvents.Count;
@@ -1937,6 +2209,19 @@ public class IsoLevelScreen : IScreen
         if (dmg <= 0 || !target.Alive) return;
         target.ShakeTimer = Recoil.Duration;
 
+        // Vulnerable pays out on the first blow to land and is then gone,
+        // however many turns it had left. Armour is worked out afterwards, so
+        // the bonus is soaked like any other damage rather than sneaking past.
+        if (target.IsVulnerable)
+        {
+            int bonus = (int)Math.Round(dmg * Data.Effects.VulnerableBonus,
+                MidpointRounding.AwayFromZero);
+            dmg += bonus;
+            target.VulnerableTurns = 0;
+            report.AppendLine(_ctx.Strings.Format("iso_vulnerable_hit",
+                ("target", target.Name), ("bonus", bonus.ToString())));
+        }
+
         int soaked = Math.Min(target.Armor, dmg);
         target.Armor -= soaked;
         int through = dmg - soaked;
@@ -1958,6 +2243,8 @@ public class IsoLevelScreen : IScreen
             report.AppendLine(_ctx.Strings.Format("battle_down", ("name", target.Name)));
             Record(ReplayEventKind.Down, _actor, target: target.Name,
                 to: Tile(target), note: _actingCard?.Name ?? "");
+            // nobody is watching that ground any more
+            StopGuarding(target);
 
             // a pet only acts on its summoner's turn, so one left behind would
             // never move again. It goes down with the hand that called it.
@@ -2057,13 +2344,19 @@ public class IsoLevelScreen : IScreen
                 }
                 else if (effect.Is(Data.Effects.Guard))
                 {
-                    // planting yourself is the whole cost: no more walking, this
-                    // turn or any turn after, until the fight ends
-                    _actor.GuardRange = effect.Amount;
+                    // Planting yourself costs the rest of your movement at
+                    // once, and marks out the ground you are covering. The zone
+                    // is worked out here and then left alone: it is a patch of
+                    // dirt, not a bubble that follows anybody.
+                    _actor.GuardZone = GuardZoneAround(Tile(_actor), card.GuardReach);
                     _actor.GuardShots = Math.Max(1, card.Hits);
                     _actor.GuardDamage = card.Damage;
                     _actor.MovePoints = 0;
-                    _actor.GuardedAgainst.Clear();
+                    // whoever is already standing in it does not get shot for
+                    // having been there first; they are marked as inside so
+                    // only stepping IN sets it off
+                    _actor.GuardedAgainst = Everyone
+                        .Where(c => c.Alive && c != _actor && InGuardZone(_actor, c)).ToList();
                     report.AppendLine(_ctx.Strings.Format("iso_guarding",
                         ("name", _actor.Name), ("range", effect.Amount.ToString()),
                         ("shots", _actor.GuardShots.ToString()),
@@ -2099,6 +2392,14 @@ public class IsoLevelScreen : IScreen
                     c.Curses.Add((effect.Amount, Data.Effects.CurseTurns));
                     report.AppendLine(_ctx.Strings.Format("iso_cursed",
                         ("name", c.Name), ("bonus", c.CurseBonus.ToString())));
+                }
+                else if (effect.Is(Data.Effects.Vulnerable))
+                {
+                    // marking somebody again just restarts the clock: there is
+                    // one bullseye, and one blow spends it
+                    c.VulnerableTurns = Math.Max(c.VulnerableTurns, effect.Amount);
+                    report.AppendLine(_ctx.Strings.Format("iso_vulnerable",
+                        ("name", c.Name), ("turns", c.VulnerableTurns.ToString())));
                 }
                 else if (effect.Is(Data.Effects.Steal))
                 {
@@ -2289,6 +2590,8 @@ public class IsoLevelScreen : IScreen
                 c.Curses[i] = (c.Curses[i].Amount, c.Curses[i].Turns - 1);
             c.Curses.RemoveAll(x => x.Turns <= 0);
         }
+        // a bullseye left unshot goes stale on the same clock
+        if (c.VulnerableTurns > 0) c.VulnerableTurns--;
         // borrowed cards run on the THIEF's clock: the turn they were taken on
         // counts as the first, so Steal 3 is "now, or either of your next two"
         for (int i = c.Stolen.Count - 1; i >= 0; i--)
@@ -2402,6 +2705,7 @@ public class IsoLevelScreen : IScreen
                 _walkFrom = Tile(me);
                 _walkPath = path;
                 _walkT = 0f;
+                _walkPause = 0f;
                 _afterWalk = NextTurn;
                 return;
             }
@@ -2497,6 +2801,16 @@ public class IsoLevelScreen : IScreen
         // cursor is over empty space.
         var hovered = FindTileAt(_pointer.ToVector2());
 
+        // Every square anybody is covering right now, plus the patch the card
+        // in hand would cover if it were played. Gathered once instead of
+        // asked per tile, since the block loop runs over the whole level.
+        _watchedGround.Clear();
+        foreach (var g in Everyone.Where(g => g.Alive && g.IsGuarding))
+            _watchedGround.UnionWith(g.GuardZone);
+        if (armed && Acting is CharacterInstance planter &&
+            (_selectedCard ?? HoveredCard()) is { IsGuard: true } plant)
+            _watchedGround.UnionWith(GuardZoneAround(Tile(planter), plant.GuardReach));
+
         foreach (var block in _level.Blocks.Values
                      .Where(b => _revealed.Contains(b.Room))
                      .OrderBy(b => b.X + b.Y).ThenBy(b => b.X))
@@ -2519,6 +2833,18 @@ public class IsoLevelScreen : IScreen
             if (_blastSet.Contains(tile))
                 Region(batch, tile, block.Height, _blastSet, new Color(190, 100, 255),
                     _blastOpacityKey, 9f);
+
+            // Ground somebody is watching, and the same patch previewed in red
+            // while the card is still in hand. Skulls are what tells the two
+            // reds apart: plain red is "this card reaches here", red with a
+            // skull is "walk here and get shot".
+            if (_watchedGround.Contains(tile))
+            {
+                Region(batch, tile, block.Height, _watchedGround, new Color(210, 40, 40),
+                    "Guard", 8f);
+                DrawSkull(batch, tile, block.Height);
+            }
+
             if (_level.TriggerAt(tile) is { Fired: false })
             {
                 Fill(batch, tile, block.Height, Color.Violet * _ctx.Config.Opacity("Trigger"));
@@ -2554,6 +2880,7 @@ public class IsoLevelScreen : IScreen
         }
 
         DrawProjectile(batch);
+        DrawMower(batch);
         DrawHud(batch);
         DrawLog(batch);
         if (DialogueActive) DrawDialogue(batch);
@@ -2612,6 +2939,20 @@ public class IsoLevelScreen : IScreen
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
         return new Rectangle((int)(c.X - IsoMath.TileW / 2f), (int)(c.Y - IsoMath.TileH / 2f),
             IsoMath.TileW, IsoMath.TileH);
+    }
+
+    /// <summary>
+    /// A small skull lying flat in the middle of a square. Deliberately much
+    /// smaller than the tile: it marks the ground as watched without hiding
+    /// what is standing on it.
+    /// </summary>
+    private void DrawSkull(SpriteBatch batch, Point tile, int height)
+    {
+        var tex = _ctx.Assets.LoadTexture("Content/Images/Effects/Skull.png");
+        var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
+        const int size = 62;
+        batch.Draw(tex, new Rectangle((int)(c.X - size / 2f), (int)(c.Y - size / 2f), size, size),
+            Color.White * 0.85f);
     }
 
     private void Fill(SpriteBatch batch, Point tile, int height, Color color)
@@ -2723,6 +3064,15 @@ public class IsoLevelScreen : IScreen
             Ui.FillRect(batch, _ctx.Pixel,
                 new Rectangle(back.X, back.Bottom + 3, barW, 6), new Color(150, 60, 200));
 
+        // marked: a bullseye under the bar, sitting below the curse stripe so
+        // the two never land on top of each other
+        if (c.IsVulnerable)
+        {
+            const int eye = 40;
+            batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Effects/Bullseye.png"),
+                new Rectangle(back.Center.X - eye / 2, back.Bottom + 12, eye, eye), Color.White);
+        }
+
         // burning: one flame per stack, sitting on the bar
         if (c.BurningStacks > 0)
         {
@@ -2753,6 +3103,32 @@ public class IsoLevelScreen : IScreen
             Ui.FillRect(batch, _ctx.Pixel,
                 new Rectangle(bar.Center.X - w / 2, baseY + row, w, 1), Color.Gold);
         }
+    }
+
+    /// <summary>
+    /// The machine, sitting on whichever square of its run it has reached. It
+    /// slides between the last square and the next rather than jumping, so a
+    /// run at eleven squares a second still reads as something driving.
+    /// </summary>
+    private void DrawMower(SpriteBatch batch)
+    {
+        if (_mode != Mode.Acting || _act != Act.Mowing || _mower == null || _actingCard == null)
+            return;
+        int i = Math.Clamp(_mowerBeat - 1, 0, _mower.Beats.Count - 1);
+        var here = _mower.Beats[i].Tile;
+        var last = i > 0 ? _mower.Beats[i - 1].Tile : here;
+        // _mowerTimer counts DOWN across one square, so this runs 0 -> 1
+        float t = MathHelper.Clamp(1f - _mowerTimer / MowerTileTime, 0f, 1f);
+
+        var a = IsoMath.ToScreen(last.X, last.Y, HeightAt(last), Origin);
+        var b = IsoMath.ToScreen(here.X, here.Y, HeightAt(here), Origin);
+        var pos = Vector2.Lerp(a, b, t);
+
+        var tex = _ctx.Assets.LoadTexture($"Content/Images/Effects/{_actingCard.ProjectileArt}");
+        var size = AssetLoader.DisplaySize(tex, AssetKind.Effect) * 2f;
+        batch.Draw(tex, pos, null, Color.White, _clock * 14f,
+            new Vector2(tex.Width / 2f, tex.Height / 2f),
+            new Vector2(size.X / tex.Width, size.Y / tex.Height), SpriteEffects.None, 0f);
     }
 
     private void DrawProjectile(SpriteBatch batch)
@@ -3117,7 +3493,11 @@ public class IsoLevelScreen : IScreen
         int hitCount = card.TargetsGround && _blastSet.Count > 0
             ? VisibleEnemies.Count(e => e.Footprint.Any(_blastSet.Contains))
             : VisibleEnemies.Count;
-        string total = card.Damage <= 0 && card.Effects.Count > 0
+        // A card that rolls its damage shows the range it rolls in. Printing
+        // only the top of it would read as a promise the card does not make.
+        string total = card.VariableDamage
+            ? $"{card.DamageMin}-{card.Damage} {card.DamageType}"
+            : card.Damage <= 0 && card.Effects.Count > 0
             ? $"+{card.Effects[0].Amount} {card.Effects[0].Name}"
             : $"{card.TotalDamage(hitCount)} {card.DamageType}";
         string range = _ctx.Strings.Format("iso_card_range", ("range", card.Range.ToString()));

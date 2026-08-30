@@ -7,6 +7,9 @@
 title = The Timeline is
 # The word below is scrambled on screen and never shows in the right order.
 title_scramble_word = fucked
+# Shown small and dim in the bottom-left corner from the moment the game
+# opens, so a screenshot always says which build it came from.
+version = Panhandle V1
 menu_new_game = New Game
 menu_continue = Continue
 
@@ -113,3 +116,5 @@ iso_summoned = {owner} calls up a {name}.
 iso_summon_no_room = There is nowhere for a {name} to stand.
 iso_guarding = {name} stands their ground: anything within {range} takes {shots} shots of {dmg}.
 iso_guard_fires = {name} opens up on {target} - {shots} shots.
+iso_vulnerable = {name} is marked - the next hit lands harder ({turns} turn(s)).
+iso_vulnerable_hit = The mark pays off: {bonus} extra on {target}.

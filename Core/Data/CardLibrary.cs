@@ -50,9 +50,19 @@ public class Card
     public List<string> Tags = new();
     public string TypeLine = "";
     public CardKind Kind;
-    public int Damage;      // per hit / per target / per enemy
+    public int Damage;      // per hit / per target / per enemy — the HIGHEST when it varies
     public int Hits = 1;    // SingleTargetHits only
     public int Targets = 1; // MultiTarget only
+
+    /// <summary>
+    /// The bottom of a damage range, written "1 to 20 damage" or "1-20 damage"
+    /// on the Effect line. 0 means the card always does exactly
+    /// <see cref="Damage"/>. When it is set, Damage is the top of the range.
+    /// </summary>
+    public int DamageMin;
+
+    /// <summary>Whether this card rolls its damage rather than always doing the same.</summary>
+    public bool VariableDamage => DamageMin > 0 && DamageMin < Damage;
 
     public Delivery Delivery = Delivery.Instant;
     /// <summary>One projectile aimed at the player's pick, vs one per target.</summary>
@@ -100,8 +110,30 @@ public class Card
     /// </summary>
     public bool IsSummon => Effects.Exists(e => e.Is(Data.Effects.Summon));
 
-    /// <summary>Cone, blast and summon cards are aimed at a square, not at a body.</summary>
-    public bool TargetsGround => Kind == CardKind.AoEDamage || Delivery == Delivery.Cone || IsSummon;
+    /// <summary>
+    /// Cone, blast, summon and mower cards are aimed at a square rather than at
+    /// a body. A mower only takes a DIRECTION from that square, but the aiming
+    /// works the same way: point at the ground and let go.
+    /// </summary>
+    public bool TargetsGround =>
+        Kind == CardKind.AoEDamage || Delivery == Delivery.Cone || IsSummon || IsMower;
+
+    /// <summary>
+    /// Whether this card hurts whoever it reaches, side regardless. A card
+    /// without it only ever touches the other team; with it, a blast catches
+    /// your own party, and a single-target shot can be pointed at them. It
+    /// reads the same way in both decks — an enemy card with friendly fire
+    /// hurts other enemies as readily as it hurts you.
+    /// </summary>
+    public bool FriendlyFire;
+
+    /// <summary>
+    /// Whether the card actually said. A missing line means No, which is the
+    /// safe way round, but the validator still asks for it: a card quietly
+    /// deciding it cannot hit your own party is exactly the kind of thing
+    /// nobody notices until it matters.
+    /// </summary>
+    public bool FriendlyFireDeclared;
 
     /// <summary>A card that only helps (Armor, no damage) is aimed at the party instead.</summary>
     public bool TargetsAllies => Damage <= 0 && Effects.Exists(e => Effects_IsFriendly(e));
@@ -137,6 +169,33 @@ public class Card
 
     /// <summary>Squares this card sets alight, for as many turns as the amount says.</summary>
     public int FireTileTurns => EffectNamed(Data.Effects.FireTiles)?.Amount ?? 0;
+
+    /// <summary>
+    /// How far the ground this card watches reaches, or 0 for a card that does
+    /// not plant its caster. This one number decides both the red patch shown
+    /// while the card is up and the zone left behind when it is played, so the
+    /// promise and the result cannot drift apart.
+    /// </summary>
+    public int GuardReach => EffectNamed(Data.Effects.Guard)?.Amount ?? 0;
+
+    /// <summary>
+    /// A card that plants its caster and watches ground. It asks for no target:
+    /// the damage on it belongs to the shots the zone fires at whoever walks
+    /// in, not to anybody chosen when it is played.
+    /// </summary>
+    public bool IsGuard => GuardReach > 0;
+
+    /// <summary>How many squares a mower this card sends off can cross. 0 for anything else.</summary>
+    public int MowerTiles => EffectNamed(Data.Effects.Mower)?.Amount ?? 0;
+
+    public bool IsMower => MowerTiles > 0;
+
+    /// <summary>
+    /// The damage a mower's final blast does, as its own range. Written on the
+    /// card as "Blast: 1 to 15", separately from the 1-to-20 the machine does
+    /// by running people over — two different numbers doing two different jobs.
+    /// </summary>
+    public int BlastMin, BlastMax;
 
     /// <summary>
     /// Degrees the projectile falls from, measured clockwise from straight
@@ -212,8 +271,8 @@ public class CardLibrary
     {
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
-        "explosion range", "action points", "sky angle", "effects", "effect", "speed", "range",
-        "summons", "form", "tags", "type", "sounds",
+        "explosion range", "action points", "friendly fire", "sky angle", "effects", "effect",
+        "speed", "range", "summons", "blast", "form", "tags", "type", "sounds",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
@@ -364,6 +423,41 @@ public class CardLibrary
                 card.Summons = value;
                 break;
 
+            case "blast":
+                // "1 to 15" or "1-15": what the explosion does, as its own roll
+                if (BareRange.Match(value) is { Success: true } b)
+                {
+                    card.BlastMin = int.Parse(b.Groups[1].Value);
+                    card.BlastMax = int.Parse(b.Groups[2].Value);
+                    if (card.BlastMin > card.BlastMax)
+                    {
+                        diag.Error(card.Source, lineNo,
+                            $"'{card.Name}': Blast '{value}' counts down — write the smaller number first");
+                        (card.BlastMin, card.BlastMax) = (card.BlastMax, card.BlastMin);
+                    }
+                }
+                else if (int.TryParse(value, out int flat) && flat > 0)
+                {
+                    card.BlastMin = card.BlastMax = flat;
+                }
+                else
+                {
+                    diag.Error(card.Source, lineNo,
+                        $"'{card.Name}': Blast must be a number or a range like '1 to 15', got '{value}'");
+                }
+                break;
+
+            case "friendly fire":
+                // only yes and no: a typo here would quietly decide whether a
+                // blast lands on your own party, which is not a thing to guess at
+                if (value.Equals("yes", StringComparison.OrdinalIgnoreCase))
+                { card.FriendlyFire = true; card.FriendlyFireDeclared = true; }
+                else if (value.Equals("no", StringComparison.OrdinalIgnoreCase))
+                { card.FriendlyFire = false; card.FriendlyFireDeclared = true; }
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Friendly Fire must be Yes or No, got '{value}'");
+                break;
+
             case "action points":
                 // 0 is a real value here: a free card that costs nothing to play
                 if (int.TryParse(value, out int ap) && ap >= 0) card.ActionCost = ap;
@@ -502,8 +596,32 @@ public class CardLibrary
         }
     }
 
+    /// <summary>"1 to 20 damage" or "1-20 damage": a roll rather than a fixed number.</summary>
+    private static readonly Regex DamageRange =
+        new(@"(\d+)\s*(?:-|to)\s*(\d+)(?=\s*damage)", RegexOptions.IgnoreCase);
+
+    /// <summary>The same pair of numbers on a line that is nothing but a range.</summary>
+    private static readonly Regex BareRange =
+        new(@"^(\d+)\s*(?:-|to)\s*(\d+)$", RegexOptions.IgnoreCase);
+
     private static void ApplyEffect(Card card, string effect, int lineNo, Diagnostics diag)
     {
+        // A range is pulled out first and replaced by its top end, so the rest
+        // of the line parses exactly as a fixed-damage one does and "3 times x
+        // 1 to 20 damage" still reads as three hits.
+        if (DamageRange.Match(effect) is { Success: true } span)
+        {
+            int lo = int.Parse(span.Groups[1].Value), hi = int.Parse(span.Groups[2].Value);
+            if (lo > hi)
+            {
+                diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': damage range '{span.Value}' counts down — write the smaller number first");
+                (lo, hi) = (hi, lo);
+            }
+            card.DamageMin = lo;
+            effect = DamageRange.Replace(effect, hi.ToString(), 1);
+        }
+
         var nums = Ints.Matches(effect).Select(m => int.Parse(m.Value)).ToList();
         string type = card.TypeLine.ToLowerInvariant();
 

@@ -146,6 +146,15 @@ public class CharacterInstance
     public int CurseBonus => Curses.Sum(c => c.Amount);
 
     /// <summary>
+    /// Turns of Vulnerable left, or 0. While it is up the next blow to land
+    /// does half again as much, and anything that rolls its damage rolls the
+    /// top of its range. That one blow spends it, however many turns were left.
+    /// </summary>
+    public int VulnerableTurns;
+
+    public bool IsVulnerable => VulnerableTurns > 0;
+
+    /// <summary>
     /// The card being channelled, if any. While this is set the character is
     /// rooted: they cannot move, and the only card they can play is this one,
     /// which releases it.
@@ -189,16 +198,27 @@ public class CharacterInstance
         party.Any(p => p.Alive && !p.IsPet);
 
     /// <summary>
-    /// How far this character shoots anything hostile that comes near, or 0
-    /// when they are not standing their ground. Set by a Guard card, and it
-    /// costs them their movement for as long as it lasts.
+    /// The squares this character is covering, painted on the ground when they
+    /// stand their ground. Empty when they are not.
+    ///
+    /// The zone is a fixed patch of GROUND, worked out once when the card is
+    /// played and left there — not a radius that follows anybody around. That
+    /// is the whole point: they cannot move while it is up, so the ground they
+    /// are watching cannot move either. It lifts when they die or when their
+    /// next turn begins.
     /// </summary>
-    public int GuardRange;
+    public HashSet<Point> GuardZone = new();
 
-    /// <summary>Shots fired at whoever walks into that range, and the damage each does.</summary>
+    public bool IsGuarding => GuardZone.Count > 0;
+
+    /// <summary>Shots fired at whoever steps into the zone, and the damage each does.</summary>
     public int GuardShots, GuardDamage;
 
-    /// <summary>Who has already been shot for coming close, so one approach draws one volley.</summary>
+    /// <summary>
+    /// Who is standing inside the zone right now. Walking in draws one volley;
+    /// crossing more of it does not draw another, but leaving and coming back
+    /// does — stepping in is what sets it off.
+    /// </summary>
     public List<CharacterInstance> GuardedAgainst = new();
 
     /// <summary>Cards lifted off somebody else and playable until the clock runs out.</summary>
@@ -252,6 +272,7 @@ public class CharacterInstance
         copy.Stolen = new List<StolenCard>(Stolen);
         copy.Lost = new List<StolenCard>(Lost);
         copy.GuardedAgainst = new List<CharacterInstance>(GuardedAgainst);
+        copy.GuardZone = new HashSet<Point>(GuardZone);
         return copy;
     }
 }

@@ -28,6 +28,7 @@ Tags: Default
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
+Friendly Fire: No
 Melee Time: 0.2
 Casting Sound: [Blank.wav]
 Casting Time: 0.5
@@ -43,6 +44,7 @@ Tags: Goblin
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 4
+Friendly Fire: No
 Melee Time: 0.2
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
@@ -58,6 +60,7 @@ Tags: Living Stone
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 6
+Friendly Fire: No
 Melee Time: 0.5
 Casting Sound: [Blank.wav]
 Casting Time: 0.75
@@ -73,6 +76,7 @@ Tags: Imp
 Type: [ranged] Single target, X hits.
 Range: 7
 Action Points: 4
+Friendly Fire: No
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.3
