@@ -16,7 +16,9 @@
 #                                            player clicks (AoE still damages
 #                                            everyone; the click only aims it)
 #                    "Multiple Projectiles" - one shot per target (default))
-# Action Points:  (What the card costs to play. 1 action point carries over.)
+# Action Points:  (What the card costs to play. Everyone earns 2 a turn and
+#                  may carry ONE unspent point forward, so 3 is the most
+#                  anybody can ever bring to a single turn.)
 # Friendly Fire: (Yes or No. Yes means the card hurts whoever it reaches,
 #                  side regardless - a blast catches your own party, and a
 #                  single shot can be aimed at them. Sides are read from the
@@ -418,4 +420,94 @@ Hit Sound: [FireballBoom.wav]
 Effect: Single target. 1 times x 1 to 20 damage.
 Card Text: A feat of redneck engineering that's as predictable as it sounds.
 Bottom Right: 20 Chainsaw
+[]
+
+# Loading different shells. These two cost nothing and hit nobody: all they do
+# is reach into the Gun-O-Mancer's own hand and change which cone he is
+# carrying. 'Replaces:' is what comes out, 'With:' is what goes in, and the
+# swap sticks to that character - a second Gun-O-Mancer keeps his own shells.
+[]
+Card Name: Lightning Shells
+Tags: Gun-O-Mancer
+Type: [ranged] Single target, X hits.
+Action Points: 0
+Friendly Fire: No
+Range: 1
+Effects: Swap 1
+Replaces: Hot Lead
+With: Shock Shot
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.2
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Break the fire rounds and load the ones that bite.
+Bottom Right: 0 Shells
+[]
+
+[]
+Card Name: Flaming Shells
+Tags: Gun-O-Mancer
+Type: [ranged] Single target, X hits.
+Action Points: 0
+Friendly Fire: No
+Range: 1
+Effects: Swap 1
+Replaces: Shock Shot
+With: Hot Lead
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.2
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Back to the ones that set things on fire.
+Bottom Right: 0 Shells
+[]
+
+# The same cone as Hot Lead - same [cone], same Range 3 - so the shape you aim
+# does not change when you change shells. What changes is what it leaves
+# behind: no fire, but everything caught loses its next turn.
+[]
+Card Name: Shock Shot
+Tags: Gun-O-Mancer
+Dealt: No
+Type: [cone] AoE damage
+Action Points: 2
+Friendly Fire: No
+Range: 3
+Effects: Stun 1
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [FireballCast.wav]
+Effect: AoE 5 shock damage to enemies
+Card Text: Spray a cone of lightning. Anything it touches drops its next turn.
+Bottom Right: 5 Shock
+[]
+
+# The screen goes black and whatever is in Florida Man/BathSalts/ plays across
+# it - single pictures for two seconds each, numbered runs like Gator1.png,
+# Gator2.png as one 30fps animation. While it is dark everyone on the board
+# pays: enemies up to 130% of their own health, so a good roll clears a room
+# and a bad one wastes a turn; the party and its pets up to 80% of theirs. The
+# Florida Man does not roll. He always comes back on 1 health, somewhere
+# within 15 tiles of where he went under.
+[]
+Card Name: Bath Salts
+Tags: Florida Man
+Type: [ranged] Single target, X hits.
+Action Points: 3
+Friendly Fire: Yes
+Range: 1
+Effects: BathSalts 1
+Projectile Art: Placeholder.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.3
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: You will not remember this. Neither will anybody still standing.
+Bottom Right: 0 Salts
 []

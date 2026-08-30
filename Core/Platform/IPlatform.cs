@@ -18,6 +18,13 @@ public interface IPlatform
     /// <summary>Where mission replays are written and read back.</summary>
     IReplayStore ReplayStore { get; }
 
+    /// <summary>
+    /// What is in a content folder. TitleContainer opens files by name but
+    /// cannot say what exists, and some art is meant to be added by dropping
+    /// pictures in rather than by listing them in a manifest.
+    /// </summary>
+    IContentIndex ContentIndex { get; }
+
     /// <summary>Non-null when the game STARTED with --devmap on desktop.</summary>
     IDevDestinationWriter? DevWriter { get; }
 

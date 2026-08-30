@@ -17,18 +17,18 @@
 Enemy: Goblin
 HP: 8
 Movement: 5
-Actions: 5
+Actions: 2
 Sprites: Goblin1.png, Goblin2.png, Goblin3.png
 
 Enemy: Living Stone
 HP: 40
 Movement: 2
-Actions: 5
+Actions: 2
 Size: 2
 Sprites: LivingStone.png
 
 Enemy: Imp
 HP: 10
 Movement: 5
-Actions: 5
+Actions: 2
 Sprites: Imp.png

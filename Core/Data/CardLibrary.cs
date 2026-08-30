@@ -185,6 +185,26 @@ public class Card
     /// </summary>
     public bool IsGuard => GuardReach > 0;
 
+    /// <summary>
+    /// A Swap card takes <see cref="Replaces"/> out of its caster's hand and
+    /// puts <see cref="With"/> there instead. Both name cards in the same deck.
+    /// </summary>
+    public string Replaces = "", With = "";
+
+    public bool IsSwap => Effects.Exists(e => e.Is(Data.Effects.Swap));
+
+    /// <summary>A card that blacks the screen out and shows pictures while it works.</summary>
+    public bool IsBathSalts => Effects.Exists(e => e.Is(Data.Effects.BathSalts));
+
+    /// <summary>
+    /// Whether this card is handed out at the start. "Dealt: No" keeps a card
+    /// out of the opening hand while still letting its holder carry it once
+    /// something puts it there — Shock Shot wears the Gun-O-Mancer's tag so he
+    /// may hold it, but he starts with Hot Lead and only gets the other cone
+    /// when Lightning Shells loads it.
+    /// </summary>
+    public bool Dealt = true;
+
     /// <summary>How many squares a mower this card sends off can cross. 0 for anything else.</summary>
     public int MowerTiles => EffectNamed(Data.Effects.Mower)?.Amount ?? 0;
 
@@ -272,7 +292,7 @@ public class CardLibrary
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
         "explosion range", "action points", "friendly fire", "sky angle", "effects", "effect",
-        "speed", "range", "summons", "blast", "form", "tags", "type", "sounds",
+        "speed", "range", "summons", "replaces", "blast", "dealt", "with", "form", "tags", "type", "sounds",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
@@ -421,6 +441,21 @@ public class CardLibrary
 
             case "summons":
                 card.Summons = value;
+                break;
+
+            case "dealt":
+                if (value.Equals("yes", StringComparison.OrdinalIgnoreCase)) card.Dealt = true;
+                else if (value.Equals("no", StringComparison.OrdinalIgnoreCase)) card.Dealt = false;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Dealt must be Yes or No, got '{value}'");
+                break;
+
+            case "replaces":
+                card.Replaces = value;
+                break;
+
+            case "with":
+                card.With = value;
                 break;
 
             case "blast":
@@ -683,7 +718,8 @@ public class CardLibrary
 
     /// <summary>Cards a class can play: any tag the class carries appears in the card's Tags.</summary>
     public List<Card> HandFor(IReadOnlyList<string> classTags) =>
-        All.Where(c => c.Tags.Intersect(classTags, StringComparer.OrdinalIgnoreCase).Any()).ToList();
+        All.Where(c => c.Dealt && c.Tags.Intersect(classTags, StringComparer.OrdinalIgnoreCase).Any())
+           .ToList();
 
     /// <summary>The cards dealt to a holder that has none of its own.</summary>
     public List<Card> DefaultHand() =>

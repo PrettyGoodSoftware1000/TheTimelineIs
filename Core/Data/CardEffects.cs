@@ -69,11 +69,32 @@ public static class Effects
     /// </summary>
     public const string Mower = "Mower";
 
+    /// <summary>
+    /// Stun N: the victim loses its next N turns outright — no walking, no
+    /// cards. The turn still comes round to them; it just goes straight past.
+    /// </summary>
+    public const string Stun = "Stun";
+
+    /// <summary>
+    /// Swap 1: exchanges one card in the caster's own hand for another, named
+    /// by the card's "Replaces:" and "With:" lines. Loading different shells
+    /// rather than firing anything, so it costs nothing and hits nobody.
+    /// </summary>
+    public const string Swap = "Swap";
+
+    /// <summary>
+    /// BathSalts 1: the screen goes black, whatever is in the caster's picture
+    /// folder plays across it, and while nobody can see, something dreadful
+    /// happens to everyone on the board — the caster very much included.
+    /// See <see cref="Iso.BathSaltsTrip"/>.
+    /// </summary>
+    public const string BathSalts = "BathSalts";
+
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
     public static readonly string[] Known =
     {
         Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles,
-        Summon, Guard, Vulnerable, Mower,
+        Summon, Guard, Vulnerable, Mower, Stun, Swap, BathSalts,
     };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
@@ -121,7 +142,9 @@ public static class Effects
         name.Equals(Leap, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Form, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Summon, StringComparison.OrdinalIgnoreCase) ||
-        name.Equals(Guard, StringComparison.OrdinalIgnoreCase);
+        name.Equals(Guard, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Swap, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(BathSalts, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>These carry a word (a form name) instead of a number.</summary>
     public static bool TakesText(string name) =>

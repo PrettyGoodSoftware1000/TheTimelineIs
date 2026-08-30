@@ -109,6 +109,26 @@ public static class ContentValidator
             if (card.Kind == CardKind.MultiTarget && card.Targets < 1)
                 diag.Error(card.Source, card.Line, $"'{card.Name}': needs at least one target");
 
+            // A swap naming a card nobody wrote would take one card out of the
+            // hand and put nothing back, leaving a hole and no explanation.
+            if (card.IsSwap)
+            {
+                if (card.Replaces.Length == 0 || card.With.Length == 0)
+                    diag.Error(card.Source, card.Line,
+                        $"'{card.Name}': swaps cards but needs both a 'Replaces:' and a 'With:' line");
+                foreach (var (field, name) in new[] { ("Replaces", card.Replaces), ("With", card.With) })
+                    if (name.Length > 0 &&
+                        !cards.All.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                        diag.Error(card.Source, card.Line,
+                            $"'{card.Name}': {field} names '{name}', which is not a card in {cards.Source}");
+            }
+            else if (card.Replaces.Length > 0 || card.With.Length > 0)
+            {
+                diag.Warn(card.Source, card.Line,
+                    $"'{card.Name}': has a Replaces/With line but no 'Effects: Swap 1', " +
+                    "so it never swaps anything");
+            }
+
             if (!card.FriendlyFireDeclared)
                 diag.Warn(card.Source, card.Line,
                     $"'{card.Name}': has no 'Friendly Fire:' line, so it is treated as No and " +
@@ -124,15 +144,15 @@ public static class ContentValidator
                         $"'{card.Name}': carries Armor and damage, so it aims at enemies " +
                         "and will armour whatever it hits");
             }
-            // a channelled card is paid for twice, but on two different turns,
-            // so what matters is that ONE play fits inside one turn's points
-            // points now pile up across turns with no ceiling, so an expensive
-            // card is a saving-up problem rather than an impossible one. Only a
-            // truly absurd cost is worth mentioning.
-            if (card.ActionCost > CharacterInstance.DefaultActionsPerTurn * 20)
+            // Only one point carries forward, so the most anybody can ever
+            // bring to a turn is one turn's worth plus that. A card dearer than
+            // this is unplayable by a normal character, not merely expensive.
+            int reachable = CharacterInstance.DefaultActionsPerTurn + CharacterInstance.MaxCarriedActions;
+            if (card.ActionCost > reachable)
                 diag.Warn(card.Source, card.Line,
-                    $"'{card.Name}': costs {card.ActionCost} points, which is more than twenty " +
-                    "turns of saving for a normal character");
+                    $"'{card.Name}': costs {card.ActionCost} points, but the most anyone can hold " +
+                    $"is {reachable} ({CharacterInstance.DefaultActionsPerTurn} a turn plus " +
+                    $"{CharacterInstance.MaxCarriedActions} carried), so nobody can play it");
             if (card.FireTileTurns > 0 && !card.TargetsGround)
                 diag.Warn(card.Source, card.Line,
                     $"'{card.Name}': FireTiles needs ground to burn, so the card should be " +
@@ -477,6 +497,8 @@ public static class ContentValidator
             "iso_steal_pick", "iso_steal_pick_form", "iso_empty_square",
             "iso_channel_start", "iso_channelling", "iso_channel_rooted", "iso_channel_waiting", "iso_fire_lit",
             "iso_vulnerable", "iso_vulnerable_hit",
+            "iso_stunned", "iso_stun_skip", "iso_swapped",
+            "iso_trip_start", "iso_trip_empty", "iso_trip_survivor", "iso_trip_woke",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

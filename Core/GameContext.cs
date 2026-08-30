@@ -31,6 +31,9 @@ public class GameContext
     public required SoundBank Sounds;
     public required ILogStore LogStore;
     public required IReplayStore ReplayStore;
+
+    /// <summary>What is in a content folder, for art added by dropping files in.</summary>
+    public required IContentIndex ContentIndex;
     public IDevDestinationWriter? DevWriter;
 
     public IScreen Screen = null!;

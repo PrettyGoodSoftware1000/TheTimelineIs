@@ -106,21 +106,28 @@ public class CharacterInstance
 
     /// <summary>
     /// Fresh points granted at the start of every turn, from the "Actions:"
-    /// line in Classes.txt or Enemies.txt. Everyone gets this many; nobody has
-    /// a ceiling.
+    /// line in Classes.txt or Enemies.txt.
     /// </summary>
     public int ActionsPerTurn = DefaultActionsPerTurn;
 
     /// <summary>What a class or enemy gets without an "Actions:" line of its own.</summary>
-    public const int DefaultActionsPerTurn = 5;
+    public const int DefaultActionsPerTurn = 2;
 
     /// <summary>
-    /// Turn start: this turn's points are ADDED to whatever is left over, with
-    /// no cap. Saving up is a real option — three quiet turns buy a card that
-    /// no single turn could pay for — and the pile is only cleared when the
-    /// fight ends, so nothing carries between battles.
+    /// The most a turn can hand forward to the next one. Holding a point back
+    /// buys you a three-card turn later; holding four back would buy a turn
+    /// nobody could answer, so the saving stops at one.
     /// </summary>
-    public void RefreshActionPoints() => ActionPoints += ActionsPerTurn;
+    public const int MaxCarriedActions = 1;
+
+    /// <summary>
+    /// Turn start: this turn's points on top of whatever was left, but only one
+    /// point may be carried. Anything past that is lost, so points are worth
+    /// spending rather than hoarding, and the pile is cleared outright when the
+    /// fight ends so nothing crosses between battles.
+    /// </summary>
+    public void RefreshActionPoints() =>
+        ActionPoints = Math.Min(ActionPoints, MaxCarriedActions) + ActionsPerTurn;
 
     /// <summary>Back to nothing saved up. Called when a fight begins and when it ends.</summary>
     public void ResetActionPoints() => ActionPoints = 0;
@@ -153,6 +160,22 @@ public class CharacterInstance
     public int VulnerableTurns;
 
     public bool IsVulnerable => VulnerableTurns > 0;
+
+    /// <summary>
+    /// Turns this character is out for. A stunned turn comes round as normal
+    /// and then goes straight past: no walking, no cards.
+    /// </summary>
+    public int StunTurns;
+
+    public bool IsStunned => StunTurns > 0;
+
+    /// <summary>
+    /// Cards this character has swapped out, by name: the one they no longer
+    /// hold, and the one they hold in its place. Loading different shells
+    /// changes what is in the hand without touching the deck everyone reads
+    /// from, so two Gun-O-Mancers can be carrying different things.
+    /// </summary>
+    public Dictionary<string, string> Swapped = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The card being channelled, if any. While this is set the character is
@@ -273,6 +296,7 @@ public class CharacterInstance
         copy.Lost = new List<StolenCard>(Lost);
         copy.GuardedAgainst = new List<CharacterInstance>(GuardedAgainst);
         copy.GuardZone = new HashSet<Point>(GuardZone);
+        copy.Swapped = new Dictionary<string, string>(Swapped, StringComparer.OrdinalIgnoreCase);
         return copy;
     }
 }

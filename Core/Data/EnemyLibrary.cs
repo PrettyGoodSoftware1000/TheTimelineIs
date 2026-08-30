@@ -12,8 +12,9 @@ public class EnemyDef
     public int Movement = 3;
 
     /// <summary>
-    /// Action points granted each turn once a fight starts. Unspent points
-    /// carry over with no ceiling, so this is a rate rather than a budget.
+    /// Action points granted each turn once a fight starts. At most one
+    /// unspent point carries into the next turn, so this is close to a hard
+    /// budget rather than an allowance to save up.
     /// </summary>
     public int Actions = CharacterInstance.DefaultActionsPerTurn;
     /// <summary>

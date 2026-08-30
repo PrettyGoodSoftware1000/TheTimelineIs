@@ -6,17 +6,17 @@
 Class: Dirtbag
 HP: 30
 Movement: 8
-Actions: 7
+Actions: 2
 
 Class: Gun-O-Mancer
 HP: 20
 Movement: 4
-Actions: 6
+Actions: 2
 
 Class: Cyborg
 HP: 50
 Movement: 5
-Actions: 5
+Actions: 2
 
 # A shapeshifter. "Form:" lines give each shape its own art; the first one is
 # where she starts. Cards carrying a matching "Form:" line only appear while
@@ -29,7 +29,7 @@ Actions: 5
 Class: Werewitch
 HP: 80
 Movement: 8
-Actions: 5
+Actions: 2
 Form: Werewolf, WerewitchWerewolf.png
 Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png
 
@@ -41,12 +41,12 @@ Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png
 Class: Florida Man
 HP: 50
 Movement: 4
-Actions: 5
+Actions: 2
 
 Summon: Gator
 Summoned By: Florida Man
 HP: 14
 Movement: 6
-Actions: 5
+Actions: 2
 Size: 2 x 1
 Sprites: Gator.png

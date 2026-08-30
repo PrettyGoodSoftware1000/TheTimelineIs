@@ -18,8 +18,9 @@ public class PlayerClass
     public int Movement = 5;
 
     /// <summary>
-    /// Action points granted each turn once a fight starts. Unspent points
-    /// carry over with no ceiling, so this is a rate rather than a budget.
+    /// Action points granted each turn once a fight starts. At most one
+    /// unspent point carries into the next turn, so this is close to a hard
+    /// budget rather than an allowance to save up.
     /// </summary>
     public int Actions = CharacterInstance.DefaultActionsPerTurn;
     public List<string> Sprites = new();   // defaults to {Name}.png
@@ -100,7 +101,7 @@ public class PlayerClass
 ///   Class: Dirtbag
 ///   HP: 15
 ///   Movement: 8
-///   Actions: 5                 (optional; points a turn, default 5)
+///   Actions: 2                 (optional; points a turn, default 2)
 ///   Sprites: Dirtbag.png            (optional; defaults to {Name}.png)
 ///   Card Tags: Dirtbag, 'Mancer     (optional; defaults to the class name)
 ///   Cast Animation: Spell/Spell.png (optional; the sheet played while this

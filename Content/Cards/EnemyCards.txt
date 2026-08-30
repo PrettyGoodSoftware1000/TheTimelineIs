@@ -43,7 +43,7 @@ Card Name: Goblin Claw
 Tags: Goblin
 Type: [melee] Single target, X hits.
 Range: 1
-Action Points: 4
+Action Points: 1
 Friendly Fire: No
 Melee Time: 0.2
 Casting Sound: [Blank.wav]
@@ -59,7 +59,7 @@ Card Name: Stone Slap
 Tags: Living Stone
 Type: [melee] Single target, X hits.
 Range: 1
-Action Points: 6
+Action Points: 1
 Friendly Fire: No
 Melee Time: 0.5
 Casting Sound: [Blank.wav]
@@ -75,7 +75,7 @@ Card Name: Firebolt
 Tags: Imp
 Type: [ranged] Single target, X hits.
 Range: 7
-Action Points: 4
+Action Points: 1
 Friendly Fire: No
 Projectile Art: Placeholder.png
 Casting Sound: [FireballCast.wav]

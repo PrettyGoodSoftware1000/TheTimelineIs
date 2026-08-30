@@ -45,7 +45,7 @@ public class IsoLevelScreen : IScreen
         /// <summary>Watching a recording. Nothing is decided here, only shown.</summary>
         Replay,
     }
-    private enum Act { Casting, Projectile, MeleeWait, Hits, Mowing }
+    private enum Act { Casting, Projectile, MeleeWait, Hits, Mowing, Tripping }
 
     private const int AggroTiles = 15;
 
@@ -136,6 +136,13 @@ public class IsoLevelScreen : IScreen
     /// zones plus whatever the card in hand would add.
     /// </summary>
     private readonly HashSet<Point> _watchedGround = new();
+
+    /// <summary>
+    /// Everyone the card being aimed would hit, outlined in red while you aim.
+    /// Rebuilt every frame from the same rule the card uses when it lands, so
+    /// what lights up is exactly what gets hurt — friendly fire included.
+    /// </summary>
+    private readonly HashSet<CharacterInstance> _doomed = new();
 
     private bool _cardArmed;          // a card is selected or hovered: red replaces blue
     private string _rangeOpacityKey = "Range";   // "Leap" when the card jumps
@@ -670,6 +677,19 @@ public class IsoLevelScreen : IScreen
         // still swing. Once it has one of its own, the default drops away.
         if (!who.IsPlayer && hand.Count == 0)
             hand = DeckOf(who).DefaultHand();
+
+        // Loaded different shells: the swapped-out card is gone from this
+        // character's hand and its replacement stands in the same slot, so the
+        // hand keeps its order and the number keys keep meaning what they did.
+        if (who.Swapped.Count > 0)
+        {
+            var deck = DeckOf(who);
+            hand = hand.Select(c =>
+                who.Swapped.TryGetValue(c.Name, out string? into) &&
+                deck.All.FirstOrDefault(x => x.Name.Equals(into, StringComparison.OrdinalIgnoreCase))
+                    is Card loaded
+                    ? loaded : c).ToList();
+        }
 
         if (who.Lost.Count > 0)
             hand = hand.Where(c => !who.Lost.Any(l =>
@@ -1231,6 +1251,175 @@ public class IsoLevelScreen : IScreen
         }
     }
 
+    // ---------------- bath salts ----------------
+
+    /// <summary>The trip being played, or null. Owns the running order of the pictures.</summary>
+    private BathSaltsTrip? _trip;
+    private float _tripT;
+    private bool _tripPaidOut;
+    private readonly List<Vector2> _tripPlaces = new();
+
+    /// <summary>Where the pictures come from, relative to whoever took them.</summary>
+    private const string BathSaltsFolder = "BathSalts";
+
+    /// <summary>What each side takes, as a fraction of their own maximum health.</summary>
+    private const float EnemyTollMax = 1.30f, PartyTollMax = 0.80f;
+
+    /// <summary>How far the caster can come round from where they went under.</summary>
+    private const int BathSaltsScatter = 15;
+
+    /// <summary>
+    /// Blacks the screen out and starts the pictures. Nothing is hurt yet: the
+    /// damage lands at the far end, while the screen is still dark, so the
+    /// board you come back to is already the board you have to deal with.
+    /// </summary>
+    private void StartTrip()
+    {
+        var taker = _actor!;
+        string folder = $"{taker.Folder}/{BathSaltsFolder}";
+        var files = _ctx.ContentIndex.Files(folder, ".png");
+
+        if (files.Count == 0)
+        {
+            // Nothing to show. The card still does what it does — being told
+            // there are no pictures is far better than a black screen that
+            // never comes back, and better than the card silently doing nothing.
+            _ctx.ReportProblem(folder,
+                $"'{_actingCard!.Name}' found no .png files here, so there is nothing to see " +
+                "— the damage still lands");
+            Toast(_ctx.Strings.Get("iso_trip_empty"));
+        }
+
+        _trip = BathSaltsTrip.From(files, Rng);
+        _tripT = 0f;
+        _tripPaidOut = false;
+
+        // one resting place per shot, picked now so a picture does not jitter
+        // around the screen while it is fading
+        _tripPlaces.Clear();
+        for (int i = 0; i < _trip.Shots.Count; i++)
+            _tripPlaces.Add(new Vector2(
+                Rng.Next(VirtualViewport.Width / 6, VirtualViewport.Width * 5 / 6),
+                Rng.Next(VirtualViewport.Height / 6, VirtualViewport.Height * 5 / 6)));
+
+        Log(_ctx.Strings.Format("iso_trip_start", ("name", taker.Name)));
+        EnterAct(Act.Tripping, 0f);
+    }
+
+    private void UpdateTrip(float dt)
+    {
+        if (_trip == null) { FinishAction(); return; }
+        _tripT += dt;
+
+        // the reckoning happens before the lights come back up
+        float payout = _trip.Duration - BathSaltsTrip.FadeSeconds;
+        if (!_tripPaidOut && _tripT >= payout)
+        {
+            _tripPaidOut = true;
+            BathSaltsToll();
+        }
+
+        if (_tripT >= _trip.Duration)
+        {
+            _trip = null;
+            FinishAction();
+        }
+    }
+
+    /// <summary>
+    /// What the salts actually do, settled while the screen is still black.
+    ///
+    /// Everyone on the board pays, both sides — enemies up to more than their
+    /// whole health, so a lucky roll clears a room and an unlucky one wastes a
+    /// turn. The one certainty is what it does to the man who took them: down
+    /// to one, and standing somewhere he did not choose.
+    /// </summary>
+    private void BathSaltsToll()
+    {
+        var taker = _actor!;
+        var report = new StringBuilder();
+
+        foreach (var c in Everyone.Where(c => c.Alive && c != taker).ToList())
+        {
+            float most = c.IsPlayer ? PartyTollMax : EnemyTollMax;
+            int dmg = (int)Math.Round(c.MaxHp * most * Rng.NextDouble());
+            if (dmg > 0) ApplyHit(c, dmg, "Bath Salts", report);
+        }
+
+        // he does not roll. He always comes out of it on one health.
+        if (taker.Alive)
+        {
+            taker.Hp = 1;
+            report.AppendLine(_ctx.Strings.Format("iso_trip_survivor", ("name", taker.Name)));
+            if (ScatterWithin(taker, BathSaltsScatter) is Point woke)
+                report.AppendLine(_ctx.Strings.Format("iso_trip_woke",
+                    ("name", taker.Name), ("x", woke.X.ToString()), ("y", woke.Y.ToString())));
+        }
+
+        if (report.Length > 0) Log(report.ToString().TrimEnd());
+        _overlayKey = null;
+    }
+
+    /// <summary>
+    /// Puts a character down on a random square within reach of where they
+    /// were, on ground their body actually fits on. Returns where they landed,
+    /// or null if there was nowhere to put them — in which case they stay put,
+    /// which is a better answer than dropping them into a wall.
+    /// </summary>
+    private Point? ScatterWithin(CharacterInstance who, int reach)
+    {
+        var from = Tile(who);
+        var taken = OccupiedExcept(who);
+        var spots = _level.Blocks.Keys
+            .Where(t => IsoMath.GridDistance(t, from) <= reach)
+            .Where(t => Pathfinder.Fits(_level, t, who.SizeX, who.SizeY, _revealed, taken))
+            .ToList();
+        if (spots.Count == 0) return null;
+
+        var landed = spots[Rng.Next(spots.Count)];
+        who.GX = landed.X;
+        who.GY = landed.Y;
+        Record(ReplayEventKind.Move, who, from: from, to: landed);
+        return landed;
+    }
+
+    /// <summary>
+    /// The trip itself, drawn over everything. Black, then whatever is in the
+    /// folder, then black again — the fade at each end is why the board never
+    /// snaps back into view with the bodies already rearranged.
+    /// </summary>
+    private void DrawTrip(SpriteBatch batch)
+    {
+        if (_trip == null) return;
+        var full = new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height);
+
+        // in over the first moments, out over the last, solid in between
+        float fade = BathSaltsTrip.FadeSeconds;
+        float dark = _tripT < fade ? _tripT / fade
+            : _tripT > _trip.Duration - fade ? Math.Max(0f, (_trip.Duration - _tripT) / fade)
+            : 1f;
+        Ui.FillRect(batch, _ctx.Pixel, full, Color.Black * Math.Clamp(dark, 0f, 1f));
+
+        // which shot are we in, and how far into it
+        float t = _tripT - fade;
+        if (t < 0f) return;
+        for (int i = 0; i < _trip.Shots.Count; i++)
+        {
+            var shot = _trip.Shots[i];
+            if (t > shot.Duration) { t -= shot.Duration; continue; }
+
+            var tex = _ctx.Assets.LoadTexture(
+                $"{_actor?.Folder}/{BathSaltsFolder}/{shot.FrameAt(t)}");
+            var size = AssetLoader.DisplaySize(tex, AssetKind.Background) * 0.45f;
+            var at = _tripPlaces[i];
+            batch.Draw(tex,
+                new Rectangle((int)(at.X - size.X / 2), (int)(at.Y - size.Y / 2),
+                    (int)size.X, (int)size.Y),
+                Color.White * (BathSaltsTrip.Opacity(shot, t) * dark));
+            return;
+        }
+    }
+
     /// <summary>The blast at the end of the run: its own roll, over its own little area.</summary>
     private void BlowUpMower(Point where)
     {
@@ -1419,6 +1608,21 @@ public class IsoLevelScreen : IScreen
         }
 
         if (!BurnAtTurnStart(current)) { NextTurn(); return; }
+
+        // Stunned: the turn arrives and goes straight past. The points and
+        // movement handed out above are spent doing nothing, which is the whole
+        // cost of it. Checked after the burn so a stunned character still cooks.
+        if (current.IsStunned)
+        {
+            current.StunTurns--;
+            current.MovePoints = 0;
+            current.ActionPoints = 0;
+            Log(_ctx.Strings.Format("iso_stun_skip",
+                ("name", current.Name), ("turns", current.StunTurns.ToString())));
+            NextTurn();
+            return;
+        }
+
         if (current.IsPlayer)
         {
             // a summoner's turn is also its pets': they get their points and
@@ -1525,6 +1729,7 @@ public class IsoLevelScreen : IScreen
     private void UpdateAim()
     {
         _blastSet = new HashSet<Point>();
+        _doomed.Clear();
 
         // While a channel is open the aim is already fixed, so the purple shows
         // where the shot is going to land instead of following the cursor. It
@@ -1534,21 +1739,64 @@ public class IsoLevelScreen : IScreen
         {
             _blastOpacityKey = waiting.Delivery == Delivery.Cone ? "Cone" : "AoE";
             _blastSet = AreaOf(waiting, Tile(held), held.ChannelAim);
+            MarkDoomed(waiting);
             return;
         }
 
-        if (_selectedCard is not { TargetsGround: true } card || Acting == null) return;
-        _blastOpacityKey = card.Delivery == Delivery.Cone ? "Cone" : "AoE";
+        var aiming = _selectedCard ?? HoveredCard();
+        if (aiming == null || Acting == null || _mode == Mode.Explore) return;
 
-        if (FindTileAt(_pointer.ToVector2()) is Point c && ReachableAim(Acting, c, card))
+        if (!aiming.TargetsGround)
+        {
+            // A card aimed at one body marks whoever the yellow square is over,
+            // so you can see who you are about to hit before you commit — and
+            // see nothing when the square is empty.
+            MarkDoomed(aiming);
+            return;
+        }
+
+        _blastOpacityKey = aiming.Delivery == Delivery.Cone ? "Cone" : "AoE";
+
+        if (FindTileAt(_pointer.ToVector2()) is Point c && ReachableAim(Acting, c, aiming))
         {
             // For a summon the purple is the creature's own outline, and it is
             // only drawn where the creature will actually go. Painting it over
             // a square the body cannot fit on would promise a placement the
             // click then refuses, which reads as a bug.
-            if (card.IsSummon && !SummonFits(card, c)) return;
-            _blastSet = AreaOf(card, Tile(Acting), c);
+            if (aiming.IsSummon && !SummonFits(aiming, c)) return;
+            _blastSet = AreaOf(aiming, Tile(Acting), c);
         }
+        MarkDoomed(aiming);
+    }
+
+    /// <summary>
+    /// Everyone this card would hit if it went off right now, so they can be
+    /// outlined in red before anybody commits to anything.
+    ///
+    /// It asks the same question the card itself asks when it lands —
+    /// CatchableBy — so Friendly Fire is answered once, in one place. Turn the
+    /// field on and your own people light up too, because they really are
+    /// about to be hit.
+    /// </summary>
+    private void MarkDoomed(Card card)
+    {
+        // a summon puts a creature down; there is nobody to hurt
+        if (card.IsSummon) return;
+
+        var reachable = CatchableBy(Acting, card).Where(c => c.Alive);
+        if (_blastSet.Count > 0)
+        {
+            foreach (var c in reachable.Where(c => c.Footprint.Any(_blastSet.Contains)))
+                _doomed.Add(c);
+            return;
+        }
+        // no area: it is whoever the cursor is sitting on, plus anybody already
+        // chosen for a card that wants several
+        foreach (var c in _targets) _doomed.Add(c);
+        if (card.TargetsGround) return;
+        if (FindTileAt(_pointer.ToVector2()) is Point tile && WhoIsOn(tile) is CharacterInstance who
+            && reachable.Contains(who) && ReachableAim(Acting!, tile, card))
+            _doomed.Add(who);
     }
 
     /// <summary>The card of that name from whichever deck the holder draws from.</summary>
@@ -1826,7 +2074,7 @@ public class IsoLevelScreen : IScreen
         // A guard card goes off immediately even though it carries a damage
         // number, because that number is what the ground does to whoever walks
         // onto it later — there is nobody to point at now.
-        if (card.IsGuard || (card.Damage <= 0 && !card.IsSummon &&
+        if (card.IsGuard || card.IsBathSalts || (card.Damage <= 0 && !card.IsSummon &&
             card.Effects.All(e => Data.Effects.IsSelfCast(e.Name))))
         {
             PlayCard(new List<CharacterInstance>(), Tile(Acting!));
@@ -2060,6 +2308,7 @@ public class IsoLevelScreen : IScreen
     {
         if (_act == Act.Hits) { UpdateHits(dt); return; }
         if (_act == Act.Mowing) { UpdateMower(dt); return; }
+        if (_act == Act.Tripping) { UpdateTrip(dt); return; }
 
         _actT += dt;
         if (_actDur > 0 && _actT < _actDur) return;
@@ -2070,6 +2319,11 @@ public class IsoLevelScreen : IScreen
             // itself: no projectile, no hit sequence, its own phase
             case Act.Casting when _actingCard is { IsMower: true }:
                 StartMower();
+                break;
+
+            // the lights go out and the pictures start: also its own phase
+            case Act.Casting when _actingCard is { IsBathSalts: true }:
+                StartTrip();
                 break;
 
             case Act.Casting when _actingCard is { Delivery: Delivery.Ranged } ranged:
@@ -2313,6 +2567,45 @@ public class IsoLevelScreen : IScreen
         _overlayKey = null;
     }
 
+    /// <summary>
+    /// Loads different shells: takes one card out of this character's hand and
+    /// puts another in its place. Only their hand changes — the deck everyone
+    /// reads from is untouched, so one Gun-O-Mancer swapping shells does not
+    /// reach into another's pockets.
+    ///
+    /// Swapping back is just another Swap card pointing the other way, which is
+    /// why there is no "unswap": Flaming Shells replaces Shock Shot with Hot
+    /// Lead exactly as Lightning Shells did the reverse.
+    /// </summary>
+    private void SwapCard(CharacterInstance who, Card card, StringBuilder report)
+    {
+        if (card.Replaces.Length == 0 || card.With.Length == 0)
+        {
+            _ctx.ReportProblem(card.Source,
+                $"'{card.Name}' swaps cards but is missing its 'Replaces:' or 'With:' line");
+            return;
+        }
+        if (DeckOf(who).All.All(c => !c.Name.Equals(card.With, StringComparison.OrdinalIgnoreCase)))
+        {
+            _ctx.ReportProblem(card.Source,
+                $"'{card.Name}' loads '{card.With}', which is not a card in {DeckOf(who).Source}");
+            return;
+        }
+
+        // a swap already pointing at this card is replaced, not stacked, so
+        // loading back and forth cannot leave a chain behind
+        foreach (var stale in who.Swapped
+                     .Where(kv => kv.Value.Equals(card.Replaces, StringComparison.OrdinalIgnoreCase))
+                     .Select(kv => kv.Key).ToList())
+            who.Swapped.Remove(stale);
+
+        who.Swapped[card.Replaces] = card.With;
+        _hand = HandOf(who);
+        _overlayKey = null;
+        report.AppendLine(_ctx.Strings.Format("iso_swapped",
+            ("name", who.Name), ("old", card.Replaces), ("new", card.With)));
+    }
+
     /// <summary>The closest square to a point where a body of this shape fits.</summary>
     private Point? NearestFreeFor(Point around, int sizeX, int sizeY, IReadOnlySet<Point> taken)
     {
@@ -2362,6 +2655,10 @@ public class IsoLevelScreen : IScreen
                         ("shots", _actor.GuardShots.ToString()),
                         ("dmg", _actor.GuardDamage.ToString())));
                 }
+                else if (effect.Is(Data.Effects.Swap))
+                {
+                    SwapCard(_actor, card, report);
+                }
                 else if (effect.Is(Data.Effects.Form))
                 {
                     ChangeForm(_actor, effect.Text, report);
@@ -2392,6 +2689,14 @@ public class IsoLevelScreen : IScreen
                     c.Curses.Add((effect.Amount, Data.Effects.CurseTurns));
                     report.AppendLine(_ctx.Strings.Format("iso_cursed",
                         ("name", c.Name), ("bonus", c.CurseBonus.ToString())));
+                }
+                else if (effect.Is(Data.Effects.Stun))
+                {
+                    // the longer of the two rather than the sum: stunning
+                    // somebody twice keeps them out until the later clock runs
+                    c.StunTurns = Math.Max(c.StunTurns, effect.Amount);
+                    report.AppendLine(_ctx.Strings.Format("iso_stunned",
+                        ("name", c.Name), ("turns", c.StunTurns.ToString())));
                 }
                 else if (effect.Is(Data.Effects.Vulnerable))
                 {
@@ -2742,6 +3047,21 @@ public class IsoLevelScreen : IScreen
             return;
         }
         _selectedCard = card;
+
+        // An area card goes off over the ground its target is standing on and
+        // catches everyone the card is allowed to catch — the caster's own side
+        // included when Friendly Fire says so.
+        //
+        // Enemies used to hand PlayCard the single body they had aimed at,
+        // whatever the card was, which quietly turned every enemy blast and
+        // every enemy cone into a one-target jab and left their Friendly Fire
+        // line doing nothing at all.
+        if (card.TargetsGround)
+        {
+            var aim = Tile(victim);
+            PlayArea(AreaOf(card, Tile(me), aim), aim);
+            return;
+        }
         PlayCard(new List<CharacterInstance> { victim }, Tile(victim));
     }
 
@@ -2884,6 +3204,9 @@ public class IsoLevelScreen : IScreen
         DrawHud(batch);
         DrawLog(batch);
         if (DialogueActive) DrawDialogue(batch);
+        // last, and over the top of everything: while the salts are working
+        // there is nothing to see but the pictures
+        DrawTrip(batch);
         _tap = null;
     }
 
@@ -3034,6 +3357,12 @@ public class IsoLevelScreen : IScreen
         else
             batch.Draw(_ctx.Assets.LoadTexture(c.SpritePath), rect, Color.White * alpha);
 
+        // About to be hit: a red box round them. Drawn for anything the aimed
+        // card would actually catch, which with Friendly Fire on means your own
+        // people light up alongside the enemies — the point being that you find
+        // that out while aiming rather than afterwards.
+        if (_doomed.Contains(c)) OutlineSprite(batch, rect);
+
         if (_targets.Contains(c))
             Ui.FillRect(batch, _ctx.Pixel,
                 new Rectangle(rect.X, rect.Y - 74, rect.Width, 12), Color.OrangeRed);
@@ -3091,6 +3420,23 @@ public class IsoLevelScreen : IScreen
     private bool IsSelected(CharacterInstance c) => _mode is Mode.Explore or Mode.FreeMove
         ? c == _selected
         : c == Current && c.IsPlayer;
+
+    /// <summary>
+    /// A red box round a sprite, marking it as something the aimed card will
+    /// hit. Drawn a little outside the art so it frames the character rather
+    /// than cutting into them.
+    /// </summary>
+    private void OutlineSprite(SpriteBatch batch, Rectangle rect)
+    {
+        const int pad = 10, thick = 6;
+        var box = new Rectangle(rect.X - pad, rect.Y - pad,
+            rect.Width + pad * 2, rect.Height + pad * 2);
+        var red = new Color(255, 45, 45);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, box.Width, thick), red);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Bottom - thick, box.Width, thick), red);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, thick, box.Height), red);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.Right - thick, box.Y, thick, box.Height), red);
+    }
 
     /// <summary>A small solid triangle pointing down, sitting on top of the health bar.</summary>
     private void DrawSelectionArrow(SpriteBatch batch, Rectangle bar)

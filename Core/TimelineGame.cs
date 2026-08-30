@@ -67,6 +67,7 @@ public class TimelineGame : Game
             Sounds = new SoundBank(),
             LogStore = _platform.LogStore,
             ReplayStore = _platform.ReplayStore,
+            ContentIndex = _platform.ContentIndex,
             DevWriter = _platform.DevWriter,
         };
 
