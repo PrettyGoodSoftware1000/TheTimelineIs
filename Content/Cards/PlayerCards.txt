@@ -294,8 +294,8 @@ Bottom Right: 0 Stolen
 Card Name: Magic Tomahawk Missile
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
-Action Points: 1
-Friendly Fire: No
+Action Points: 3
+Friendly Fire: Yes
 Explosion Range: 5
 Range: 12
 Effects: Channel 1, FireTiles 2
@@ -305,8 +305,8 @@ Casting Sound: [FireballCast.wav]
 Casting Time: 0.6
 Speed: 22
 Hit Sound: [FireballBoom.wav]
-Effect: AoE 15 fire damage to enemies
-Card Text: Play it once to start channelling - 10 points, and you cannot move. Play it again next turn for 10 more to bring it down out of the sky. 15 fire damage over a wide blast, and the ground burns for 3 turns.
+Effect: AoE 10 fire damage to enemies
+Card Text: Summon Uncle Sam's Finest. 
 Bottom Right: 15 Fire
 []
 
@@ -361,6 +361,7 @@ Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
 Friendly Fire: No
+Effects: Nimble 2
 Melee Time: 0.4
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
@@ -483,7 +484,7 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [FireballCast.wav]
 Effect: AoE 5 shock damage to enemies
-Card Text: Spray a cone of lightning. Anything it touches drops its next turn.
+Card Text: Spray a cone of lightning to stun stuff.
 Bottom Right: 5 Shock
 []
 
@@ -504,10 +505,10 @@ Range: 1
 Effects: BathSalts 1
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
-Casting Time: 0.3
+Casting Time: 2
 Speed: 20
 Hit Sound: [hitbasic.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: You will not remember this. Neither will anybody still standing.
-Bottom Right: 0 Salts
+Card Text: Black out and fuck shit up.
+Bottom Right: 0 ????
 []
