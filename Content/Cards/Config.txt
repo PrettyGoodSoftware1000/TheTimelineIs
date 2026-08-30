@@ -25,7 +25,7 @@
 
 
 Global scale: 0%
-Cast scale: 125%
+Cast scale: 0%
 Werewitch Werewolf scale: 90%
 
 
@@ -37,4 +37,4 @@ Cone opacity: 30%
 Guard opacity: 28%
 Trigger opacity: 18%
 Hover opacity: 35%
-Cast scale: 80%
+
