@@ -407,7 +407,7 @@ Bottom Right: 0 Marked
 Card Name: Lawnmower with a Chainsaw
 Tags: Florida Man
 Type: [ranged] Single target, X hits.
-Action Points: 1
+Action Points: 2
 Friendly Fire: Yes
 Range: 15
 Explosion Range: 3
@@ -415,11 +415,11 @@ Effects: Mower 15
 Blast: 1 to 15
 Projectile Art: Placeholder.png
 Casting Sound: [Blank.wav]
-Casting Time: 0.4
-Speed: 20
+Casting Time: 1.5
+Speed: 5
 Hit Sound: [FireballBoom.wav]
 Effect: Single target. 1 times x 1 to 20 damage.
-Card Text: A feat of redneck engineering that's as predictable as it sounds.
+Card Text: A horrifying feat of redneck engineering.
 Bottom Right: 20 Chainsaw
 []
 
