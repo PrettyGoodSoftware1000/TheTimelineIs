@@ -18,10 +18,17 @@ namespace TheTimelineIs.Core.Platform;
 public interface IContentIndex
 {
     /// <summary>
-    /// The files directly inside a content folder, by name only, in whatever
-    /// order the platform gives them. The path is content-relative and uses
-    /// forward slashes, e.g. "Content/Cast/PlayerCharacters/Florida Man/BathSalts".
-    /// A folder that does not exist is not an error: it comes back empty.
+    /// Files directly inside a content folder, by name only. The path is
+    /// content-relative, e.g. "Content/Cast/PlayerCharacters/Florida Man/BathSalts".
+    ///
+    /// - A missing folder comes back empty; that is not an error.
+    /// - Extensions include the dot and are matched case-insensitively.
     /// </summary>
-    IReadOnlyList<string> Files(string folder, string extension);
+    IReadOnlyList<string> Files(string folder, params string[] extensions);
+
+    /// <summary>Every picture in a folder, whatever image format it is in.</summary>
+    IReadOnlyList<string> Images(string folder) => Files(folder, ImageTypes);
+
+    /// <summary>Image formats the texture loader can read.</summary>
+    public static readonly string[] ImageTypes = { ".png", ".jpg", ".jpeg", ".bmp" };
 }

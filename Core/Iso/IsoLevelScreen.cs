@@ -37,7 +37,7 @@ namespace TheTimelineIs.Core.Iso;
 ///
 /// Stepping on a trigger square plays its dialogue block once.
 /// </summary>
-public class IsoLevelScreen : IScreen
+public partial class IsoLevelScreen : IScreen
 {
     private enum Mode
     {
@@ -52,7 +52,6 @@ public class IsoLevelScreen : IScreen
     /// <summary>How much of a sprite survives while Ctrl is held: 80% transparent.</summary>
     private const float CtrlFade = 0.2f;
     private const float WalkTilesPerSec = 5f;
-    private const int DoorReach = 2;
 
     private readonly GameContext _ctx;
     private readonly LevelData _level;
@@ -87,7 +86,19 @@ public class IsoLevelScreen : IScreen
 
     /// <summary>Set once the mission's ending has been recorded, so it is only written once.</summary>
     private bool _ended;
-    private CharacterInstance? _selected;
+    /// <summary>
+    /// Who is picked out of combat. Several at once: shift adds, ctrl toggles
+    /// one, tab or the middle button takes everybody — the way files are picked
+    /// in a file manager. In combat it only ever holds whoever's turn it is.
+    /// </summary>
+    private readonly List<CharacterInstance> _picked = new();
+
+    /// <summary>The one whose movement is shown, which is the last one added.</summary>
+    private CharacterInstance? _selected
+    {
+        get => _picked.LastOrDefault(p => p.Alive);
+        set { _picked.Clear(); if (value != null) _picked.Add(value); }
+    }
     private readonly HashSet<CharacterInstance> _freeMovers = new();
     private List<Card> _hand = new();
     private Card? _selectedCard;
@@ -160,7 +171,8 @@ public class IsoLevelScreen : IScreen
     private readonly HashSet<Point> _disarmed = new();
     private Point _pointer;
     private Point? _tap;
-    private bool _ctrl;              // square-targeting mode: see ClickSquare
+    private bool _ctrl;              // held: fades the board so the grid reads
+    private bool _shift;             // held: adds to the out-of-combat selection
     private string _toast = "";
     private float _toastTimer;
 
@@ -372,7 +384,7 @@ public class IsoLevelScreen : IScreen
     /// </summary>
     private bool PartyWiped => !CharacterInstance.AnyoneStanding(_party);
     private List<CharacterInstance> VisibleEnemies => _enemies.Where(e =>
-        e.Alive && _level.BlockAt(Tile(e)) is LevelBlock b && _revealed.Contains(b.Room)).ToList();
+        e.Alive && _level.Shown(Tile(e), _revealed)).ToList();
 
     /// <summary>Every square a character's body covers — one, unless it is a big one.</summary>
     private static IEnumerable<Point> Occupied(CharacterInstance c) => c.Footprint;
@@ -793,12 +805,16 @@ public class IsoLevelScreen : IScreen
         _pointer = input.PointerPos;
         _tap = input.Tap;
         _ctrl = input.CtrlHeld;
+        _shift = input.ShiftHeld;
         _camera += input.PanDelta;
         if (_toastTimer > 0) _toastTimer -= dt;
         if (_replaySavedTimer > 0) _replaySavedTimer -= dt;
         Recoil.Update(Everyone, dt);
         _clock += dt;
         UpdateCastAnimations(dt);
+
+        // the ~ menu answers before anything else, and swallows the frame
+        if (UpdateDevMenu(input)) return;
 
         if (_tap is Point logTap && LogToggleRect.Contains(logTap))
         {
@@ -835,6 +851,27 @@ public class IsoLevelScreen : IScreen
         if (input.AltTap.HasValue) CancelCard();
 
         if (_replayMode) { RefreshOverlays(); UpdateReplay(input, dt); return; }
+
+        // Tab or the middle button takes the whole party. Out of combat only:
+        // in a fight it is one character's turn and there is nothing to pick.
+        if (_mode is Mode.Explore or Mode.FreeMove &&
+            (input.SelectAll || input.MiddleTap.HasValue))
+        {
+            _picked.Clear();
+            _picked.AddRange(_mode == Mode.FreeMove
+                ? _freeMovers.Where(p => p.Alive)
+                : LivingParty);
+            _overlayKey = null;
+        }
+
+        // a stunned character's turn: the camera has gone to them, and nothing
+        // happens until the pause runs out
+        if (_stunHold > 0f)
+        {
+            _stunHold -= dt;
+            if (_stunHold <= 0f) { _stunHold = 0f; NextTurn(); }
+            return;
+        }
 
         // End or Space finishes the turn, and a number plays that card. Both are
         // ignored while somebody is talking or a card is mid-flight, since a key
@@ -936,6 +973,9 @@ public class IsoLevelScreen : IScreen
             // crossing burning ground catches you as surely as standing in it
             Ignite(_walker);
             if (!_walker.Alive) { _walkPath.Clear(); break; }
+
+            // standing beside a door opens it: no clicking, no reach to learn
+            if (_walker.IsPlayer) OpenDoorsBeside(_walker);
 
             // Stepping onto watched ground draws a volley. It only ENDS the
             // walk if it kills; otherwise the walker stands still for a moment
@@ -1099,7 +1139,7 @@ public class IsoLevelScreen : IScreen
         foreach (var block in _level.Blocks.Values)
         {
             var tile = new Point(block.X, block.Y);
-            if (_revealed.Contains(block.Room) && IsoMath.GridDistance(tile, centre) <= reach)
+            if (_level.Shown(tile, _revealed) && IsoMath.GridDistance(tile, centre) <= reach)
                 zone.Add(tile);
         }
         return zone;
@@ -1157,6 +1197,12 @@ public class IsoLevelScreen : IScreen
     /// <summary>How long a walk holds still while a guard's volley lands on it.</summary>
     private const float GuardPause = 0.45f;
 
+    /// <summary>Seconds a stunned character's turn is held on screen doing nothing.</summary>
+    private const float StunHoldSeconds = 1.5f;
+
+    /// <summary>Time left on that hold, or 0.</summary>
+    private float _stunHold;
+
     // ---------------- the lawnmower ----------------
 
     /// <summary>The run being played back, a square at a time.</summary>
@@ -1184,7 +1230,7 @@ public class IsoLevelScreen : IScreen
             from,
             MowerRun.HeadingToward(from, _aimPoint),
             card.MowerTiles,
-            ground: t => _level.BlockAt(t) is LevelBlock b && _revealed.Contains(b.Room),
+            ground: t => _level.Shown(t, _revealed),
             // Only somebody this card is allowed to touch counts as something
             // to hit. With Friendly Fire that is everyone, the driver included:
             // a bounce can send the thing back through the man who started it,
@@ -1257,6 +1303,9 @@ public class IsoLevelScreen : IScreen
     private BathSaltsTrip? _trip;
     private float _tripT;
     private bool _tripPaidOut;
+
+    /// <summary>Where this trip's pictures live, kept for as long as they are on screen.</summary>
+    private string _tripFolder = "";
     private readonly List<Vector2> _tripPlaces = new();
 
     /// <summary>Where the pictures come from, relative to whoever took them.</summary>
@@ -1268,6 +1317,9 @@ public class IsoLevelScreen : IScreen
     /// <summary>How far the caster can come round from where they went under.</summary>
     private const int BathSaltsScatter = 15;
 
+    /// <summary>The most of the screen one picture may take up, on its longer side.</summary>
+    private const float TripPictureShare = 0.55f;
+
     /// <summary>
     /// Blacks the screen out and starts the pictures. Nothing is hurt yet: the
     /// damage lands at the far end, while the screen is still dark, so the
@@ -1276,16 +1328,19 @@ public class IsoLevelScreen : IScreen
     private void StartTrip()
     {
         var taker = _actor!;
-        string folder = $"{taker.Folder}/{BathSaltsFolder}";
-        var files = _ctx.ContentIndex.Files(folder, ".png");
+        // Remembered rather than looked up again while drawing: _actor is
+        // cleared the moment the card finishes, and the pictures are still
+        // fading out at that point.
+        _tripFolder = $"{taker.Folder}/{BathSaltsFolder}";
+        var files = _ctx.ContentIndex.Images(_tripFolder);
 
         if (files.Count == 0)
         {
             // Nothing to show. The card still does what it does — being told
             // there are no pictures is far better than a black screen that
             // never comes back, and better than the card silently doing nothing.
-            _ctx.ReportProblem(folder,
-                $"'{_actingCard!.Name}' found no .png files here, so there is nothing to see " +
+            _ctx.ReportProblem(_tripFolder,
+                $"'{_actingCard!.Name}' found no pictures here, so there is nothing to see " +
                 "— the damage still lands");
             Toast(_ctx.Strings.Get("iso_trip_empty"));
         }
@@ -1294,13 +1349,14 @@ public class IsoLevelScreen : IScreen
         _tripT = 0f;
         _tripPaidOut = false;
 
-        // one resting place per shot, picked now so a picture does not jitter
-        // around the screen while it is fading
+        // One resting place per shot, picked now so a picture does not jitter
+        // around the screen while it is fading. Kept as a 0..1 fraction and
+        // turned into pixels at draw time, once the picture's real size is
+        // known — a centre chosen in pixels would hang a big picture half off
+        // the edge of the screen.
         _tripPlaces.Clear();
         for (int i = 0; i < _trip.Shots.Count; i++)
-            _tripPlaces.Add(new Vector2(
-                Rng.Next(VirtualViewport.Width / 6, VirtualViewport.Width * 5 / 6),
-                Rng.Next(VirtualViewport.Height / 6, VirtualViewport.Height * 5 / 6)));
+            _tripPlaces.Add(new Vector2((float)Rng.NextDouble(), (float)Rng.NextDouble()));
 
         Log(_ctx.Strings.Format("iso_trip_start", ("name", taker.Name)));
         EnterAct(Act.Tripping, 0f);
@@ -1408,13 +1464,22 @@ public class IsoLevelScreen : IScreen
             var shot = _trip.Shots[i];
             if (t > shot.Duration) { t -= shot.Duration; continue; }
 
-            var tex = _ctx.Assets.LoadTexture(
-                $"{_actor?.Folder}/{BathSaltsFolder}/{shot.FrameAt(t)}");
-            var size = AssetLoader.DisplaySize(tex, AssetKind.Background) * 0.45f;
+            var tex = _ctx.Assets.LoadTexture($"{_tripFolder}/{shot.FrameAt(t)}");
+            // Fitted to a share of the screen, aspect kept. Sizing these the way
+            // backgrounds are sized made a square picture fill the screen and a
+            // tall one come out a third of the height, from the same folder.
+            float fit = Math.Min(
+                VirtualViewport.Width * TripPictureShare / tex.Width,
+                VirtualViewport.Height * TripPictureShare / tex.Height);
+            var size = new Vector2(tex.Width * fit, tex.Height * fit);
+            // the fraction picks a corner somewhere in the room the picture
+            // leaves over, so it always lands fully on screen
             var at = _tripPlaces[i];
+            var corner = new Vector2(
+                at.X * Math.Max(0f, VirtualViewport.Width - size.X),
+                at.Y * Math.Max(0f, VirtualViewport.Height - size.Y));
             batch.Draw(tex,
-                new Rectangle((int)(at.X - size.X / 2), (int)(at.Y - size.Y / 2),
-                    (int)size.X, (int)size.Y),
+                new Rectangle((int)corner.X, (int)corner.Y, (int)size.X, (int)size.Y),
                 Color.White * (BathSaltsTrip.Opacity(shot, t) * dark));
             return;
         }
@@ -1429,7 +1494,7 @@ public class IsoLevelScreen : IScreen
         foreach (var block in _level.Blocks.Values)
         {
             var tile = new Point(block.X, block.Y);
-            if (_revealed.Contains(block.Room) &&
+            if (_level.Shown(tile, _revealed) &&
                 IsoMath.GridDistance(tile, where) <= Math.Max(1, card.ExplosionRange))
                 area.Add(tile);
         }
@@ -1460,11 +1525,21 @@ public class IsoLevelScreen : IScreen
         return target.IsVulnerable ? card.Damage : Rng.Next(card.DamageMin, card.Damage + 1);
     }
 
-    /// <summary>Stepping on a trigger square plays its dialogue, once.</summary>
+    /// <summary>
+    /// Stepping on a trigger square plays its dialogue, once.
+    ///
+    /// Once per DIALOGUE, not once per square. Painting the same conversation
+    /// across a doorway is the normal way to catch a party however it walks in,
+    /// and every one of those squares firing meant hearing the same speech four
+    /// times. Every square carrying that name is spent the first time any of
+    /// them goes off.
+    /// </summary>
     private bool FireTrigger(Point tile)
     {
         if (_level.TriggerAt(tile) is not LevelTrigger trigger || trigger.Fired) return false;
-        trigger.Fired = true;
+        foreach (var t in _level.Triggers.Where(t =>
+                     t.Dialogue.Equals(trigger.Dialogue, StringComparison.OrdinalIgnoreCase)))
+            t.Fired = true;
         var lines = _dialogue.Get(trigger.Dialogue);
         if (lines == null || lines.Count == 0)
         {
@@ -1489,6 +1564,14 @@ public class IsoLevelScreen : IScreen
                 if (CheckAggro(p)) break;
     }
 
+    /// <summary>
+    /// Who gets a free move when a fight starts. Only the Dirtbag, who cheats.
+    /// Named rather than flagged in Classes.txt because it is a joke about one
+    /// character, not a stat anybody else should be able to buy.
+    /// </summary>
+    private static bool IsCheat(CharacterInstance c) =>
+        c.Name.Equals("Dirtbag", StringComparison.OrdinalIgnoreCase);
+
     private bool CheckAggro(CharacterInstance mover)
     {
         var seen = VisibleEnemies.Where(e =>
@@ -1498,16 +1581,28 @@ public class IsoLevelScreen : IScreen
         foreach (var e in seen) _aggroed.Add(e);
         if (_mode is Mode.Explore)
         {
+            // Nobody gets a free shuffle when a fight starts any more: you
+            // fight from where you were caught. The Dirtbag cheats, and gets
+            // one whatever happened — including when it was him who walked
+            // into them.
             _freeMovers.Clear();
-            foreach (var p in LivingParty.Where(p => p != mover))
+            foreach (var p in LivingParty.Where(IsCheat))
             {
                 p.MovePoints = p.MoveMax;
                 _freeMovers.Add(p);
             }
-            _mode = Mode.FreeMove;
-            _selected = _freeMovers.FirstOrDefault();
-            _overlayKey = null;
-            Log(_ctx.Strings.Get("iso_spotted"));
+            if (_freeMovers.Count > 0)
+            {
+                _mode = Mode.FreeMove;
+                _selected = _freeMovers.FirstOrDefault();
+                _overlayKey = null;
+                Log(_ctx.Strings.Format("iso_spotted",
+                    ("name", _freeMovers.First().Name)));
+            }
+            else
+            {
+                StartCombat();
+            }
         }
         return true;
     }
@@ -1612,6 +1707,10 @@ public class IsoLevelScreen : IScreen
         // Stunned: the turn arrives and goes straight past. The points and
         // movement handed out above are spent doing nothing, which is the whole
         // cost of it. Checked after the burn so a stunned character still cooks.
+        //
+        // It is SHOWN rather than skipped in silence: the camera goes to them
+        // and holds for a moment, so a turn that produces no action still reads
+        // as somebody's turn rather than as the game having missed one out.
         if (current.IsStunned)
         {
             current.StunTurns--;
@@ -1619,7 +1718,9 @@ public class IsoLevelScreen : IScreen
             current.ActionPoints = 0;
             Log(_ctx.Strings.Format("iso_stun_skip",
                 ("name", current.Name), ("turns", current.StunTurns.ToString())));
-            NextTurn();
+            RecenterOn(current);
+            _stunHold = StunHoldSeconds;
+            _mode = current.IsPlayer ? Mode.PlayerTurn : Mode.EnemyTurn;
             return;
         }
 
@@ -1707,8 +1808,8 @@ public class IsoLevelScreen : IScreen
         int reach = card.IsGuard ? card.GuardReach : card.Range;
         foreach (var block in _level.Blocks.Values)
         {
-            if (!_revealed.Contains(block.Room)) continue;
             var tile = new Point(block.X, block.Y);
+            if (!_level.Shown(tile, _revealed)) continue;
             if (stands.Any(s => IsoMath.GridDistance(s, tile) <= reach))
                 _rangeSet.Add(tile);
         }
@@ -1829,7 +1930,7 @@ public class IsoLevelScreen : IScreen
             for (int i = 0; i < card.MowerTiles; i++)
             {
                 at = new Point(at.X + step.X, at.Y + step.Y);
-                if (_level.BlockAt(at) is not LevelBlock b || !_revealed.Contains(b.Room)) break;
+                if (!_level.Shown(at, _revealed)) break;
                 lane.Add(at);
             }
             return lane;
@@ -1838,8 +1939,8 @@ public class IsoLevelScreen : IScreen
         var set = new HashSet<Point>();
         foreach (var block in _level.Blocks.Values)
         {
-            if (!_revealed.Contains(block.Room)) continue;
             var tile = new Point(block.X, block.Y);
+            if (!_level.Shown(tile, _revealed)) continue;
             bool hit = card.Delivery == Delivery.Cone
                 ? IsoMath.InCone(from, aim, tile, card.Range)
                 : IsoMath.GridDistance(tile, aim) <= card.ExplosionRange;
@@ -1894,6 +1995,30 @@ public class IsoLevelScreen : IScreen
     }
 
     /// <summary>
+    /// Clicking a character out of combat, with the modifier keys behaving the
+    /// way they do when picking files:
+    ///
+    /// - plain click replaces the selection with this one
+    /// - shift adds to it
+    /// - ctrl adds this one, or drops it if it was already picked
+    /// </summary>
+    private void PickCharacter(CharacterInstance who)
+    {
+        if (_ctrl)
+        {
+            if (!_picked.Remove(who)) _picked.Add(who);
+            return;
+        }
+        if (_shift)
+        {
+            if (!_picked.Contains(who)) _picked.Add(who);
+            return;
+        }
+        _picked.Clear();
+        _picked.Add(who);
+    }
+
+    /// <summary>
     /// A click resolved by square — the one the yellow cursor is sitting on.
     /// With a card up it plays on whoever stands there; without one it is a
     /// move, or a selection when a party member is on the square.
@@ -1926,30 +2051,49 @@ public class IsoLevelScreen : IScreen
 
         if (who is { IsPlayer: true })
         {
-            if (_mode == Mode.Explore) { _selected = who; _overlayKey = null; }
+            if (_mode == Mode.Explore) { PickCharacter(who); _overlayKey = null; }
             else if (_mode == Mode.FreeMove && _freeMovers.Contains(who))
-            { _selected = who; _overlayKey = null; }
+            { PickCharacter(who); _overlayKey = null; }
             else if (_mode is Mode.PlayerTurn or Mode.PlayerTarget) TakeControlOf(who);
             return;
         }
 
-        if (_level.DoorAt(tile) is LevelDoor d && !d.Open && _mode is Mode.Explore &&
-            LivingParty.Any(p => p.DistanceTo(tile) <= DoorReach))
-        {
-            OpenDoor(d);
-            return;
-        }
         HandleTileClick(tile);
     }
 
+    /// <summary>
+    /// Opens any door this character is now standing next to.
+    ///
+    /// Walking up to a door is the whole interaction. It used to want a click,
+    /// from within two squares, which meant knowing there was a door there
+    /// before you could see the room it opened onto.
+    /// </summary>
+    private void OpenDoorsBeside(CharacterInstance who)
+    {
+        foreach (var square in who.Footprint.SelectMany(LevelData.Beside).Distinct().ToList())
+            if (_level.DoorAt(square) is { Open: false } door &&
+                _level.RoomsBeside(square).Count >= 2)
+                OpenDoor(door);
+    }
+
+    /// <summary>
+    /// Opens a doorway and reveals the rooms on both sides of it. The rooms are
+    /// read off the squares beside the door rather than stored on it, and the
+    /// whole run of touching doorway squares opens together — a two-square gap
+    /// is one door, not two.
+    /// </summary>
     private void OpenDoor(LevelDoor door)
     {
-        door.Open = true;
-        _revealed.Add(door.RoomA);
-        _revealed.Add(door.RoomB);
+        var group = _level.DoorGroup(door);
+        foreach (var d in group)
+        {
+            d.Open = true;
+            foreach (string room in _level.RoomsBeside(d.Tile))
+                _revealed.Add(room);
+        }
         _overlayKey = null;
         Log(_ctx.Strings.Get("iso_door_open"));
-        var nearest = LivingParty.OrderBy(p => door.Tiles.Min(p.DistanceTo)).First();
+        var nearest = LivingParty.OrderBy(p => group.Min(d => p.DistanceTo(d.Tile))).First();
         CheckAggro(nearest);
     }
 
@@ -1969,10 +2113,61 @@ public class IsoLevelScreen : IScreen
             Toast(_ctx.Strings.Get("iso_move_spent"));
             return;
         }
+        // Out of combat the whole selection walks. Everybody heads for the free
+        // square nearest where you clicked, so a click never simply refuses
+        // because four people will not fit on one tile.
+        if (_mode == Mode.Explore && _picked.Count > 1)
+        {
+            MarchTo(tile);
+            return;
+        }
+
         if (!_moveSet.TryGetValue(tile, out int spent)) return;
 
         if (_mode != Mode.Explore) mover.MovePoints -= spent;
         BeginWalk(mover, tile, null);
+    }
+
+    /// <summary>
+    /// Sends everybody picked towards one square. The nearest walks onto it and
+    /// the rest take the closest free ground they can reach, so a group move
+    /// always happens rather than being refused for want of room.
+    ///
+    /// They are walked one after another — the engine animates one walker at a
+    /// time — with each leg starting when the one before it lands.
+    /// </summary>
+    private void MarchTo(Point goal)
+    {
+        var going = _picked.Where(p => p.Alive).ToList();
+        if (going.Count == 0) return;
+
+        // nearest first, so the one already closest gets the square itself
+        var order = going.OrderBy(p => p.DistanceTo(goal)).ToList();
+        var claimed = new HashSet<Point>();
+        var legs = new List<(CharacterInstance Who, Point Where)>();
+        foreach (var who in order)
+        {
+            var taken = OccupiedExcept(who);
+            foreach (var c in claimed) taken.Add(c);
+            var spot = _level.Blocks.Keys
+                .Where(t => Pathfinder.Fits(_level, t, who.SizeX, who.SizeY, _revealed, taken))
+                .OrderBy(t => IsoMath.GridDistance(t, goal))
+                .ThenBy(t => IsoMath.GridDistance(t, Tile(who)))
+                .Cast<Point?>()
+                .FirstOrDefault();
+            if (spot is not Point at) continue;
+            foreach (var t in Pathfinder.Footprint(at, who.SizeX, who.SizeY)) claimed.Add(t);
+            legs.Add((who, at));
+        }
+        WalkInTurn(legs, 0);
+    }
+
+    /// <summary>One walker at a time, each starting when the last one arrives.</summary>
+    private void WalkInTurn(List<(CharacterInstance Who, Point Where)> legs, int i)
+    {
+        if (i >= legs.Count) return;
+        var (who, where) = legs[i];
+        BeginWalk(who, where, () => WalkInTurn(legs, i + 1));
     }
 
     private void BeginWalk(CharacterInstance mover, Point goal, Action? after, Card? via = null)
@@ -3070,7 +3265,7 @@ public class IsoLevelScreen : IScreen
     private Point? FindTileAt(Vector2 screen)
     {
         foreach (var b in _level.Blocks.Values
-                     .Where(b => _revealed.Contains(b.Room))
+                     .Where(b => _level.Shown(new Point(b.X, b.Y), _revealed))
                      .OrderByDescending(b => b.X + b.Y))
             if (IsoMath.HitsTop(screen, b.X, b.Y, b.Height, Origin))
                 return new Point(b.X, b.Y);
@@ -3132,7 +3327,7 @@ public class IsoLevelScreen : IScreen
             _watchedGround.UnionWith(GuardZoneAround(Tile(planter), plant.GuardReach));
 
         foreach (var block in _level.Blocks.Values
-                     .Where(b => _revealed.Contains(b.Room))
+                     .Where(b => _level.Shown(new Point(b.X, b.Y), _revealed))
                      .OrderBy(b => b.X + b.Y).ThenBy(b => b.X))
         {
             DrawBlock(batch, block);
@@ -3147,7 +3342,11 @@ public class IsoLevelScreen : IScreen
                     Region(batch, tile, block.Height, _rangeSet, new Color(255, 70, 70),
                         _rangeOpacityKey, 7f);
             }
-            else if (_moveSet.ContainsKey(tile))
+            // Out of combat there is no blue: movement is not rationed there, so
+            // painting where you "can" reach was colouring in the whole level
+            // and saying nothing. In a fight the wash is the budget, and means
+            // something again.
+            else if (_mode != Mode.Explore && _moveSet.ContainsKey(tile))
                 Region(batch, tile, block.Height, _moveSet.Keys, new Color(90, 150, 255),
                     "Movement", 7f);
             if (_blastSet.Contains(tile))
@@ -3174,7 +3373,9 @@ public class IsoLevelScreen : IScreen
             // Whose turn it is, or who is picked in Explore: green under their
             // feet. Drawn before the yellow so the cursor still reads clearly
             // when it is over the selected character's own square.
-            if (Chosen is CharacterInstance picked && picked.Covers(tile))
+            // green under everyone picked, not only the last one clicked, so a
+            // group selection is visible as a group
+            if (Picked.Any(p => p.Covers(tile)))
             {
                 Fill(batch, tile, block.Height, Color.LimeGreen * _ctx.Config.Opacity("Selected"));
                 Edge(batch, tile, block.Height, Color.LimeGreen);
@@ -3207,6 +3408,7 @@ public class IsoLevelScreen : IScreen
         // last, and over the top of everything: while the salts are working
         // there is nothing to see but the pictures
         DrawTrip(batch);
+        DrawDevMenu(batch);
         _tap = null;
     }
 
@@ -3351,17 +3553,19 @@ public class IsoLevelScreen : IScreen
         // it starts or stops. Everything below still hangs off the sprite's own
         // rect, so a wide frame overflows sideways without dragging the health
         // bar out with it.
+        var art = _ctx.Assets.LoadTexture(c.SpritePath);
         if (c.CastAnim is SpriteAnimation anim)
             batch.Draw(anim.Sheet, anim.RectFor(rect),
                 anim.SourceRect(anim.FrameAt(c.CastAnimTime)), Color.White * alpha);
         else
-            batch.Draw(_ctx.Assets.LoadTexture(c.SpritePath), rect, Color.White * alpha);
+            batch.Draw(art, rect, Color.White * alpha);
 
-        // About to be hit: a red box round them. Drawn for anything the aimed
+        // About to be hit: a red line round them. Drawn for anything the aimed
         // card would actually catch, which with Friendly Fire on means your own
         // people light up alongside the enemies — the point being that you find
-        // that out while aiming rather than afterwards.
-        if (_doomed.Contains(c)) OutlineSprite(batch, rect);
+        // that out while aiming rather than afterwards. Traced off the standing
+        // sprite even mid-cast, so the shape does not flicker frame to frame.
+        if (_doomed.Contains(c)) OutlineSprite(batch, art, rect);
 
         if (_targets.Contains(c))
             Ui.FillRect(batch, _ctx.Pixel,
@@ -3393,13 +3597,19 @@ public class IsoLevelScreen : IScreen
             Ui.FillRect(batch, _ctx.Pixel,
                 new Rectangle(back.X, back.Bottom + 3, barW, 6), new Color(150, 60, 200));
 
-        // marked: a bullseye under the bar, sitting below the curse stripe so
-        // the two never land on top of each other
-        if (c.IsVulnerable)
+        // Marks under the bar, below the curse stripe so nothing overlaps.
+        // Side by side when a character has both, rather than stacked on top
+        // of one another.
+        const int mark = 40;
+        var marks = new List<string>();
+        if (c.IsVulnerable) marks.Add("Bullseye");
+        if (c.IsStunned) marks.Add("Stun");
+        for (int i = 0; i < marks.Count; i++)
         {
-            const int eye = 40;
-            batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Effects/Bullseye.png"),
-                new Rectangle(back.Center.X - eye / 2, back.Bottom + 12, eye, eye), Color.White);
+            int row = marks.Count * mark + (marks.Count - 1) * 6;
+            int x = back.Center.X - row / 2 + i * (mark + 6);
+            batch.Draw(_ctx.Assets.LoadTexture($"Content/Images/Effects/{marks[i]}.png"),
+                new Rectangle(x, back.Bottom + 12, mark, mark), Color.White);
         }
 
         // burning: one flame per stack, sitting on the bar
@@ -3416,27 +3626,31 @@ public class IsoLevelScreen : IScreen
         }
     }
 
-    /// <summary>Who the blue movement region belongs to right now.</summary>
+    /// <summary>Everyone marked right now: the picked group, or whoever's turn it is.</summary>
+    private IEnumerable<CharacterInstance> Picked =>
+        _mode is Mode.Explore or Mode.FreeMove
+            ? _picked.Where(p => p.Alive)
+            : Chosen is CharacterInstance one ? new[] { one } : Enumerable.Empty<CharacterInstance>();
+
     private bool IsSelected(CharacterInstance c) => _mode is Mode.Explore or Mode.FreeMove
-        ? c == _selected
+        ? _picked.Contains(c)
         : c == Current && c.IsPlayer;
 
+    /// <summary>How thick the "about to be hit" outline is, in the art's own pixels.</summary>
+    private const int DoomedOutline = 3;
+
     /// <summary>
-    /// A red box round a sprite, marking it as something the aimed card will
-    /// hit. Drawn a little outside the art so it frames the character rather
-    /// than cutting into them.
+    /// Traces a red line round the ART of a sprite — the drawn pixels, soft
+    /// edges included — rather than round its canvas.
+    ///
+    /// A character sits in a PNG that is mostly empty, so boxing the canvas
+    /// drew a rectangle floating well clear of them and, with several marked at
+    /// once, a row of boxes that told you nothing about who was where. The
+    /// outline is a texture built once per sprite and stretched over it, so
+    /// this is one draw call however complicated the silhouette.
     /// </summary>
-    private void OutlineSprite(SpriteBatch batch, Rectangle rect)
-    {
-        const int pad = 10, thick = 6;
-        var box = new Rectangle(rect.X - pad, rect.Y - pad,
-            rect.Width + pad * 2, rect.Height + pad * 2);
-        var red = new Color(255, 45, 45);
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, box.Width, thick), red);
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Bottom - thick, box.Width, thick), red);
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, thick, box.Height), red);
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.Right - thick, box.Y, thick, box.Height), red);
-    }
+    private void OutlineSprite(SpriteBatch batch, Texture2D art, Rectangle rect) =>
+        batch.Draw(_ctx.Assets.Outline(art, DoomedOutline), rect, new Color(255, 45, 45));
 
     /// <summary>A small solid triangle pointing down, sitting on top of the health bar.</summary>
     private void DrawSelectionArrow(SpriteBatch batch, Rectangle bar)
@@ -3578,7 +3792,9 @@ public class IsoLevelScreen : IScreen
                     new Rectangle(0, 40, VirtualViewport.Width, 90), Color.White * 0.7f, 0.34f);
                 break;
             case Mode.FreeMove:
-                Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("iso_spotted"),
+                Ui.DrawTextCentered(batch, _ctx.Font,
+                    _ctx.Strings.Format("iso_spotted",
+                        ("name", _freeMovers.FirstOrDefault()?.Name ?? "")),
                     new Rectangle(0, 40, VirtualViewport.Width, 90), Color.OrangeRed, 0.42f);
                 if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, DoneRect, _ctx.Strings.Get("iso_done"), _tap))
                 { _freeMovers.Clear(); StartCombat(); }

@@ -16,31 +16,25 @@
 #              so it earns a lighter wash)
 #   AoE      - purple, a blast card's explosion radius
 #   Cone     - purple, a cone card's wedge
+#   Guard    - red with skulls, ground somebody is standing guard over
 #   Trigger  - violet, an unfired dialogue square
-#   Hover    - yellow, the square under the cursor. Always shown, so long as
-#              the cursor is over a square at all
-#   Selected - green, under the party member being moved or whose turn it is
+#   Hover    - yellow, the square under the cursor while Ctrl is held
 
 
 
 
 
-# A shapeshifter's shapes can be sized separately: "<Class> <Form> scale" beats
-# the class's own line. The wolf and the witch are different art and rarely
-# want the same size.
-#   Werewitch Werewolf scale: 90%
-#   Werewitch Witch scale: 105%
 Global scale: 0%
-Cast scale: 125%
-
-
+Cast scale: 0%
+Werewitch Werewolf scale: 90%
+Gator scale: 30%
 
 Movement opacity: 20%
 Range opacity: 18%
 Leap opacity: 10%
 AoE opacity: 30%
 Cone opacity: 30%
+Guard opacity: 28%
 Trigger opacity: 18%
 Hover opacity: 35%
-Selected opacity: 30%
-Cast scale: 80%
+

@@ -118,6 +118,9 @@ public class DesktopInput : IInputSource
         state.Undo = state.CtrlHeld && Pressed(keys, Keys.Z);
         state.ToggleDevMap = state.CtrlHeld && Pressed(keys, Keys.D);
         state.ToggleControls = Pressed(keys, Keys.Insert);
+        state.SelectAll = Pressed(keys, Keys.Tab);
+        // OemTilde is the ` / ~ key; shifted or not, it means the same thing here
+        state.ToggleDevMenu = Pressed(keys, Keys.OemTilde);
         state.Copy = state.CtrlHeld && Pressed(keys, Keys.C);
         state.Paste = state.CtrlHeld && Pressed(keys, Keys.V);
         if (mouse.MiddleButton == ButtonState.Pressed && _prevMouse.MiddleButton == ButtonState.Released)

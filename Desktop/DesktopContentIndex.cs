@@ -19,9 +19,9 @@ public class DesktopContentIndex : IContentIndex
     private readonly Dictionary<string, IReadOnlyList<string>> _cache =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public IReadOnlyList<string> Files(string folder, string extension)
+    public IReadOnlyList<string> Files(string folder, params string[] extensions)
     {
-        string key = folder + "|" + extension;
+        string key = folder + "|" + string.Join(",", extensions);
         if (_cache.TryGetValue(key, out var known)) return known;
 
         var names = new List<string>();
@@ -30,9 +30,10 @@ public class DesktopContentIndex : IContentIndex
             // relative to the working directory, the same place TitleContainer
             // resolves content from
             if (Directory.Exists(folder))
-                names = Directory.GetFiles(folder, "*" + extension)
+                names = Directory.GetFiles(folder)
                     .Select(Path.GetFileName)
-                    .Where(n => n != null)
+                    .Where(n => n != null && extensions.Any(e =>
+                        n.EndsWith(e, StringComparison.OrdinalIgnoreCase)))
                     .Select(n => n!)
                     .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
                     .ToList();

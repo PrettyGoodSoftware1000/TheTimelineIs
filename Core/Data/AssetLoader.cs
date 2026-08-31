@@ -133,6 +133,82 @@ public class AssetLoader
 
     private readonly Dictionary<Texture2D, float> _bottomPad = new();
 
+    /// <summary>
+    /// Alpha at or below this is nothing. Deliberately lower than the
+    /// eight <see cref="OpaqueEnough"/> uses, because an outline is meant to
+    /// follow the SEEN edge of the art, and a soft edge is seen.
+    /// </summary>
+    private const byte AnyPaint = 0;
+
+    private readonly Dictionary<(Texture2D, int), Texture2D> _outlines = new();
+
+    /// <summary>
+    /// A white silhouette outline of a texture: transparent everywhere except a
+    /// band of the given thickness hugging the outside of the drawn pixels.
+    /// Tint it and stretch it over the sprite and you get a border that follows
+    /// the ART rather than the edges of its canvas — which for a character
+    /// standing in a mostly-empty PNG is a completely different shape.
+    ///
+    /// Built once per texture and cached: it walks every pixel twice, which is
+    /// far too slow to do per frame but nothing as a one-off.
+    /// </summary>
+    public Texture2D Outline(Texture2D tex, int thickness)
+    {
+        var key = (tex, thickness);
+        if (_outlines.TryGetValue(key, out var known)) return known;
+
+        int w = tex.Width, h = tex.Height;
+        var pixels = new Color[w * h];
+        var outline = new Texture2D(_device, w, h);
+        try
+        {
+            tex.GetData(pixels);
+            var paint = new bool[w * h];
+            for (int i = 0; i < pixels.Length; i++) paint[i] = pixels[i].A > AnyPaint;
+
+            // Dilating a square is the same as dilating sideways and then
+            // downwards, which turns a (2t+1)^2 look per pixel into 2(2t+1).
+            var wide = new bool[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    for (int d = -thickness; d <= thickness; d++)
+                    {
+                        int nx = x + d;
+                        if (nx < 0 || nx >= w || !paint[y * w + nx]) continue;
+                        wide[y * w + x] = true;
+                        break;
+                    }
+                }
+            var grown = new bool[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    for (int d = -thickness; d <= thickness; d++)
+                    {
+                        int ny = y + d;
+                        if (ny < 0 || ny >= h || !wide[ny * w + x]) continue;
+                        grown[y * w + x] = true;
+                        break;
+                    }
+                }
+
+            // the band is what the growing added: inside it, but not art
+            var edge = new Color[w * h];
+            for (int i = 0; i < edge.Length; i++)
+                edge[i] = grown[i] && !paint[i] ? Color.White : Color.Transparent;
+            outline.SetData(edge);
+        }
+        catch (Exception ex)
+        {
+            // an unreadable texture means no outline, not a crash
+            Diagnostics.Current.Warn("AssetLoader", 0,
+                $"could not trace a sprite's outline ({ex.Message})");
+        }
+        _outlines[key] = outline;
+        return outline;
+    }
+
     /// <summary>Loads the first path that exists, so thumbnails can fall back to the full sprite.</summary>
     public Texture2D LoadFirstAvailable(params string[] paths)
     {

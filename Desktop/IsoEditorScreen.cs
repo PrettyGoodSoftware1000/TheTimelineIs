@@ -41,21 +41,7 @@ public partial class IsoEditorScreen : IScreen
     private string _levelName = "TestLevel";
 
     private Tool _tool = Tool.Block;
-    private int _decoIndex, _enemyIndex, _doorIndex;
-
-    /// <summary>
-    /// The doorway sizes the Door button offers. A wide door is a run of
-    /// squares that open as one, so it needs an axis as well as a width —
-    /// X runs the way screen-right-and-down goes, Y the other way.
-    /// </summary>
-    private static readonly (string Label, int Width, bool AlongY)[] DoorSizes =
-    {
-        ("Small", 1, false),
-        ("Medium along X", 2, false),
-        ("Medium along Y", 2, true),
-        ("Large along X", 4, false),
-        ("Large along Y", 4, true),
-    };
+    private int _decoIndex, _enemyIndex;
 
     /// <summary>
     /// The Door dropdown's last entry. It is not a door at all — it is here
@@ -74,8 +60,6 @@ public partial class IsoEditorScreen : IScreen
     /// <summary>Pair numbers are handed out in order; 0 means unlinked.</summary>
     private int NextPair() =>
         _level.Transitions.Count == 0 ? 1 : _level.Transitions.Max(t => t.Pair) + 1;
-
-    private string DoorSizeName => DoorSizes[_doorIndex].Label;
 
     // the block brush: which family, and which piece inside it. -1 = Random,
     // which is settled per square as it is painted.
@@ -303,7 +287,7 @@ public partial class IsoEditorScreen : IScreen
         Add("Reload", "reload", false);
         Add("Controls", "controls", _showControls);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
-        Add($"Door: {(_tool == Tool.Transition ? TransitionEntry : DoorSizeName)}", "door",
+        Add($"Door: {(_tool == Tool.Transition ? TransitionEntry : "Doorway")}", "door",
             _tool is Tool.Door or Tool.Transition, menu: true);
         Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
         Add("Start", "start", _tool == Tool.PlayerStart);
@@ -332,7 +316,7 @@ public partial class IsoEditorScreen : IScreen
             .Concat(FamilyPieces.Select(gp => Strip(gp.File))).ToList(),
         "deco" => BlockCatalog.Decorations.Select(Strip).ToList(),
         "enemy" => _ctx.Enemies.EnemyNames.ToList(),
-        "door" => DoorSizes.Select(d => d.Label).Append(TransitionEntry).ToList(),
+        "door" => new List<string> { "Doorway", TransitionEntry },
         "level" => LevelNames(),
         _ => new List<string>(),
     };
@@ -378,8 +362,7 @@ public partial class IsoEditorScreen : IScreen
             case "deco": _decoIndex = index; _tool = Tool.Decoration; break;
             case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
             case "door":
-                if (index >= DoorSizes.Length) { _tool = Tool.Transition; break; }
-                _doorIndex = index; _tool = Tool.Door;
+                _tool = index == 0 ? Tool.Door : Tool.Transition;
                 break;
         }
         _openMenu = null;
@@ -796,31 +779,20 @@ public partial class IsoEditorScreen : IScreen
                 break;
             case Tool.Door when _level.BlockAt(tile) is LevelBlock db:
             {
-                var (label, width, alongY) = DoorSizes[_doorIndex];
-                // A door joining a room to itself opens onto nothing. It is the
-                // easy mistake to make — the Room box still says whatever you
-                // last typed — so it is refused here rather than found at
-                // startup, and the message says what to do about it.
-                if (db.Room.Equals(_room, StringComparison.OrdinalIgnoreCase))
-                {
-                    Status($"both sides would be '{_room}' — set Room to the room this opens INTO");
-                    break;
-                }
-                var placed = new LevelDoor
-                {
-                    X = tile.X, Y = tile.Y, RoomA = db.Room, RoomB = _room,
-                    Width = width, AlongY = alongY,
-                };
-                // a wide door swallows anything it overlaps, so dragging one
-                // across an old single door replaces it instead of stacking
-                var run = placed.Tiles.ToHashSet();
-                _level.Doors.RemoveAll(d => d.Tiles.Any(run.Contains));
-                _level.Doors.Add(placed);
+                // A doorway is a square belonging to no room, with rooms either
+                // side. Painting one is the whole job: which rooms it joins is
+                // read off its neighbours, so there is no room to name, no
+                // width to pick and no axis to get backwards.
+                db.Room = LevelData.NoRoom;
+                _level.Doors.RemoveAll(d => d.Covers(tile));
+                _level.Doors.Add(new LevelDoor { X = tile.X, Y = tile.Y });
 
-                int off = placed.Tiles.Count(t => _level.BlockAt(t) == null);
-                Status(off > 0
-                    ? $"{label.ToLowerInvariant()}: {db.Room} <-> {_room}, but {off} square(s) hang off the ground"
-                    : $"{label.ToLowerInvariant()}: {db.Room} <-> {_room}");
+                var joins = _level.RoomsBeside(tile);
+                Status(joins.Count >= 2
+                    ? $"door: {string.Join(" <-> ", joins)}"
+                    : joins.Count == 1
+                        ? $"door touches only '{joins[0]}' — it needs a second room beside it"
+                        : "door touches no rooms yet — paint rooms on either side of it");
                 break;
             }
             case Tool.Enemy when _level.BlockAt(tile) != null && _ctx.Enemies.EnemyNames.Count > 0:
@@ -917,8 +889,10 @@ public partial class IsoEditorScreen : IScreen
         // startup validator demands
         foreach (var e in _level.Enemies)
             n += FootprintGaps(e);
-        foreach (var d in _level.Doors)
-            n += d.Tiles.Count(t => _level.BlockAt(t) == null);
+        n += _level.Doors.Count(d => _level.BlockAt(d.Tile) == null);
+        // a doorway that does not actually join two rooms is a wall with a
+        // handle, and the startup check will refuse it
+        n += _level.Doors.Count(d => _level.RoomsBeside(d.Tile).Count < 2);
         n += _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
         if (_level.PlayerStarts.Count < 4) n++;
         if (_level.Blocks.Count == 0) n++;
@@ -943,7 +917,7 @@ public partial class IsoEditorScreen : IScreen
         int orphans = _level.Triggers.Count(t => _level.BlockAt(new Point(t.X, t.Y)) == null)
             + _level.Decorations.Count(d => _level.BlockAt(new Point(d.X, d.Y)) == null)
             + _level.Enemies.Sum(FootprintGaps)
-            + _level.Doors.Sum(d => d.Tiles.Count(t => _level.BlockAt(t) == null))
+            + _level.Doors.Count(d => _level.BlockAt(d.Tile) == null)
             + _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
         if (orphans > 0) bits.Add($"{orphans} thing(s) floating with no block under them");
         if (_level.PlayerStarts.Count < 4)

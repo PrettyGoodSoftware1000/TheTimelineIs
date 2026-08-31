@@ -1,4 +1,6 @@
-# name              x     y     level
-Florida                 4266    2299    Florida
-Not Ohio                4247    2004    Not Ohio
-Fartstankil             5579    3113    Fartstankil
+# One pin per line: Name  x  y
+# The name is also the level file, so 'Not Ohio' opens 'Not Ohio.txt'.
+# Coordinates are map-image pixels.
+Florida                 4266    2299
+Not Ohio                4247    2004
+Fartstankil             5579    3113

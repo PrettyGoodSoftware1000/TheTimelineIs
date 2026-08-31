@@ -1,566 +1,241 @@
 # The Timeline Is
 
-A story-driven tactics game: pick a destination on a scrolling world map, fight
-the isometric level it opens, return to the map.
+Story-driven tactics: pick a destination on a world map, fight the isometric
+level it opens, return to the map.
 
-MonoGame (DesktopGL) on .NET 10. Desktop now; structured so tablet heads
-(Android/iOS) can be added later without rewriting game logic.
+MonoGame (DesktopGL) on .NET 10. Desktop now, structured so tablet heads can be
+added without rewriting game logic.
 
-## Building and running
-
-```
-dotnet tool restore        # once, after cloning
-dotnet run --project Desktop
-```
-
-Dev map mode (click the map to place destinations, rows are appended to
-`Content/Levels/Destinations.txt` in the repo):
+## Build and run
 
 ```
-dotnet run --project Desktop -- --devmap
+dotnet tool restore                          # once, after cloning
+dotnet run --project Desktop                 # the game
+dotnet run --project Desktop -- --editor     # the level editor
 ```
 
-## Controls (desktop)
+## Controls
 
 | Action | Input |
 |---|---|
-| Pan the map | Arrow keys / WASD, or hold right mouse button and drag |
-| Select / advance dialogue | Left click, or Enter/Space |
+| Pan | Arrows / WASD, or right-drag |
+| Select, advance dialogue | Left click, Enter, Space |
+| End turn | Space or End |
+| Play card 1-10 | `1`-`9`, `0` |
+| Add to selection | Shift+click |
+| Toggle one in selection | Ctrl+click |
+| Select whole party | Tab or middle mouse |
+| Fade the board to read the grid | Hold Ctrl |
+| Dev menu | `~` |
+| Ruler | F12 |
 | Back / quit | Escape |
 
-## Project layout
+## Layout
 
-- `Core/` — all game logic. Never touches Keyboard, Mouse, or `System.IO.File`
-  for assets; everything goes through `IInputSource`, `ISaveStore`, and
-  `TitleContainer`. This is what makes a tablet port a new `Platform` folder
-  instead of a rewrite.
-- `Desktop/` — the DesktopGL head: input mapping, save location, dev-mode writer.
-- `Content/` — every asset and script, loaded raw at runtime (no content
-  pipeline rebuild needed when art or text changes). The one exception is the
-  font, which MonoGame must bake at build time via `Content/Content.mgcb`.
+- `Core/` — all game logic. No `Keyboard`, `Mouse`, or `System.IO` for assets;
+  everything goes through `IInputSource`, `ISaveStore`, `IContentIndex`,
+  `TitleContainer`. This is what makes a tablet port a new folder, not a rewrite.
+- `Desktop/` — the DesktopGL head: input, save location, dev writers, editor.
+- `Content/` — every asset and script, loaded raw. Only the font is baked at build time.
 
-## Isometric tactics
+---
 
-The game is an **isometric tactics** game: Title -> party select -> world map -> the destination opens
-`Content/Levels/TestLevel.txt` over a black void.
+## Combat
 
-- **Checkerboard families**: put `Checkerboard Dark:` and `Checkerboard Light:`
-  headings inside a `Family:` in `Blocks.txt` and it stops picking at random —
-  which half a square draws from is decided by its position, so a dark piece
-  never lands beside another dark one. Within a half the pieces are still
-  random, so several variants keep the pattern from looking stamped. The piece
-  dropdown does nothing for such a family; the grid chooses. The validator
-  errors if only one half is declared.
-- **`Placeholder*` art** in `Content/Images/Blocks/` is drawn 1:1 with virtual
-  pixels for checking alignment: `PlaceholderSurface.png` is exactly 360x180 —
-  one grid square's top face — and `PlaceholderBlock.png` is that face over a
-  760px body, the depth `DarkStoneSimple1.png` renders at. Dark variants of
-  both, plus a ready-made `PlaceholderCheckerboard` family.
-- **Decorations** (`Content/Images/Decorations/`, listed in `Decorations.txt`)
-  sit on a square and block it: trees, rocks, and a treasure chest. The chest
-  is scenery for now; it will hand out items when a character steps beside it.
-- **Blocks**: square-top tiles with textured sides and adjustable height in
-  feet. Palette in `Content/Images/Blocks/` — `{Type}Top.png` is a 360x180
-  diamond, `{Type}Side.png` a 360x90 strip stacked once per foot; `Blocks.txt`
-  lists the types.
+- **Turn**: movement, then a card. Playing a card spends the rest of that
+  turn's movement unless `Nimble` gives some back.
+- **Action points**: 2 a turn, and **one** unspent point may carry, so 3 is the
+  most anyone ever holds. Walking is free — separate budget.
 - **Movement**: orthogonal 1, diagonal 2, +1 per foot climbed, 4 ft max step
-  up, drops free. The reachable region is washed blue with a border around its
-  outer edge, and only shows while a character is selected. Every overlay's
-  fill strength comes from `Config.txt` (`Movement opacity: 20%` and friends);
-  0% there means outline only.
-  Exploration is free-roam and per-character; a combat turn is movement
-  **then** a card, and playing a card spends the rest of that turn's movement
-  unless `Nimble` hands some back.
-- **Party members do not block each other.** A character walks straight
-  through its allies but can never stop on an occupied square. Enemies still
-  wall a path off.
-- **Sight**: walking within 15 tiles of an enemy in a revealed room springs
-  combat — the rest of the party gets a free positioning move first (Done
-  starts the fight). Doors open when clicked from beside them, reveal the room
-  behind, and enemies see through them.
-- **Cards**: melee cards reach 1 tile; ranged cards default to `Range: 5`
-  (override per card). Hovering or selecting a card outlines its reach in red,
-  measured **from where the caster is standing right now** rather than from
-  everywhere it could walk to first. Red replaces the blue region while it
-  shows.
-- **Targeting is one click.** Clicking an enemy fires the card at it; if the
-  caster has to close the distance first it walks there by the shortest route
-  and strikes — the player never picks the angle of approach. A card wanting
-  several targets (`Two targets, 1 hit.`) collects one per click and fires on
-  the last. Right-click cancels the armed card.
-- **Selection** is marked by a small gold arrow pointing down at the selected
-  character's health bar.
-- **Hold `Ctrl` to aim by square.** Everyone on the ground — party, enemies,
-  decorations and doors — drops to 20% opacity so the grid reads clearly, and
-  the square under the cursor lights up with a yellow wash and outline
-  (`Hover opacity` in `Config.txt`). While it is held, clicks resolve against
-  the **square** rather than against whichever sprite happens to be over it: a
-  click with no card up is a move (or picks the party member standing there),
-  and a click with a card up plays it exactly as if whoever occupies that
-  square had been clicked. It is the way to reach somebody standing behind a
-  tree or beneath a taller neighbour. Health bars stay at full strength — they
-  are the information you are aiming with, not something in the way.
-- **Turn order** is a row of face thumbnails across the top. Whoever is acting
-  sits at the far left at double size with a gold frame, so the strip shuffles
-  along by one each turn and "next up" is always the face beside it. A green or
-  red bar under each face says which side it is on.
-- **The combat log** lives behind the small `+` button at the top left. Nothing
-  about damage is printed over the level any more: every blow, burn, theft,
-  shapeshift and turn event goes in there, newest at the bottom, and the mouse
-  wheel scrolls back through the history. Only immediate "you can't do that"
-  feedback still flashes on screen — and it is logged too.
-- **Effects** (`Effects: Burning 1, Armor 5`) are shared behaviour any card
-  can carry:
-  - `Burning N` — N stacks; each stack burns the victim for 5 at the **start
-    of their turn**, for 2 of their turns. **Stacks are independent**: one
-    applied later expires later, and adding a stack never extends the ones
-    already alight. Lighting a second stack a turn after the first gives
-    5, 10, 5, then nothing. Burning shows as flames on the health bar.
-  - `Armor N` — soaks damage before health does, shown as a metallic grey
-    extension of the bar (10 health + 5 armour makes the grey a third of it).
-    6 damage against 5 armour strips the armour and takes 1 off health.
-  - `Nimble N` — the **caster** may move N more spaces after playing the card,
-    instead of the turn ending. Movement always hits 0 when a card is played;
-    Nimble hands some back afterwards, so it's a retreat, not a longer reach.
-  - `Leap N` — the approach move for *that card* reaches N further and ignores
-    height entirely, climbs and drops alike. A Leap card's red outline is its
-    range measured from **everywhere the leap can put the caster**, not from the
-    tile underfoot, since the jump is part of the attack.
-  - `Curse N` — the victim takes N extra damage from **melee** cards for 10 of
-    their turns. Curses stack and each keeps its own clock.
-  - `Steal N` — takes a card off whoever it hits, **friend or foe**, and hands
-    it to the caster for N of the caster's own turns counting the one it was
-    stolen on. `Steal 3` is "play it now, or on either of your next two". The
-    thief is shown the victim's hand and **picks one card**; right-click or
-    Escape takes nothing. The owner cannot play it while it is gone, and it
-    goes straight back the moment the thief plays it or the clock runs out. An
-    enemy robbed of its only card has nothing to attack with.
+  up, drops free. Blue wash shows the budget **in combat only**.
+- **Party members do not block each other**, but cannot stop on an occupied
+  square. Enemies wall a path off.
+- **Sight**: coming within 15 tiles of an enemy in a revealed room starts the
+  fight. Only the Dirtbag gets a free positioning move — he cheats.
+- **Targeting is one click**, resolved by **square**, never by whichever sprite
+  is under the cursor. If the caster must close first it walks the shortest
+  route and strikes. Right-click cancels.
+- Everything an aimed card would hit is **outlined in red**, traced round the
+  art itself. With `Friendly Fire: Yes` your own people light up too.
+- **Turn order** is a strip of faces across the top; whoever acts sits far left
+  at double size.
+- **The combat log** is behind the `+` at the top left. Damage is never printed
+  over the level.
 
-    **One exception to one-card-per-steal**: if the card taken is a shapeshift
-    card, the thief immediately gets a second pick from the hand of the shape it
-    would have turned them into. Steal `Witch Form` off a Werewitch in wolf
-    form and you may then take `Curse`, which the wolf's hand never offers.
-  - `Channel N` — the card is cast over **two turns**. The first play pays for
-    it and **roots** the caster: they cannot move, and the only card in their
-    hand is this one. The next turn's play aims and fires it, paying again.
-  - `FireTiles N` — every square the card covered **burns for N turns**. Anyone
-    who *starts* their turn on burning ground takes 5 damage, so crossing a
-    fire is free and standing in it is not. Fires age once per round, not once
-    per character, so three turns means three rounds however big the fight.
-  - `Form X` — the caster changes into their form X, swapping art and hand.
-    **Changing shape is free**: it spends neither the turn's card nor its
-    movement, so a shapeshifter can shift and then actually do something. The
-    shape persists across turns and through a save.
-- **Forms**: a class may declare `Form: Name, Art.png` lines in `Classes.txt`
-  (first one is where it starts). A card with a matching `Form:` line only
-  appears while its owner wears that shape, so the Werewitch's claws and
-  curses never share a hand. The validator warns about a form with no card
-  that changes out of it.
-- **`Sky Angle: N`** on a ranged card drops the shot out of the sky at N
-  degrees onto the square aimed at, instead of flying it flat from the caster.
-  The Gun-O-Mancer's **Magic Tomahawk Missile** uses it: 10 points to start
-  channelling, 10 more next turn to bring it down at 110°, 15 fire damage over
-  a blast of 5, and the ground burns for 3 turns.
-- **Cone cards** (`Type: [cone] AoE damage`) spray a staircase wedge measured
-  in whole tiles: **1 tile at depth 1, 3 at depth 2, 5 at depth 3** — the point
-  sits on the square in front of the caster and the wide end faces away.
-  `Range` caps the depth (range 3 = 9 tiles). The same shape rotates to all
-  eight headings; a diagonal cone is measured in diagonal steps so it stays
-  exactly congruent instead of covering twice the ground. Because a cone only
-  takes a heading from the cursor, it can be aimed at any tile, and it shows as
-  the purple wedge alone — no red range diamond, which would be a second,
-  wrong-shaped answer.
-- **Area cards can be aimed at bare ground**, not just at enemies — one click
-  on a tile fires at it.
-- **Blast cards** take `Explosion Range: N`, a radius in tiles around the
-  impact point, kept separate from `Range` (how far it can be thrown). The
-  blast is outlined in purple, following the cursor, and damages whatever that
-  outline covers — not everything in throwing range.
-- Health bars sit above each head with the current HP in the middle.
-- **Dialogue**: trigger squares painted in the editor (G tool) play a named
-  block from `Content/Levels/{Level}Dialogue.txt` the first time anyone steps
-  on them. Same `Speaker: text` format as the old mission scripts.
-- **Cards live in `Content/Cards/`**: `PlayerCards.txt` for the party,
-  `EnemyCards.txt` for enemies. Identical format — the only difference is
-  whether a card's `Tags:` match a class in `Classes.txt` or an enemy in
-  `Enemies.txt`.
-- **Action points.** Everyone gets **10 per turn** and may carry **at most 1**
-  unspent point into the next, so a turn that spent nothing opens the next with
-  three. **Walking costs nothing** — movement points and action points are
-  separate budgets. Every card costs `Action Points: N` (default 1, `0` = free),
-  set per card in `PlayerCards.txt` / `EnemyCards.txt`. Cards you cannot currently afford grey out individually,
-  and the cost shows as orange pips on the card face.
-- **Enemies act through cards**, exactly as the party does — and are bound by
-  the same action points. Their turn:
-  1. a **melee** card it can actually land this turn wins — it walks at the
-     nearest player it can reach and swings;
-  2. otherwise a **ranged** card — it closes only as far as it must to bring
-     the nearest player inside that card's range, and no further;
-  3. holding a weapon but out of reach of anyone, it advances and tries again
-     next turn;
-  4. holding **no usable attack card** — its last one has been stolen — it
-     cannot attack at all, so it walks to a random square inside its movement
-     range.
+## Out of combat
 
-  An enemy in `Enemies.txt` with **no card tagged for it** is dealt the one
-  tagged `Default` — `Smack Something`, a 5-damage melee swing — so a newly
-  added enemy fights without you writing it a card first. The moment it has a
-  card of its own the default drops away, which is why the Goblin never smacks
-  anything. `Enemies.txt` no longer carries `Basic Attack Damage`, `Sounds` or
-  `Range`: how hard an enemy hits, what it sounds like and how far it reaches
-  all live on its cards. Those lines now warn and are ignored.
-- **Classes.txt** now holds all class stats (`Class:`/`HP:`/`Movement:`,
-  optional `Sprites:` and `Card Tags:`) — the per-character `{Name}.txt`
-  manifests are gone. **Enemies.txt** does the same for enemies
-  (`Enemy:`/`HP:`/`Movement:`/`Basic Attack Damage:`/`Sounds:`/`Range:`).
-- **Editor**: `dotnet run --project Desktop -- --editor`. Every tool has both a
-  **button in the strip across the top** and a hotkey, and the two stay in step;
-  palettes with more than one entry (blocks, decorations, enemies) hang a
-  **dropdown** off their button rather than spending a button each.
-  - `1-3`/`B` block types, `D` decorations, `O` doors, `E` enemies, `P` player
-    starts, `G` dialogue triggers, `R` room label, `N` trigger's dialogue name,
-    `V` save-as, `S` save, `T` play-test.
-  - **Hold the left button to paint** — every square the cursor crosses is
-    placed once, and the whole stroke is a single undo step. Blocks,
-    decorations and triggers paint; doors, enemies and starts stay one click
-    each, where a repeat would be meaningless.
-  - **Hold `Delete` to rub out** whatever the cursor crosses, same stroke rule.
-  - **`Ctrl`+`Delete`** arms a box: drag one out and everything inside goes at
-    once. The cursor turns red while it is armed and returns to normal as soon
-    as the box is drawn; `Esc` cancels.
-  - **`Shift`+drag** fills a box with the current block at the placement
-    height. It paints over bare ground too, since it creates blocks.
-  - **`Ctrl`+drag** marks a **selection** that stays put when you let go:
-    `+`/`-` raise and lower every block in it, `Ctrl`+`C` copies, `Ctrl`+`V`
-    pastes with the top-left corner on the cursor, `Delete` empties it, `Esc`
-    drops it.
-  - **Middle click** is an eyedropper: it adopts the block type, height and
-    room of the square under it.
-  - **`Level: ▾`** in the strip lists every level file in `Content/Levels` and
-    opens the one you pick, so you no longer have to restart to edit another.
-  - The **`OK` / `! n`** button counts the things the startup validator would
-    complain about in this level — decorations, enemies, triggers or starts
-    floating with no block under them, too few player starts, an empty level.
-    Click it for the details.
-  - **`Ctrl`+`Z`** undoes the last stroke, 40 deep.
-  - **Right-click a trigger square** to open that level's
-    `{Level}Dialogue.txt` in whatever the OS uses for `.txt`. If the file or
-    the block the trigger names doesn't exist yet, it is stubbed in first — so
-    right-clicking a fresh trigger lands you on the lines you need to write.
-  - Scroll or `+`/`-` for placement height. **The editor pans on the arrow keys
-    and right-drag only** — `W`/`A`/`S`/`D` are tool keys there. In game they
-    still pan as before.
-  - The yellow cursor square shows its height as a number in the middle, and
-    for everything except the block tool it sits on top of the block under the
-    pointer rather than on the ground plane beneath it.
-  - `S` saves to `Content/Levels/{Level}.txt` in the repo; `V` saves-as under a
-    typed name and keeps editing that file from then on.
-- Levels complete when every enemy is dead; a wiped party reloads.
+- Free-roam, no movement rationing and no blue wash.
+- Pick characters like files: click, Shift+click, Ctrl+click, Tab for all.
+- With several picked, clicking the ground sends everyone to the nearest free square.
 
-## Adding a level to the world map
+## Effects
 
-A destination is one row in `Content/Levels/Destinations.txt`:
+Any card can carry these (`Effects: Burning 1, Armor 5`).
 
-```
-# name              x     y     level
-Test Level          412   688   TestLevel
-```
+| Effect | What it does |
+|---|---|
+| `Burning N` | N stacks, 5 damage each at the victim's turn start, 2 turns. Stacks are independent — one added later expires later. |
+| `Armor N` | Soaks damage before health. Grey extension of the bar. |
+| `Nimble N` | The **caster** may move N more after playing. A retreat, not a longer reach. |
+| `Leap N` | That card's approach reaches N further and ignores height. Its red outline is measured from everywhere the leap can reach. |
+| `Curse N` | +N damage from **melee** for 10 of the victim's turns. Stacks, each with its own clock. |
+| `Steal N` | Takes a card off anyone for N of the thief's turns. Stealing a shapeshift card gives a second pick from that shape's hand. |
+| `Channel N` | Cast over two turns. The first roots the caster; the next aims and fires, paying again. |
+| `FireTiles N` | Every covered square burns N turns. Fires age once per round. |
+| `Form X` | Change shape. **Free** — costs neither the card nor the movement. |
+| `Summon 1` | Puts a creature down on a square you pick. Needs `Summons:`. |
+| `Guard N` | Plants the caster and marks the ground within N with skulls. Anyone stepping in stops, is shot, then walks on. |
+| `Vulnerable N` | Bullseye under the bar. Next hit does +50%, and any rolled damage comes up at its maximum. One hit spends it. |
+| `Stun N` | Loses N turns outright. Lightning bolt under the bar. |
+| `Swap 1` | Exchanges one card in the caster's own hand. Needs `Replaces:` and `With:`. |
+| `Mower N` | Sends a lawnmower N squares down a straight line. See `Core/Iso/MowerRun.cs`. |
+| `BathSalts 1` | Blacks the screen out, plays the caster's picture folder, and hurts everybody. |
 
-- **name** — what the player reads on the map. Spaces are fine.
-- **x, y** — where the pin sits, in the map image's own pixels (`Map.png` is
-  authored at 7680x4320). They scale with `Global scale` in `Config.txt`.
-- **level** — the level file's base name: `TestLevel` loads
-  `Content/Levels/TestLevel.txt`. No path, no `.txt`.
+## Card shapes
 
-Two ways to add one:
+- **Melee** reaches 1 tile; **ranged** defaults to `Range: 5`.
+- **Cone** (`Type: [cone] AoE damage`) is a staircase wedge: 1 tile deep 1,
+  3 at 2, 5 at 3. `Range` caps the depth. Rotates to all eight headings.
+- **Blast** takes `Explosion Range: N` around the impact point, kept separate
+  from how far it can be thrown.
+- **Area cards can be aimed at bare ground.**
+- **`Sky Angle: N`** drops the shot out of the sky onto the aimed square.
+- **`Friendly Fire: Yes/No`** decides whether a card touches its caster's own
+  side. Read from the caster, so an enemy card with it hurts other enemies.
+- **`Dealt: No`** keeps a card out of the opening hand until something loads it.
+- Damage may be a range: `1 to 20 damage` on the `Effect:` line.
 
-1. **By hand** — make the level (`dotnet run --project Desktop -- --editor`,
-   build it, `V` to save it under a new name), then add a row here pointing at
-   that name.
-2. **In game** — open the map and use dev placement: click where the pin
-   should go, type the display name, Enter, type the level name, Enter. The row
-   is appended to the real `Destinations.txt` in the repo, so you get the
-   coordinates by clicking rather than guessing them.
+## Rooms and doors
 
-The validator checks nothing about destinations yet, so a row naming a level
-that doesn't exist fails when you click it, not at startup.
+- Rooms are labels on blocks.
+- **A door is one square belonging to no room, with rooms either side.** In the
+  editor: pick Door, click the square. That is all.
+- Which rooms it joins is read off its neighbours — nothing to name, no width,
+  no axis. Walk anybody beside it and it opens, revealing both sides.
+- Touching doorway squares are one wide door.
+- **Area transitions** are the other way between rooms: an orange patch that
+  moves the whole party and lets the old room go dark.
 
-## Adding dialogue to an isometric level
+## Dialogue
 
-Dialogue lives beside the level, in `Content/Levels/{Level}Dialogue.txt` — so
-`TestLevel.txt` reads `TestLevelDialogue.txt`. The file is a list of named
-blocks:
+- Lives in `Content/Levels/{Level}Dialogue.txt` as `Dialogue: Name` blocks of
+  `Speaker: text` lines.
+- Paint trigger squares with `G`; `N` sets which block they call.
+- A dialogue fires **once per level**, however many squares name it.
 
-```
-Dialogue: Intro
-Dirtbag: Goddamn if my balls ain't itching.
-Cyborg: SCANNING. THAT IS A PERSONAL PROBLEM.
+## The ~ menu
 
-Dialogue: DoorWarning
-Gun-O-Mancer: Something's breathing on the other side of that door.
-```
+- **Win Level** / **Die!** — end the mission either way.
+- **Scale Stuff** — a percentage box for every character, summon, enemy and
+  decoration. Type, watch it change, Enter applies and writes `Config.txt`.
+  `0` = no line of its own. Tiles are never scaled.
+- On the world map, `~` arms destination placement: click, name it, Enter.
 
-`Dialogue: Name` opens a block; every `Speaker: text` line after it belongs to
-that block until the next `Dialogue:` line. The speaker's name is matched
-against the characters on stage to pick the portrait, falling back to their
-full sprite when there's no `{Name}Thumb.png`.
+## Editor
 
-To fire one, paint a **trigger square** in the editor:
+`dotnet run --project Desktop -- --editor`. Every tool has a button and a hotkey.
 
-1. Press `N`, type the block's name (`Intro`), Enter — that sets which block
-   new triggers will call.
-2. Press `G` for the trigger tool.
-3. Click the squares that should fire it. They show violet in the editor with
-   the block name written on them, and violet in-game until they fire.
-4. `S` to save.
+- `1-3`/`B` blocks, `D` decorations, `O` doors, `E` enemies, `P` starts,
+  `G` triggers, `R` room label, `N` trigger name, `S` save, `V` save-as, `T` play-test.
+- **Hold left** to paint a stroke (one undo step). **Hold Delete** to rub out.
+- **Ctrl+Delete** arms a box delete. **Shift+drag** fills a box.
+- **Ctrl+drag** selects: `+`/`-` raise and lower, Ctrl+C/V copy and paste,
+  Delete empties, Esc drops.
+- **Middle click** eyedroppers type, height and room.
+- **`Level: ▾`** opens any level without restarting.
+- **`OK` / `! n`** counts what the startup validator would complain about.
+- **Ctrl+Z** undoes, 40 deep.
+- **Right-click a trigger** opens its dialogue file, stubbing it if needed.
+- Scroll or `+`/`-` for placement height. The editor pans on arrows and
+  right-drag only — WASD are tool keys there.
 
-A trigger fires **once**, the first time any character steps on it, and it
-interrupts walking. Several squares can name the same block. The validator
-errors if a trigger names a block that doesn't exist, or one with no lines, so
-a typo is caught at startup rather than being silently skipped.
+## Content files
 
-## spritetool: video to sprite sheets
+All of them: `Key: value`, `#` comments, case-insensitive, blank lines ignored.
 
-`Tools/SpriteTool` turns an mp4 into numbered PNGs, assembles chosen PNGs into
-a sprite sheet, and slices a sheet back apart.
+| File | Holds |
+|---|---|
+| `Content/Levels/Destinations.txt` | Map pins: `Name  x  y`. The name **is** the level file. |
+| `Content/Levels/{Name}.txt` | One level. Written by the editor. |
+| `Content/Cast/PlayerCharacters/Classes.txt` | Classes, and `Summon:` blocks for what they call up |
+| `Content/Cast/EnemyCharacters/Enemies.txt` | Enemies |
+| `Content/Cards/PlayerCards.txt`, `EnemyCards.txt` | Cards. Same format; the tag decides who holds one |
+| `Content/Text/Strings.txt` | Every player-facing string, as `key = text` |
+| `Content/Config.txt` | Art scale and overlay opacity |
 
-Double-click `Tools/SpriteTool/spritetool.bat`, or run it with no arguments,
-for a menu — pick a number and answer a few questions, dragging files onto the
-window instead of typing paths. The command line is still there for scripting:
+- A card's `Tags:` are **labels, not class names**. A class holds its own name
+  unless `Card Tags:` says otherwise, so several classes can share a pool.
+- A summon lives in `Classes.txt` with `Summoned By:`, keeping it out of the
+  party picker. Its art lives in its summoner's folder.
+- An enemy with no card of its own is dealt the one tagged `Default`.
 
-```
-dotnet run --project Tools/SpriteTool                                   # menu
-dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
-dotnet run --project Tools/SpriteTool -- extract wolf.mp4 -n werewolf_attack --odd -o out
-dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
-dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png werewolf_attack -o frames
-dotnet run --project Tools/SpriteTool -- detect WerewitchSpell1.png
-```
+### Config.txt
 
-Extraction is lossless — PNG out, `-fps_mode passthrough` so no frame is
-duplicated or dropped, and an accurate YUV→RGB conversion. `--odd` keeps source
-frames 1, 3, 5, … and renumbers the output 1..N with no gaps. Frames are
-numbered to at least three digits — `werewolf_attack001.png` — so they stay in
-order in anything that sorts filenames as text. Every sheet is
-written with a `.txt` beside it giving the cell size and grid, so it can be cut
-up again without remembering the numbers.
+- Most specific wins **outright**: `Dirtbag scale` > `Cast scale` > `Global scale`.
+- `0` means "ignore this line", falling through to the next up.
+- Opacity lines differ: `0` there is a real zero — outline, no fill.
 
-**`detect` measures a sheet somebody else made** and writes that `.txt` for it.
-A sheet built here tiles the whole PNG from its top-left corner. One that came
-out of an image generator might do the same, or might sit in the middle of a
-much larger canvas with wide transparent margins and a cell size that divides
-nothing in particular — and guessing "width ÷ columns" on one of those cuts
-every frame in half. `detect` reads the grid off the art instead: transparent
-gutters mark where cells can begin, and the winning grid is the one with the
-most cells such that no run of art straddles a boundary and no cell is left
-empty. Pass `--columns`/`--rows` if it miscounts.
+### Art
 
-`extract` needs **ffmpeg** on the PATH (`winget install Gyan.FFmpeg`); `sheet`,
-`slice` and `detect` need nothing beyond the repo. Full details in
-[`Tools/SpriteTool/README.md`](Tools/SpriteTool/README.md).
+Authored at 3840x2160, letterboxed to any window.
+
+| Asset | Path | Size |
+|---|---|---|
+| World map | `Content/Images/Map/Map.png` | 7680x4320 |
+| Sprites | `Content/Cast/.../{Name}/{Name}N.png` | 1200x1800, transparent |
+| Thumbnails | same folder, `{Name}NThumb.png` | 512x512, optional |
+
+- Undersized art is scaled up, aspect preserved. Nothing is ever stretched.
+- Cast art hangs by its **feet** — the lowest drawn row.
+- Folders, files and declared names must match exactly: `Dirtbag`, not `Joe_dirtbag`.
+- Always refer to files repo-relative with forward slashes.
 
 ## Casting animations
 
-When a card is played, the caster's sprite is replaced by an animation for as
-long as that animation runs, then the sprite comes back. Declare one on a class
-in `Classes.txt`, as a path inside that character's own folder:
+- Declared on a class in `Classes.txt`, as a path inside that character's folder.
+  A third field on a `Form:` line gives that shape its own.
+- Needs the `.txt` beside the sheet that spritetool writes.
+- `FPS:` sets playback; the animation lasts as long as its frame count makes it.
+- `Scale: 100` draws a frame as tall as the character it replaces.
+- **Casting time and animation are independent clocks** — deliberately, so art
+  is timed to art and combat to combat.
+- A missing or broken sheet is reported at startup and falls back to the sprite.
+
+## spritetool
+
+`Tools/SpriteTool` turns an mp4 into numbered PNGs, builds sheets, and slices
+them back apart. Run it with no arguments for a menu.
 
 ```
-Class: Werewitch
-Form: Werewolf, WerewitchWerewolf.png
-Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png
+dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
+dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
+dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png frames -o frames
+dotnet run --project Tools/SpriteTool -- detect WerewitchSpell1.png
 ```
 
-A third field on a `Form:` line is that shape's own animation and beats the
-class's `Cast Animation:` line, so the wolf never plays the witch's spell. A
-class with no forms uses `Cast Animation: Spell/Spell.png` on its own; enemies
-take the same line in `Enemies.txt`. Anyone who declares nothing keeps standing
-still, exactly as before.
-
-The sheet needs the `.txt` beside it that spritetool writes (`detect` will
-write one for art from elsewhere). Two keys in it are the ones worth turning:
-
-| Key | Meaning |
-|---|---|
-| `FPS: 30` | Constant playback rate. **The animation is as long as its frame count makes it** — 48 frames at 30fps is 1.6 seconds — and casting time never stretches or trims it |
-| `Scale: 100` | 100 draws a frame exactly as tall as the character it replaces, whatever the art's own resolution, so undersized frames are scaled up. Raise it when the character sits small inside its cell |
-
-**Casting time and the animation are independent clocks.** `Casting Time:` still
-decides when the projectile launches or the walk begins, so a short cast fires
-with the caster still mid-swing, and a long one finishes the animation and
-stands there. That is deliberate: it lets the art be timed to the art and the
-combat be timed to the combat.
-
-**Sprites are tall (around 9:16); animation frames are wide (around 16:9)**, to
-leave room around the character for the effect. The two are matched by *height*
-and centred on each other: a frame is scaled until it is as tall as the sprite
-it replaces — up or down, whatever the art's own resolution happens to be —
-keeps its own aspect ratio, and is centred on the sprite's centre. The extra
-width falls evenly either side rather than squashing the character. `Scale:`
-nudges that, growing the frame about its centre.
-
-The health bar, the turn arrow and click targeting all stay on the sprite's own
-rectangle, so a wide frame doesn't drag the interface around with it.
-
-A missing sheet, a missing `.txt`, or numbers that describe a grid running off
-the edge of the art are all reported in the startup popup, and the character
-falls back to its static sprite rather than the battle breaking. Every declared
-sheet is loaded during that startup check, so nothing stutters the first time a
-card is played.
-
-## Naming convention
-
-Folders and files use initial caps with no underscores; multi-word names run
-together with each word capitalized — `EnemyCharacters`, `ForestMission1`,
-`RuinedBridge.png`. Character names follow the same rule (`Dirtbag`, not
-`Joe_dirtbag`), and a character's folder, its sprite files, and the name it is
-declared under in `Classes.txt` or `Enemies.txt` must all match exactly.
-
-## How to refer to files
-
-Always use repo-relative paths with forward slashes, e.g.
-`Content/Cast/EnemyCharacters/Goblin/Goblin2.png`. Never absolute paths
-(`C:\...`) — the repo lives at different roots on different machines.
-
-## Content authoring
-
-The game is authored at **3840x2160** and letterboxes to any window or screen.
-
-| Asset | Path | Optimal size |
-|---|---|---|
-| World map | `Content/Images/Map/Map.png` | 7680x4320 (bigger than the view so it scrolls) |
-| Character sprites | `Content/Cast/.../{Name}/{Name}N.png` | 1200x1800, transparent background |
-| Dialogue thumbnails | same folder, `{Name}NThumb.png` | 512x512 (optional) |
-
-**Undersized art is scaled up automatically.** If an image is smaller than the
-optimal size for its kind, it is enlarged until its longer side matches the
-corresponding optimal dimension, with the aspect ratio preserved — so a
-960x1440 sprite renders as 1200x1800, and a 1000x500 one renders as 1200x600.
-Art already at or above the optimal size is left at its native resolution.
-Nothing is ever stretched to fit; images are centered in their slot instead.
-
-Thumbnails are optional: if `Goblin1Thumb.png` doesn't exist, the dialogue box
-falls back to the full `Goblin1.png` sprite.
-
-### Destinations — `Content/Levels/Destinations.txt`
-
-```
-# name              x     y     mission
-Forest Clearing     412   688   ForestMission1
-```
-
-The last three columns are x, y (in **map-image pixels**), and the mission
-folder name; everything before them is the display name (spaces allowed).
-Easiest way to add one: run with `--devmap` and click the map.
-
-### Characters — `Content/Cast/{PlayerCharacters|EnemyCharacters}/{Name}/`
-
-Each folder holds sprite variants (`Goblin1.png`, `Goblin2.png`, ...) and
-optional thumbnails (`Goblin1Thumb.png`, ...). The per-character `{Name}.txt`
-manifests are gone: sprites and stats are declared in `Classes.txt` for the
-party and `Enemies.txt` for everyone else, one block each.
-
-### Player-facing text — `Content/Text/Strings.txt`
-
-Every string the game shows outside of room dialogue (menus, buttons, save
-confirmations, the death screen) lives here as `key = text`. Edit the text
-freely; keys must stay.
-
-### Font
-
-`Content/Fonts/CourierPrime-Regular.ttf` (Courier Prime, SIL OFL — license in
-the same folder) is baked at build time via `Content/Fonts/Courier.spritefont`.
+- Extraction is lossless. `--odd` keeps frames 1, 3, 5 and renumbers 1..N.
+- Every sheet gets a `.txt` giving cell size and grid.
+- **`detect`** measures a sheet somebody else made, reading the grid off the art
+  rather than guessing width ÷ columns.
+- Only `extract` needs ffmpeg. Details in [`Tools/SpriteTool/README.md`](Tools/SpriteTool/README.md).
 
 ## Saves
 
-`%AppData%/TheTimelineIs/save.json` on Windows (platform equivalent elsewhere).
-Progress is recorded on the world map between levels, so a save always resumes
-there and a level that was underway is played again from its start. Dying
-reloads the last save.
+`%AppData%/TheTimelineIs/save.json`. Progress is recorded on the world map, so a
+save resumes there and an unfinished level restarts.
 
-## Config — `Content/Config.txt`
+## Replays
 
-Art scale tuning, e.g. `Global scale: 100%` (the `%` is optional). The most
-specific line wins outright (override, not multiply): `Dirtbag scale` beats
-`Cast scale`, which beats `Global scale`. **A value of 0 means ignore that
-line**, so `Dirtbag scale: 0` falls through to `Cast scale` exactly as if the
-line weren't there — a way to switch a line off without deleting it. The same
-rule applies to a card's `Speed: 0`, which falls back to the default. Global covers the map and backgrounds too; UI and the
-ruler never scale. Scaling happens at draw time, so future animation frames
-scale with their character automatically — author all frames of an animation
-on the same canvas size and they stay seamless.
-
-## Debug ruler
-
-Press **F12** to toggle a ruler measured in **feet**, with **(0,0) at the
-bottom-left** of the screen: feet run up the left edge and right along the
-bottom. One foot = 180 virtual px = 1/12 of the screen height at any window
-size, so the screen is 12 feet tall and (at 16:9) 21.3 feet wide. Whole-foot
-ticks are yellow and labeled; half-foot ticks are teal. The ruler ignores all
-Config scaling — it's a fixed yardstick.
-
-## Party
-
-New Game leads to a party picker: choose 4 from the playable classes
-(duplicates allowed). `Classes.txt` is the authoritative roster — one
-`Class: Name` line each — and a class appears in the picker once it also has a
-`Content/Cast/PlayerCharacters/{Name}/` folder.
-
-A card's `Tags:` are **labels, not class names**. A class plays every card
-carrying a tag it holds; with no `Card Tags:` line, a class holds one tag —
-its own name. Adding `Card Tags: 'Mancer, Gun-O-Mancer` to a class lets it
-play cards tagged either way, so several classes can share a card pool without
-the tag having to be anybody's name.
-
-## Cards — `Content/Cards/PlayerCards.txt` and `EnemyCards.txt`
-
-Card definitions; the format legend is commented at the top of the file.
-`Effect:` is the machine-readable line (keep the wording pattern per Type);
-`Card Text:` is what the player reads; the bottom-right number is computed
-live as total damage against the current room.
-
-Cards are separated by `[]` lines. **Keys are case-insensitive** and tolerate
-loose punctuation (`Speed: 2`, `Speed 2`, `Speed 2:`); only Card Name, Card
-Text, and Bottom Right keep their authored capitalization, since the player
-reads those. The full legend is commented at the top of the file.
-
-Presentation fields:
-
-| Field | Meaning |
-|---|---|
-| `Type: [melee] …` / `[ranged] …` | Walk to the target and back, or throw a projectile |
-| `… Single Projectile` | One shot, aimed at the enemy the player clicks (AoE still damages everyone — the click only aims) |
-| `… Multiple Projectiles` | One shot per target (the default) |
-| `Projectile Art: X.png` | File in `Content/Images/Effects/`. **Art must point right**; it is rotated onto the travel vector |
-| `Casting Sound: [X.wav]` | Played when targeting completes. `[Blank]` = no sound, no delay |
-| `Casting Time: Use Sound Time` or `Casting Time: 0.9` | Either wait exactly as long as the casting sound runs, or give a fixed number of seconds. Both work on any card; with no casting sound, "Use Sound Time" is 0 |
-| `Speed: 2` | **Feet per second** for the projectile or the melee walk — distance now determines duration |
-| `Melee Time: 0.5` | Pause on arrival before the first blow |
-| `Hit Sound: [a.wav], Delay 0.2, [a.wav]` | A sequence of blows. Health drops once per blow, timed to its sound; the Effect line's damage is split across them |
-
-WAVs live in `Content/Sounds/` (PCM `.wav` only — not MP3 or OGG). A missing
-file is logged once and then ignored, so timing still works silently.
-
-**Speed is in feet per second and the screen is 12 feet tall.** Front row to
-front row is about 4.4 feet; back row to back row is about 17. At `Speed: 0.5`
-that second case takes 35 seconds. Values around 6–12 feel like a game.
+- Off until asked. Button beside End Turn.
+- Two files in `Replays/`: what happened, and a **copy** of the level as it was.
+- Nothing is re-simulated on playback, so a replay cannot disagree with the mission.
+- `Replays/` is gitignored.
 
 ## Content checking
 
-Every content file is parsed through one diagnostics channel, and a validator
-cross-checks the results at startup: card tags against `Classes.txt`, mission
-backgrounds and cast names against the folders on disk, every referenced sound
-and projectile image against whether the file exists, plus the string keys the
-code depends on.
-
-If anything is wrong, **the game opens on a popup listing the problems and
-waits for you to press Continue** — errors in red, warnings in amber, each with
-the file and line number. The complete list is always written to
-`ContentErrors.log` at the repo root (and beside the save file), so it can be
-kept open while editing.
-
-Errors mean something is broken (a card no class can play, a missing sound, a
-mission pointing at a background that isn't there). Warnings mean it will run
-but probably isn't what you meant (a card with no text, a speed so low a
-fighter takes 35 seconds to cross the stage). Problems found mid-play raise the
-same popup through `GameContext.ReportProblem`.
+- Everything is parsed through one diagnostics channel and cross-checked at startup.
+- Problems open a popup before the game — errors red, warnings amber, each with
+  file and line. The full list goes to `ContentErrors.log`.
+- **Errors** mean something is broken. **Warnings** mean it will run but
+  probably isn't what you meant.
+- Problems found mid-play raise the same popup through `GameContext.ReportProblem`.

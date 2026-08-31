@@ -10,10 +10,12 @@ using TheTimelineIs.Core.Render;
 namespace TheTimelineIs.Core.Screens;
 
 /// <summary>
-/// The scrolling world map. Destinations come from Destinations.txt in
-/// map-image pixel coordinates. With --devmap, tapping an empty spot starts
-/// the click-to-place flow: type a name, then a mission folder name, and the
-/// row is appended to the source Destinations.txt.
+/// The scrolling world map.
+///
+/// - Pins come from Destinations.txt, in map-image pixel coordinates.
+/// - A pin's name is also its level file, so the two cannot disagree.
+/// - In dev mode, tapping empty map asks for one name and appends the row to
+///   the source Destinations.txt.
 /// </summary>
 public class MapScreen : IScreen
 {
@@ -30,13 +32,13 @@ public class MapScreen : IScreen
     private float _toastTimer;
     private string _toastText = "";
 
-    // dev-mode placement state
-    private enum DevPhase { Idle, TypingName, TypingMission }
+    // dev-mode placement state. One prompt, not two: the name a pin is given
+    // is the level it opens, so there is nothing else to ask for.
+    private enum DevPhase { Idle, TypingName }
     private DevPhase _devPhase = DevPhase.Idle;
     private bool _devWasOn;
     private Point _devPoint;
     private string _devName = "";
-    private string _devMission = "";
 
     private static readonly Rectangle SaveRect = new(60, 60, 400, 160);
 
@@ -85,46 +87,28 @@ public class MapScreen : IScreen
 
     private void UpdateDevTyping(InputState input)
     {
-        bool typingName = _devPhase == DevPhase.TypingName;
-        string buffer = typingName ? _devName : _devMission;
-        buffer += input.TypedChars;
-        if (input.Backspace && buffer.Length > 0)
-            buffer = buffer[..^1];
-        if (typingName) _devName = buffer; else _devMission = buffer;
+        _devName += input.TypedChars;
+        if (input.Backspace && _devName.Length > 0)
+            _devName = _devName[..^1];
 
         if (input.Cancel)
         {
             _devPhase = DevPhase.Idle;
             return;
         }
-        if (!input.Submit) return;
+        if (!input.Submit || _devName.Trim().Length == 0) return;
 
-        if (_devPhase == DevPhase.TypingName && _devName.Trim().Length > 0)
-        {
-            _devPhase = DevPhase.TypingMission;
-        }
-        else if (_devPhase == DevPhase.TypingMission && _devMission.Trim().Length > 0)
-        {
-            string name = _devName.Trim();
-            string mission = ToPascalCase(_devMission);
-            _ctx.DevWriter!.Append(name, _devPoint.X, _devPoint.Y, mission);
-            _destinations.All.Add(new Destination(name, _devPoint.X, _devPoint.Y, mission));
-            _devPhase = DevPhase.Idle;
-            Toast(_ctx.Strings.Get("devmap_saved"));
-        }
+        string name = _devName.Trim();
+        _ctx.DevWriter!.Append(name, _devPoint.X, _devPoint.Y);
+        _destinations.All.Add(new Destination(name, _devPoint.X, _devPoint.Y));
+        _devPhase = DevPhase.Idle;
+        Toast(_ctx.Strings.Get("devmap_saved"));
     }
 
     private void Toast(string text)
     {
         _toastText = text;
         _toastTimer = 2.5f;
-    }
-
-    /// <summary>"forest mission 2" -> "ForestMission2", matching the folder naming convention.</summary>
-    private static string ToPascalCase(string input)
-    {
-        var words = input.Split(new[] { ' ', '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
-        return string.Concat(words.Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
     }
 
     public void Draw(SpriteBatch batch)
@@ -183,7 +167,6 @@ public class MapScreen : IScreen
         {
             _devPoint = new Point((int)Math.Round(world.X / _scale), (int)Math.Round(world.Y / _scale));
             _devName = "";
-            _devMission = "";
             _devPhase = DevPhase.TypingName;
         }
     }
@@ -201,13 +184,9 @@ public class MapScreen : IScreen
 
         var panel = new Rectangle(1120, 860, 1600, 440);
         Ui.FillRect(batch, _ctx.Pixel, panel, new Color(0, 0, 0, 230));
-        string prompt = _devPhase == DevPhase.TypingName
-            ? _ctx.Strings.Get("devmap_name_prompt")
-            : _ctx.Strings.Get("devmap_mission_prompt");
-        string buffer = _devPhase == DevPhase.TypingName ? _devName : _devMission;
-        Ui.DrawTextCentered(batch, _ctx.Font, prompt,
+        Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("devmap_name_prompt"),
             new Rectangle(panel.X, panel.Y + 40, panel.Width, 120), Color.Yellow, 0.5f);
-        Ui.DrawTextCentered(batch, _ctx.Font, buffer + "_",
+        Ui.DrawTextCentered(batch, _ctx.Font, _devName + "_",
             new Rectangle(panel.X, panel.Y + 220, panel.Width, 120), Color.White, 0.5f);
     }
 }

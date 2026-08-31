@@ -28,32 +28,21 @@ public class LevelDecoration
 /// and running along either the X or the Y axis. The whole run is one door —
 /// one click opens all of it, and it blocks all of it while shut.
 /// </summary>
+/// <summary>
+/// A doorway: one square of ground belonging to no room, with rooms either side.
+///
+/// - Which rooms it joins is NOT stored. It is read off the neighbours, so a
+///   door can never name a room it does not actually touch.
+/// - Doorway squares touching each other are one wide doorway; no width field.
+/// - Opens when anybody stands beside it, and reveals both rooms.
+/// </summary>
 public class LevelDoor
 {
     public int X, Y;
-    public string RoomA = "", RoomB = "";
-
-    /// <summary>Squares in the run: 1 small, 2 medium, 4 large.</summary>
-    public int Width = 1;
-
-    /// <summary>True when the run goes along Y instead of X. Meaningless at width 1.</summary>
-    public bool AlongY;
-
     public bool Open;           // runtime only; never saved
 
-    /// <summary>Every square this doorway fills.</summary>
-    public IEnumerable<Point> Tiles
-    {
-        get
-        {
-            for (int i = 0; i < Math.Max(1, Width); i++)
-                yield return AlongY ? new Point(X, Y + i) : new Point(X + i, Y);
-        }
-    }
-
-    public bool Covers(Point p) => AlongY
-        ? p.X == X && p.Y >= Y && p.Y < Y + Math.Max(1, Width)
-        : p.Y == Y && p.X >= X && p.X < X + Math.Max(1, Width);
+    public Point Tile => new(X, Y);
+    public bool Covers(Point p) => p.X == X && p.Y == Y;
 }
 
 public class LevelEnemy
@@ -92,16 +81,18 @@ public class LevelTransition
 /// <summary>
 /// One isometric level: Content/Levels/{Name}.txt, one entity per line.
 ///
-///   Block: x, y, height, type, room
+///   Block: x, y, height, type, room      (room '-' means a doorway square)
 ///   Decoration: x, y, file
-///   Door: x, y, roomA, roomB[, width[, X|Y]]
+///   Door: x, y
 ///   Enemy: x, y, name
 ///   PlayerStart: x, y
 ///   Trigger: x, y, dialogueName
 ///   Transition: x, y, pair
 ///
-/// Rooms are just labels on blocks; a door joins two of them and hides RoomB
-/// (and everything standing in it) until opened. The editor writes this file.
+/// Rooms are labels on blocks. A block with a BLANK room is a doorway square:
+/// it belongs to nothing, and the rooms it joins are whichever rooms sit beside
+/// it. An unopened door hides the room on the far side, and everything standing
+/// in it. The editor writes this file.
 /// </summary>
 public class LevelData
 {
@@ -125,8 +116,77 @@ public class LevelData
     public LevelTransition? TransitionAt(Point p) =>
         Transitions.FirstOrDefault(t => t.X == p.X && t.Y == p.Y);
 
+    /// <summary>Real rooms. Blank-roomed squares are doorways, not rooms.</summary>
     public IEnumerable<string> RoomNames =>
-        Blocks.Values.Select(b => b.Room).Distinct(StringComparer.OrdinalIgnoreCase);
+        Blocks.Values.Select(b => b.Room).Where(r => r.Length > 0)
+              .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>What a doorway square carries for a room name: nothing.</summary>
+    public const string NoRoom = "";
+
+    /// <summary>
+    /// How "no room" is written in the file. A blank field would be swallowed
+    /// by the parser's empty-entry trimming and silently read back as "Main",
+    /// which would turn every doorway into part of a room on the next load.
+    /// </summary>
+    public const string NoRoomToken = "-";
+
+    /// <summary>The four squares touching this one.</summary>
+    public static IEnumerable<Point> Beside(Point p)
+    {
+        yield return new Point(p.X + 1, p.Y);
+        yield return new Point(p.X - 1, p.Y);
+        yield return new Point(p.X, p.Y + 1);
+        yield return new Point(p.X, p.Y - 1);
+    }
+
+    /// <summary>
+    /// The rooms a doorway square opens between: the distinct rooms of the
+    /// squares touching it. Two is what a door needs; anything else is a
+    /// mistake, and the validator says so.
+    /// </summary>
+    public List<string> RoomsBeside(Point p) =>
+        Beside(p).Select(BlockAt).Where(b => b is { Room.Length: > 0 })
+                 .Select(b => b!.Room).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// Whether a square is on show right now.
+    ///
+    /// A doorway belongs to no room, so it cannot be revealed the way a room
+    /// is. It shows as soon as EITHER room beside it does, which is what makes
+    /// a door visible from both sides rather than only from the one you have
+    /// already been in.
+    /// </summary>
+    public bool Shown(Point p, IReadOnlySet<string> revealedRooms)
+    {
+        var b = BlockAt(p);
+        if (b == null) return false;
+        return b.Room.Length > 0
+            ? revealedRooms.Contains(b.Room)
+            : RoomsBeside(p).Any(revealedRooms.Contains);
+    }
+
+    /// <summary>
+    /// Every doorway square joined to this one, itself included. Doors touching
+    /// each other are one doorway, so a two-square gap opens as a unit without
+    /// anybody declaring a width.
+    /// </summary>
+    public List<LevelDoor> DoorGroup(LevelDoor door)
+    {
+        var group = new List<LevelDoor> { door };
+        var seen = new HashSet<Point> { door.Tile };
+        var queue = new Queue<Point>();
+        queue.Enqueue(door.Tile);
+        while (queue.Count > 0)
+            foreach (var n in Beside(queue.Dequeue()))
+            {
+                if (!seen.Add(n)) continue;
+                if (DoorAt(n) is not LevelDoor next) continue;
+                group.Add(next);
+                queue.Enqueue(n);
+            }
+        return group;
+    }
 
     public static LevelData Load(string name) =>
         Read(name, PathFor(name), AssetLoader.ReadNumbered(PathFor(name), PathFor(name)));
@@ -178,47 +238,19 @@ public class LevelData
                     {
                         X = bx, Y = by, Height = Math.Max(0, bh),
                         Type = parts[3],
-                        Room = parts.Length >= 5 ? parts[4] : "Main",
+                        Room = parts.Length < 5 ? "Main"
+                            : parts[4] == NoRoomToken ? NoRoom : parts[4],
                     };
                     break;
                 case "decoration" when Num(0, out int dx) && Num(1, out int dy) && parts.Length >= 3:
                     level.Decorations.Add(new LevelDecoration { X = dx, Y = dy, File = parts[2] });
                     break;
-                // width and axis are optional so every level written before
-                // wide doors existed still reads as a run of one square
-                case "door" when Num(0, out int ox) && Num(1, out int oy) && parts.Length >= 4:
-                {
-                    // A mistyped width or axis is reported rather than quietly
-                    // becoming a one-square door pointing the wrong way — a
-                    // door in the wrong place is exactly the kind of thing
-                    // nobody notices until the level is unfinishable.
-                    int width = 1;
-                    if (parts.Length >= 5)
-                    {
-                        if (!int.TryParse(parts[4], out width) || width < 1)
-                        {
-                            diag.Error(path, lineNo,
-                                $"door at {ox},{oy}: width must be a whole number of squares, " +
-                                $"got '{parts[4]}'");
-                            width = 1;
-                        }
-                    }
-                    bool alongY = false;
-                    if (parts.Length >= 6)
-                    {
-                        string axis = parts[5].Trim();
-                        if (axis.Equals("y", StringComparison.OrdinalIgnoreCase)) alongY = true;
-                        else if (!axis.Equals("x", StringComparison.OrdinalIgnoreCase))
-                            diag.Error(path, lineNo,
-                                $"door at {ox},{oy}: the axis must be X or Y, got '{axis}'");
-                    }
-                    level.Doors.Add(new LevelDoor
-                    {
-                        X = ox, Y = oy, RoomA = parts[2], RoomB = parts[3],
-                        Width = width, AlongY = alongY,
-                    });
+                // Just a position. Which rooms it joins is worked out from the
+                // squares beside it, so there is nothing here to get wrong and
+                // nothing that can disagree with the map.
+                case "door" when Num(0, out int ox) && Num(1, out int oy):
+                    level.Doors.Add(new LevelDoor { X = ox, Y = oy });
                     break;
-                }
                 case "enemy" when Num(0, out int ex) && Num(1, out int ey) && parts.Length >= 3:
                     level.Enemies.Add(new LevelEnemy { X = ex, Y = ey, Name = parts[2] });
                     break;
@@ -263,14 +295,7 @@ public class LevelData
         copy.Decorations.AddRange(Decorations.Select(d =>
             new LevelDecoration { X = d.X, Y = d.Y, File = d.File }));
         copy.Doors.AddRange(Doors.Select(d =>
-            new LevelDoor
-            {
-                X = d.X, Y = d.Y, RoomA = d.RoomA, RoomB = d.RoomB,
-                Width = d.Width, AlongY = d.AlongY, Open = d.Open,
-            }));
-        copy.Enemies.AddRange(Enemies.Select(e => new LevelEnemy { X = e.X, Y = e.Y, Name = e.Name }));
-        copy.Transitions.AddRange(Transitions.Select(t =>
-            new LevelTransition { X = t.X, Y = t.Y, Pair = t.Pair }));
+            new LevelDoor { X = d.X, Y = d.Y, Open = d.Open }));
         copy.Triggers.AddRange(Triggers.Select(t =>
             new LevelTrigger { X = t.X, Y = t.Y, Dialogue = t.Dialogue, Fired = t.Fired }));
         copy.PlayerStarts.AddRange(PlayerStarts);
@@ -297,13 +322,12 @@ public class LevelData
         sb.AppendLine("# Isometric level. One entity per line; the in-game editor writes this file.");
         sb.AppendLine("# Block: x, y, height(feet), type, room");
         foreach (var b in Blocks.Values.OrderBy(b => b.Y).ThenBy(b => b.X))
-            sb.AppendLine($"Block: {b.X}, {b.Y}, {b.Height}, {b.Type}, {b.Room}");
+            sb.AppendLine($"Block: {b.X}, {b.Y}, {b.Height}, {b.Type}, " +
+                (b.Room.Length > 0 ? b.Room : NoRoomToken));
         foreach (var d in Decorations.OrderBy(d => d.Y).ThenBy(d => d.X))
             sb.AppendLine($"Decoration: {d.X}, {d.Y}, {d.File}");
-        foreach (var d in Doors)
-            sb.AppendLine(d.Width > 1
-                ? $"Door: {d.X}, {d.Y}, {d.RoomA}, {d.RoomB}, {d.Width}, {(d.AlongY ? "Y" : "X")}"
-                : $"Door: {d.X}, {d.Y}, {d.RoomA}, {d.RoomB}");
+        foreach (var d in Doors.OrderBy(d => d.Y).ThenBy(d => d.X))
+            sb.AppendLine($"Door: {d.X}, {d.Y}");
         foreach (var e in Enemies)
             sb.AppendLine($"Enemy: {e.X}, {e.Y}, {e.Name}");
         foreach (var t in Triggers.OrderBy(t => t.Y).ThenBy(t => t.X))

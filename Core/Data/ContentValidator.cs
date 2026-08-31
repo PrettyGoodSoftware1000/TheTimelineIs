@@ -372,34 +372,33 @@ public static class ContentValidator
             }
             foreach (var door in level.Doors)
             {
-                if (!rooms.Contains(door.RoomA) || !rooms.Contains(door.RoomB))
+                var at = door.Tile;
+                var under = level.BlockAt(at);
+                if (under == null)
+                {
+                    diag.Error(path, 0, $"door at {at.X},{at.Y} has no block under it, " +
+                        "so nobody can walk through it");
+                    continue;
+                }
+                // A doorway belongs to no room. One left painted is part of a
+                // room instead of a gap between two, and would be revealed with
+                // that room whether or not it had ever been opened.
+                if (under.Room.Length > 0)
+                {
                     diag.Error(path, 0,
-                        $"door at {door.X},{door.Y} joins '{door.RoomA}' and '{door.RoomB}' " +
-                        "but at least one of those rooms has no blocks");
-                // a door whose two sides are the same room reveals nothing when
-                // opened, so it is a wall with a handle. Almost always means
-                // the editor's current room was left on the room being stood in.
-                // a warning, not an error: it still works as a barrier, and a
-                // one-room level might want exactly that. It is almost always
-                // a mistake though, so it does not pass unmentioned.
-                if (door.RoomA.Equals(door.RoomB, StringComparison.OrdinalIgnoreCase))
-                    diag.Warn(path, 0,
-                        $"door at {door.X},{door.Y} joins '{door.RoomA}' to itself, so opening it " +
-                        "reveals nothing — paint the far side as its own room and place the door " +
-                        "with Room set to that name");
-                foreach (var t in door.Tiles)
-                    if (level.BlockAt(t) == null)
-                        diag.Error(path, 0,
-                            door.Width > 1
-                                ? $"the {door.Width}-wide door at {door.X},{door.Y} runs over {t.X},{t.Y}, " +
-                                  "which has no block under it"
-                                : $"door at {door.X},{door.Y} has no block under it");
-                // two doors on one square: only the first is ever found, so the
-                // other can never be opened
-                foreach (var t in door.Tiles)
-                    if (level.Doors.Count(d => d.Covers(t)) > 1)
-                        diag.Error(path, 0,
-                            $"more than one door covers {t.X},{t.Y}; only one of them can ever be opened");
+                        $"door at {at.X},{at.Y} sits on a square painted '{under.Room}' — " +
+                        "a doorway square must belong to no room");
+                    continue;
+                }
+                var joins = level.RoomsBeside(at);
+                if (joins.Count < 2)
+                    diag.Error(path, 0,
+                        $"door at {at.X},{at.Y} touches " +
+                        (joins.Count == 0 ? "no rooms" : $"only '{joins[0]}'") +
+                        " — a door needs a different room on each side");
+                if (level.Doors.Count(d => d.Covers(at)) > 1)
+                    diag.Error(path, 0,
+                        $"more than one door on {at.X},{at.Y}; only one of them can ever be opened");
             }
             foreach (var start in level.PlayerStarts)
                 if (level.BlockAt(start) == null)
@@ -478,7 +477,7 @@ public static class ContentValidator
             "party_title", "party_start", "party_slot_empty",
             "battle_win", "battle_turn", "battle_hit", "battle_down",
             "death_title", "death_reload", "death_no_save",
-            "devmap_hint", "devmap_name_prompt", "devmap_mission_prompt", "devmap_saved",
+            "devmap_hint", "devmap_name_prompt", "devmap_saved",
             "devmap_on", "devmap_off",
             "replay_start", "replay_stop", "replay_started", "replay_done", "replay_saved", "replay_failed", "replay_watching",
             "replay_title", "replay_turn", "replay_end", "replay_next", "replay_card",
@@ -499,6 +498,8 @@ public static class ContentValidator
             "iso_vulnerable", "iso_vulnerable_hit",
             "iso_stunned", "iso_stun_skip", "iso_swapped",
             "iso_trip_start", "iso_trip_empty", "iso_trip_survivor", "iso_trip_woke",
+            "dev_title", "dev_win", "dev_die", "dev_scale", "dev_close",
+            "dev_scale_title", "dev_scale_hint", "dev_scale_saved", "dev_scale_unsaved",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

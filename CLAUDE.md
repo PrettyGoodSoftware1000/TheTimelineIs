@@ -9,6 +9,12 @@ Short. Plain words. Say the thing, then stop.
 - Explain like `Explanations.md` does — a few lines, no jargon unless defined.
 - Long output is fine when it's *work* (code, a file). Not when it's talk.
 
+## Writing docs and readmes
+
+- Bullets, not paragraphs. Short lines.
+- Say the rule, not the reasoning. One example beats three sentences.
+- If a section can be half as long, it should be.
+
 ## Rules that don't change
 
 - `Core/` must never touch `System.IO` for game assets — `TitleContainer.OpenStream`

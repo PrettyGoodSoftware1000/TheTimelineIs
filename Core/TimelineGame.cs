@@ -89,7 +89,9 @@ public class TimelineGame : Game
         var input = _input.Poll(_viewport, dt);
         if (input.ToggleRuler)
             _rulerVisible = !_rulerVisible;
-        if (input.ToggleDevMap)
+        // ~ arms dev tools. On the map that means destination placement;
+        // in a level the ~ menu handles the key itself.
+        if (input.ToggleDevMap || (input.ToggleDevMenu && _ctx.Screen is MapScreen))
             ToggleDevMap();
         _ctx.Screen.Update(input, dt);
         base.Update(gameTime);

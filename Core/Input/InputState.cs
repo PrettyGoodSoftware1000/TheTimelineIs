@@ -82,6 +82,12 @@ public struct InputState
     /// <summary>Either Shift down — the editor's box-place modifier.</summary>
     public bool ShiftHeld;
 
+    /// <summary>Tab: out of combat, select the whole party.</summary>
+    public bool SelectAll;
+
+    /// <summary>The ~ key: show or hide the dev menu.</summary>
+    public bool ToggleDevMenu;
+
     /// <summary>Either Alt down — the editor writes every block's height while it is.</summary>
     public bool AltHeld;
 

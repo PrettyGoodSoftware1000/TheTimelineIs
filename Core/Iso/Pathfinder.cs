@@ -26,8 +26,9 @@ public static class Pathfinder
     /// <summary>Whether a tile can be stood on at all (terrain only, ignoring who's there).</summary>
     public static bool Standable(LevelData level, Point p, IReadOnlySet<string> revealedRooms)
     {
-        var block = level.BlockAt(p);
-        if (block == null || !revealedRooms.Contains(block.Room)) return false;
+        // a doorway square has no room of its own; LevelData knows to look at
+        // the rooms beside it instead
+        if (!level.Shown(p, revealedRooms)) return false;
         if (level.DecorationAt(p) != null) return false;
         if (level.DoorAt(p) is LevelDoor door && !door.Open) return false;
         return true;

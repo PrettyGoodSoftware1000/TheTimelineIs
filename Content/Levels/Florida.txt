@@ -80,7 +80,7 @@ Block: 9, 4, 0, GrassBlock1, RoomA
 Block: 9, 5, 0, GrassBlock1, RoomA
 Block: 9, 6, 0, GrassBlock2, RoomA
 Block: 9, 7, 0, GrassBlock1, RoomA
-Block: 10, 3, 0, GrassBlock1, RoomA
+Block: 10, 3, 0, GrassBlock1, -
 Block: 11, 0, 0, GrassBlock2, RoomB
 Block: 11, 1, 0, GrassBlock2, RoomB
 Block: 11, 2, 0, GrassBlock1, RoomB
@@ -133,7 +133,7 @@ Decoration: 4, 0, Tree1.png
 Decoration: 8, 6, Tree1.png
 Decoration: 6, 1, Rock1.png
 Decoration: 13, 0, Rock1.png
-Door: 10, 3, RoomA, RoomB
+Door: 10, 3
 Enemy: 17, 1, Goblin
 Enemy: 17, 3, Goblin
 Enemy: 15, 4, Goblin
