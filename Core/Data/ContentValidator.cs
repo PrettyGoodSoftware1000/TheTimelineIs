@@ -25,6 +25,7 @@ public static class ContentValidator
         ValidateCards(enemyCards, enemies.AllTags(), diag);
         ValidateCardsAgainstClasses(cards, classes, diag);
         ValidateRoster(classes, cards, diag);
+        ValidateScales(classes, diag);
         ValidateEnemies(enemies, enemyCards, diag);
         ValidateLevels(enemies, diag);
         ValidateStrings(strings, diag);
@@ -212,6 +213,26 @@ public static class ContentValidator
         else if (!file.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
             diag.Warn(card.Source, card.Line,
                 $"'{card.Name}': {field} '{file}' is not a .wav — only PCM WAV can be played");
+    }
+
+    /// <summary>
+    /// A shapeshifter's shapes are different art and want different sizes, so
+    /// each one carries its own scale line. A bare "{Class} scale" line would
+    /// sit above both of them and quietly size shapes it was never measured
+    /// against — the wolf resized because somebody was adjusting the witch.
+    /// </summary>
+    private static void ValidateScales(ClassLibrary classes, Diagnostics diag)
+    {
+        var cfg = GameConfig.Load();
+        foreach (string name in classes.ClassNames)
+        {
+            var cls = classes.Get(name)!;
+            if (cls.Forms.Count == 0 || cfg.RawScale(name) <= 0f) continue;
+            diag.Warn(GameConfig.Path, 0,
+                $"'{name} scale' applies to every one of its shapes at once. " +
+                $"{name} has forms, so size them separately: " +
+                string.Join(", ", cls.Forms.Select(f => $"'{name} {f.Name} scale'")));
+        }
     }
 
     private static void ValidateRoster(ClassLibrary classes, CardLibrary cards, Diagnostics diag)
@@ -489,7 +510,7 @@ public static class ContentValidator
             "iso_move_spent", "iso_pick_target", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
-            "iso_cursed", "iso_form", "iso_pet_turn", "iso_summoned", "iso_summon_no_room",
+            "iso_cursed", "iso_form", "iso_pet_turn", "iso_summoned", "iso_summon_no_room", "iso_summon_already",
             "iso_guarding", "iso_guard_fires",
             "iso_stole", "iso_steal_over", "iso_nothing_to_steal", "iso_no_cards", "iso_needs_other",
             "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_card_actions", "iso_no_actions",

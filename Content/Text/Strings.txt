@@ -133,3 +133,4 @@ dev_scale_title = Scale Stuff - click a box, type a percent, Enter to apply and 
 dev_scale_hint = 0 means no line of its own. Scroll for more. Esc goes back without saving.
 dev_scale_saved = Sizes saved to Config.txt.
 dev_scale_unsaved = Sizes applied, but Config.txt could not be written.
+iso_summon_already = There is already a {name} out.

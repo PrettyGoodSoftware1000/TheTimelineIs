@@ -195,6 +195,21 @@ public partial class IsoLevelScreen : IScreen
     private float _walkT;
 
     /// <summary>
+    /// Everyone else walking alongside the main walker, when a group was moved
+    /// as a set. They share the one clock, so the party crosses the ground
+    /// together instead of filing past one at a time.
+    /// </summary>
+    private readonly List<Escort> _escorts = new();
+
+    /// <summary>One extra body on the same walk clock.</summary>
+    private sealed class Escort
+    {
+        public required CharacterInstance Who;
+        public required List<Point> Path;
+        public Point From;
+    }
+
+    /// <summary>
     /// Seconds the walk is holding still for. A guard's volley stops the walker
     /// where they stand for a moment so the shots read as landing on them, and
     /// then they carry on to where they were going.
@@ -506,6 +521,9 @@ public partial class IsoLevelScreen : IScreen
             _walker.GX = last.X;
             _walker.GY = last.Y;
         }
+        foreach (var e in _escorts)
+            if (e.Path.Count > 0) { e.Who.GX = e.Path[^1].X; e.Who.GY = e.Path[^1].Y; }
+        _escorts.Clear();
         _walkPath.Clear();
         _walker = null;
         _afterWalk = null;
@@ -703,6 +721,11 @@ public partial class IsoLevelScreen : IScreen
                     ? loaded : c).ToList();
         }
 
+        // A summon card is out of the hand while its creature is on the board:
+        // one Gator at a time. It comes back the moment that one dies, and a
+        // new level starts with a fresh party and no pets at all.
+        hand = hand.Where(c => !c.IsSummon || !SummonAlive(who, c.Summons)).ToList();
+
         if (who.Lost.Count > 0)
             hand = hand.Where(c => !who.Lost.Any(l =>
                 l.CardName.Equals(c.Name, StringComparison.OrdinalIgnoreCase))).ToList();
@@ -782,11 +805,14 @@ public partial class IsoLevelScreen : IScreen
     private Vector2 FootOf(CharacterInstance c)
     {
         var at = IsoMath.ToScreen(c.GX, c.GY, HeightAt(Tile(c)), Origin);
-        if (c == _walker && _walkPath.Count > 0)
+        var leg = c == _walker && _walkPath.Count > 0 ? (_walkFrom, _walkPath[0])
+            : _escorts.FirstOrDefault(e => e.Who == c) is Escort esc && esc.Path.Count > 0
+                ? (esc.From, esc.Path[0])
+                : ((Point, Point)?)null;
+        if (leg is var (legFrom, legTo) && leg != null)
         {
-            var next = _walkPath[0];
-            var from = IsoMath.ToScreen(_walkFrom.X, _walkFrom.Y, HeightAt(_walkFrom), Origin);
-            var to = IsoMath.ToScreen(next.X, next.Y, HeightAt(next), Origin);
+            var from = IsoMath.ToScreen(legFrom.X, legFrom.Y, HeightAt(legFrom), Origin);
+            var to = IsoMath.ToScreen(legTo.X, legTo.Y, HeightAt(legTo), Origin);
             at = Vector2.Lerp(from, to, _walkT);
         }
         // a body wider than one square stands in the middle of its footprint,
@@ -810,6 +836,7 @@ public partial class IsoLevelScreen : IScreen
         if (_toastTimer > 0) _toastTimer -= dt;
         if (_replaySavedTimer > 0) _replaySavedTimer -= dt;
         Recoil.Update(Everyone, dt);
+        UpdateHealthBars(dt);
         _clock += dt;
         UpdateCastAnimations(dt);
 
@@ -960,11 +987,17 @@ public partial class IsoLevelScreen : IScreen
             _walkPause = 0f;
         }
         _walkT += dt * WalkTilesPerSec;
-        while (_walkT >= 1f && _walkPath.Count > 0)
+        while (_walkT >= 1f && (_walkPath.Count > 0 || _escorts.Count > 0))
         {
             _walkT -= 1f;
+
+            // everyone travelling together takes their step on the same beat
+            StepEscorts();
+            if (_walkPath.Count == 0) continue;
+
             var arrived = _walkPath[0];
             _walkPath.RemoveAt(0);
+            _walker.Face(Tile(_walker), arrived);
             _walkFrom = arrived;
             _walker.GX = arrived.X;
             _walker.GY = arrived.Y;
@@ -972,7 +1005,7 @@ public partial class IsoLevelScreen : IScreen
 
             // crossing burning ground catches you as surely as standing in it
             Ignite(_walker);
-            if (!_walker.Alive) { _walkPath.Clear(); break; }
+            if (!_walker.Alive) { StopWalk(); break; }
 
             // standing beside a door opens it: no clicking, no reach to learn
             if (_walker.IsPlayer) OpenDoorsBeside(_walker);
@@ -981,16 +1014,16 @@ public partial class IsoLevelScreen : IScreen
             // walk if it kills; otherwise the walker stands still for a moment
             // and then carries on to where it was going, which is what the
             // pause below is for.
-            if (CheckGuards(_walker)) { _walkPath.Clear(); break; }
+            if (CheckGuards(_walker)) { StopWalk(); break; }
             if (_walkPause > 0f) break;
 
-            if (_walker.IsPlayer && FireTrigger(arrived)) { _walkPath.Clear(); break; }
+            if (_walker.IsPlayer && FireTrigger(arrived)) { StopWalk(); break; }
 
             // an area transition takes the whole party somewhere else, so the
             // walk that set it off has nowhere left to go
             if (_mode == Mode.Explore && _walker.IsPlayer && TakeTransition(arrived))
             {
-                _walkPath.Clear();
+                StopWalk();
                 _walker = null;
                 _afterWalk = null;
                 return;
@@ -998,20 +1031,61 @@ public partial class IsoLevelScreen : IScreen
 
             if (_mode == Mode.Explore && _walker.IsPlayer && CheckAggro(_walker))
             {
-                _walkPath.Clear();
+                StopWalk();
                 break;
             }
         }
         // a volley landing on the last step still gets its moment before
         // whatever the walk was leading up to happens
         if (_walkPause > 0f) return;
-        if (_walkPath.Count == 0)
+        if (_walkPath.Count == 0 && _escorts.Count == 0)
         {
             var done = _afterWalk;
             _walker = null;
             _afterWalk = null;
             done?.Invoke();
         }
+    }
+
+    /// <summary>
+    /// Cuts the whole walk short — the leader and everyone with them.
+    ///
+    /// Anything that interrupts a walk (a fire, a volley, a conversation, a
+    /// fight starting) interrupts it for the group. Stopping only the leader
+    /// would leave the rest strolling on into whatever it was.
+    /// </summary>
+    private void StopWalk()
+    {
+        _walkPath.Clear();
+        _escorts.Clear();
+    }
+
+    /// <summary>
+    /// One step for everybody walking alongside the main walker. They run the
+    /// same per-step checks it does — fire catches them, doors open for them,
+    /// and watched ground shoots at them — because they are walking too.
+    /// </summary>
+    private void StepEscorts()
+    {
+        for (int i = _escorts.Count - 1; i >= 0; i--)
+        {
+            var e = _escorts[i];
+            if (!e.Who.Alive || e.Path.Count == 0) { _escorts.RemoveAt(i); continue; }
+
+            var arrived = e.Path[0];
+            e.Path.RemoveAt(0);
+            e.From = arrived;
+            e.Who.Face(Tile(e.Who), arrived);
+            e.Who.GX = arrived.X;
+            e.Who.GY = arrived.Y;
+
+            Ignite(e.Who);
+            if (!e.Who.Alive) { _escorts.RemoveAt(i); continue; }
+            if (e.Who.IsPlayer) OpenDoorsBeside(e.Who);
+            CheckGuards(e.Who);
+            if (e.Path.Count == 0) _escorts.RemoveAt(i);
+        }
+        _overlayKey = null;
     }
 
     /// <summary>
@@ -1133,55 +1207,56 @@ public partial class IsoLevelScreen : IScreen
     }
 
     /// <summary>The ground a planted character covers: every revealed square within reach.</summary>
+    /// <summary>
+    /// The ground a planted character covers: every square of real ground
+    /// within reach.
+    ///
+    /// Deliberately NOT filtered by what is revealed. It used to be, and that
+    /// quietly cut the zone off at the edge of the room you could see — so an
+    /// enemy coming through a door that opened afterwards walked in over
+    /// ground the watch had never been told about, and nothing fired. The zone
+    /// is a patch of dirt; what you can see of it is a drawing question, and
+    /// the drawing loop only visits revealed squares anyway.
+    /// </summary>
     private HashSet<Point> GuardZoneAround(Point centre, int reach)
     {
         var zone = new HashSet<Point>();
         foreach (var block in _level.Blocks.Values)
         {
             var tile = new Point(block.X, block.Y);
-            if (_level.Shown(tile, _revealed) && IsoMath.GridDistance(tile, centre) <= reach)
-                zone.Add(tile);
+            if (IsoMath.GridDistance(tile, centre) <= reach) zone.Add(tile);
         }
         return zone;
     }
 
     /// <summary>Whether any part of a body is standing on a guard's ground.</summary>
     private static bool InGuardZone(CharacterInstance guard, CharacterInstance who) =>
-        who.Footprint.Any(guard.GuardZone.Contains);
+        guard.Watch.Covers(who.Footprint);
 
     /// <summary>
     /// Anyone who steps onto ground somebody is covering gets shot for it —
     /// their own side included, since a planted gun does not check badges.
     ///
-    /// Stepping IN is what fires it. Whoever is already inside is remembered,
-    /// so crossing the rest of the zone draws nothing more; walk out and back
-    /// in and it fires again. Returns true if the walk should stop for good,
-    /// which it does only when the walker dies — otherwise the walk pauses for
-    /// the volley and then carries on to where it was going.
+    /// Stepping IN is what fires it, and the watch itself keeps track of who is
+    /// already standing there. Returns true only if the walk should stop for
+    /// good, which is when the walker dies; otherwise it pauses for the volley
+    /// and carries on.
     /// </summary>
     private bool CheckGuards(CharacterInstance walker)
     {
         foreach (var guard in Everyone.Where(g => g.Alive && g.IsGuarding && g != walker).ToList())
         {
-            bool inside = InGuardZone(guard, walker);
-            if (!inside)
-            {
-                // stepped back out: the next step in is a fresh approach
-                guard.GuardedAgainst.Remove(walker);
-                continue;
-            }
-            if (guard.GuardedAgainst.Contains(walker)) continue;
+            if (!guard.Watch.Entered(Key(walker), walker.Footprint)) continue;
 
-            guard.GuardedAgainst.Add(walker);
             var report = new StringBuilder();
             report.AppendLine(_ctx.Strings.Format("iso_guard_fires",
                 ("name", guard.Name), ("target", walker.Name),
-                ("shots", guard.GuardShots.ToString())));
+                ("shots", guard.Watch.Shots.ToString())));
 
             var was = _actor;
             _actor = guard;                       // so the shots are credited to the guard
-            for (int i = 0; i < guard.GuardShots && walker.Alive; i++)
-                ApplyHit(walker, guard.GuardDamage, "Gunfire", report);
+            for (int i = 0; i < guard.Watch.Shots && walker.Alive; i++)
+                ApplyHit(walker, guard.Watch.Damage, "Gunfire", report);
             _actor = was;
 
             _ctx.Sounds.Play("hitbasic.wav");
@@ -1622,12 +1697,7 @@ public partial class IsoLevelScreen : IScreen
     }
 
     /// <summary>Lifts a guard zone: the ground stops being watched and the marks come off.</summary>
-    private static void StopGuarding(CharacterInstance c)
-    {
-        c.GuardZone.Clear();
-        c.GuardShots = c.GuardDamage = 0;
-        c.GuardedAgainst.Clear();
-    }
+    private static void StopGuarding(CharacterInstance c) => c.Watch.Stand_Down();
 
     private void StartCombat()
     {
@@ -1674,10 +1744,12 @@ public partial class IsoLevelScreen : IScreen
             _turn = (_turn + 1) % _order.Count;
             if (_order[_turn].Alive) break;
         }
-        // a guard forgets anybody who is no longer standing in the zone, so
-        // walking back in is a fresh approach and draws another volley
+        // A guard forgets anybody who is no longer standing on the ground, so
+        // walking back in is a fresh approach. Somebody who died in the zone is
+        // forgotten too, in case their name is reused.
         foreach (var g in Everyone.Where(g => g.IsGuarding))
-            g.GuardedAgainst.RemoveAll(t => !t.Alive || !InGuardZone(g, t));
+            foreach (var t in Everyone.Where(t => !t.Alive || !InGuardZone(g, t)))
+                g.Watch.Forget(Key(t));
 
         var current = Current!;
         _replayTurn++;
@@ -1899,6 +1971,11 @@ public partial class IsoLevelScreen : IScreen
             && reachable.Contains(who) && ReachableAim(Acting!, tile, card))
             _doomed.Add(who);
     }
+
+    /// <summary>Whether this character already has one of these on the board.</summary>
+    private bool SummonAlive(CharacterInstance owner, string what) =>
+        what.Length > 0 && _party.Any(p => p.Alive && p.Owner == owner &&
+            p.Name.Equals(what, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The card of that name from whichever deck the holder draws from.</summary>
     private Card? CardNamed(string name) =>
@@ -2159,15 +2236,28 @@ public partial class IsoLevelScreen : IScreen
             foreach (var t in Pathfinder.Footprint(at, who.SizeX, who.SizeY)) claimed.Add(t);
             legs.Add((who, at));
         }
-        WalkInTurn(legs, 0);
+        if (legs.Count == 0) return;
+
+        // The first is the walker proper — it runs the clock and the per-step
+        // checks that belong to a walk. The rest ride the same clock beside it.
+        BeginWalk(legs[0].Who, legs[0].Where, null);
+        foreach (var (who, where) in legs.Skip(1))
+            AddEscort(who, where);
     }
 
-    /// <summary>One walker at a time, each starting when the last one arrives.</summary>
-    private void WalkInTurn(List<(CharacterInstance Who, Point Where)> legs, int i)
+    /// <summary>
+    /// Puts another body on the current walk. It steps in time with the main
+    /// walker rather than after it, which is what makes a group move read as
+    /// one movement instead of a queue.
+    /// </summary>
+    private void AddEscort(CharacterInstance who, Point goal)
     {
-        if (i >= legs.Count) return;
-        var (who, where) = legs[i];
-        BeginWalk(who, where, () => WalkInTurn(legs, i + 1));
+        var (_, parent) = Pathfinder.Reachable(_level, Tile(who), 9999, _revealed,
+            OccupiedExcept(who), false, PassThroughFor(who), who.SizeX, who.SizeY);
+        var path = Pathfinder.PathTo(parent, Tile(who), goal);
+        if (path.Count == 0) return;
+        Record(ReplayEventKind.Move, who, from: Tile(who), to: goal, amount: path.Count);
+        _escorts.Add(new Escort { Who = who, Path = path, From = Tile(who) });
     }
 
     private void BeginWalk(CharacterInstance mover, Point goal, Action? after, Card? via = null)
@@ -2177,6 +2267,7 @@ public partial class IsoLevelScreen : IScreen
             OccupiedExcept(mover), via?.IgnoresHeight ?? false, PassThroughFor(mover), mover.SizeX, mover.SizeY);
         _walker = mover;
         _walkFrom = Tile(mover);
+        _escorts.Clear();          // a new walk is not the old one's group
         _walkPath = Pathfinder.PathTo(parent, _walkFrom, goal);
         if (_walkPath.Count > 0)
             Record(ReplayEventKind.Move, mover, from: _walkFrom, to: goal,
@@ -2676,6 +2767,10 @@ public partial class IsoLevelScreen : IScreen
         int through = dmg - soaked;
         target.Hp -= through;
 
+        // the number that floats off them is what actually got through, plus
+        // whatever the armour ate, since both came off the bar
+        target.Popups.Add((through + soaked, type, PopupSeconds));
+
         report.AppendLine(soaked > 0
             ? _ctx.Strings.Format("iso_hit_armor", ("target", target.Name),
                 ("dmg", through.ToString()), ("type", type), ("soaked", soaked.ToString()))
@@ -2727,6 +2822,12 @@ public partial class IsoLevelScreen : IScreen
             _ctx.ReportProblem(CardLibrary.PlayerPath,
                 $"'{card.Name}' summons '{card.Summons}', which is not a 'Summon:' block " +
                 $"in {ClassLibrary.Path}");
+            return;
+        }
+
+        if (SummonAlive(owner, card.Summons))
+        {
+            report.AppendLine(_ctx.Strings.Format("iso_summon_already", ("name", def.Name)));
             return;
         }
 
@@ -2836,19 +2937,19 @@ public partial class IsoLevelScreen : IScreen
                     // once, and marks out the ground you are covering. The zone
                     // is worked out here and then left alone: it is a patch of
                     // dirt, not a bubble that follows anybody.
-                    _actor.GuardZone = GuardZoneAround(Tile(_actor), card.GuardReach);
-                    _actor.GuardShots = Math.Max(1, card.Hits);
-                    _actor.GuardDamage = card.Damage;
+                    _actor.Watch.Cover(GuardZoneAround(Tile(_actor), card.GuardReach),
+                        Math.Max(1, card.Hits), card.Damage);
                     _actor.MovePoints = 0;
                     // whoever is already standing in it does not get shot for
                     // having been there first; they are marked as inside so
                     // only stepping IN sets it off
-                    _actor.GuardedAgainst = Everyone
-                        .Where(c => c.Alive && c != _actor && InGuardZone(_actor, c)).ToList();
+                    foreach (var c in Everyone.Where(c => c.Alive && c != _actor &&
+                                                         InGuardZone(_actor, c)))
+                        _actor.Watch.AlreadyHere(Key(c));
                     report.AppendLine(_ctx.Strings.Format("iso_guarding",
                         ("name", _actor.Name), ("range", effect.Amount.ToString()),
-                        ("shots", _actor.GuardShots.ToString()),
-                        ("dmg", _actor.GuardDamage.ToString())));
+                        ("shots", _actor.Watch.Shots.ToString()),
+                        ("dmg", _actor.Watch.Damage.ToString())));
                 }
                 else if (effect.Is(Data.Effects.Swap))
                 {
@@ -3321,7 +3422,7 @@ public partial class IsoLevelScreen : IScreen
         // asked per tile, since the block loop runs over the whole level.
         _watchedGround.Clear();
         foreach (var g in Everyone.Where(g => g.Alive && g.IsGuarding))
-            _watchedGround.UnionWith(g.GuardZone);
+            _watchedGround.UnionWith(g.Watch.Ground);
         if (armed && Acting is CharacterInstance planter &&
             (_selectedCard ?? HoveredCard()) is { IsGuard: true } plant)
             _watchedGround.UnionWith(GuardZoneAround(Tile(planter), plant.GuardReach));
@@ -3554,18 +3655,22 @@ public partial class IsoLevelScreen : IScreen
         // rect, so a wide frame overflows sideways without dragging the health
         // bar out with it.
         var art = _ctx.Assets.LoadTexture(c.SpritePath);
+        // art is drawn facing right, so walking left mirrors it — the casting
+        // sheet included, or a character would turn round to cast and back again
+        var facing = c.FacingLeft ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
         if (c.CastAnim is SpriteAnimation anim)
             batch.Draw(anim.Sheet, anim.RectFor(rect),
-                anim.SourceRect(anim.FrameAt(c.CastAnimTime)), Color.White * alpha);
+                anim.SourceRect(anim.FrameAt(c.CastAnimTime)), Color.White * alpha,
+                0f, Vector2.Zero, facing, 0f);
         else
-            batch.Draw(art, rect, Color.White * alpha);
+            batch.Draw(art, rect, null, Color.White * alpha, 0f, Vector2.Zero, facing, 0f);
 
         // About to be hit: a red line round them. Drawn for anything the aimed
         // card would actually catch, which with Friendly Fire on means your own
         // people light up alongside the enemies — the point being that you find
         // that out while aiming rather than afterwards. Traced off the standing
         // sprite even mid-cast, so the shape does not flicker frame to frame.
-        if (_doomed.Contains(c)) OutlineSprite(batch, art, rect);
+        if (_doomed.Contains(c)) OutlineSprite(batch, art, rect, c.FacingLeft);
 
         if (_targets.Contains(c))
             Ui.FillRect(batch, _ctx.Pixel,
@@ -3581,6 +3686,16 @@ public partial class IsoLevelScreen : IScreen
         int span = Math.Max(1, c.MaxHp + c.Armor);
         int hpW = (int)(barW * Math.Clamp(c.Hp / (float)span, 0f, 1f));
         int armW = (int)(barW * Math.Clamp(c.Armor / (float)span, 0f, 1f));
+
+        // The part that has been lost but not yet caught up shows pale behind
+        // the bar, so a hit reads as a chunk sliding off rather than a number
+        // that was simply different last time you looked.
+        int ghostW = (int)(barW * Math.Clamp(Math.Max(c.ShownHp, c.Hp) / span, 0f, 1f));
+        if (ghostW > hpW)
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(back.X + hpW, back.Y, ghostW - hpW, barH),
+                new Color(235, 225, 120));
+
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, hpW, barH),
             c.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
         if (armW > 0)
@@ -3596,6 +3711,24 @@ public partial class IsoLevelScreen : IScreen
         if (c.CurseBonus > 0)
             Ui.FillRect(batch, _ctx.Pixel,
                 new Rectangle(back.X, back.Bottom + 3, barW, 6), new Color(150, 60, 200));
+
+        // Damage numbers, rising off the bar and fading as they go. Stacked so
+        // three shots read as three numbers instead of one that keeps changing.
+        for (int i = 0; i < c.Popups.Count; i++)
+        {
+            var (amount, type, life) = c.Popups[i];
+            float gone = 1f - life / PopupSeconds;
+            var where = new Vector2(back.Center.X, back.Y - 18 - gone * 70f - i * 44f);
+            string text = $"-{amount}";
+            var size = _ctx.Font.MeasureString(text) * 0.42f;
+            // a dark copy behind it, so a number over pale art is still readable
+            batch.DrawString(_ctx.Font, text, where - size / 2 + new Vector2(3, 3),
+                Color.Black * (0.75f * life / PopupSeconds), 0f, Vector2.Zero, 0.42f,
+                SpriteEffects.None, 0f);
+            batch.DrawString(_ctx.Font, text, where - size / 2,
+                new Color(255, 236, 120) * Math.Clamp(life / PopupSeconds * 1.6f, 0f, 1f),
+                0f, Vector2.Zero, 0.42f, SpriteEffects.None, 0f);
+        }
 
         // Marks under the bar, below the curse stripe so nothing overlaps.
         // Side by side when a character has both, rather than stacked on top
@@ -3626,6 +3759,36 @@ public partial class IsoLevelScreen : IScreen
         }
     }
 
+    /// <summary>How long a damage number stays in the air.</summary>
+    private const float PopupSeconds = 1.1f;
+
+    /// <summary>Health points the bar closes per second while catching up.</summary>
+    private const float BarCatchUpPerSecond = 26f;
+
+    /// <summary>
+    /// Slides every health bar towards the number it is meant to show, and
+    /// ages the damage numbers floating off people. Runs on real time rather
+    /// than on turns, so it keeps going while a card is mid-flight.
+    /// </summary>
+    private void UpdateHealthBars(float dt)
+    {
+        foreach (var c in Everyone)
+        {
+            if (c.ShownHp < 0f) c.ShownHp = c.Hp;          // first sight of them
+            else if (c.ShownHp > c.Hp)
+                c.ShownHp = Math.Max(c.Hp, c.ShownHp - BarCatchUpPerSecond * dt);
+            else if (c.ShownHp < c.Hp)
+                c.ShownHp = Math.Min(c.Hp, c.ShownHp + BarCatchUpPerSecond * dt);
+
+            for (int i = c.Popups.Count - 1; i >= 0; i--)
+            {
+                var p = c.Popups[i];
+                p.Life -= dt;
+                if (p.Life <= 0f) c.Popups.RemoveAt(i); else c.Popups[i] = p;
+            }
+        }
+    }
+
     /// <summary>Everyone marked right now: the picked group, or whoever's turn it is.</summary>
     private IEnumerable<CharacterInstance> Picked =>
         _mode is Mode.Explore or Mode.FreeMove
@@ -3649,8 +3812,10 @@ public partial class IsoLevelScreen : IScreen
     /// outline is a texture built once per sprite and stretched over it, so
     /// this is one draw call however complicated the silhouette.
     /// </summary>
-    private void OutlineSprite(SpriteBatch batch, Texture2D art, Rectangle rect) =>
-        batch.Draw(_ctx.Assets.Outline(art, DoomedOutline), rect, new Color(255, 45, 45));
+    private void OutlineSprite(SpriteBatch batch, Texture2D art, Rectangle rect, bool flipped) =>
+        batch.Draw(_ctx.Assets.Outline(art, DoomedOutline), rect, null,
+            new Color(255, 45, 45), 0f, Vector2.Zero,
+            flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
 
     /// <summary>A small solid triangle pointing down, sitting on top of the health bar.</summary>
     private void DrawSelectionArrow(SpriteBatch batch, Rectangle bar)

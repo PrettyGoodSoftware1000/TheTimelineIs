@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
+using TheTimelineIs.Core.Iso;
 
 namespace TheTimelineIs.Core.Data;
 
@@ -39,6 +40,20 @@ public class CharacterInstance
 
     /// <summary>Counts down while the sprite is recoiling from a hit.</summary>
     public float ShakeTimer;
+
+    /// <summary>
+    /// Where the health bar is currently drawn from, which chases Hp rather
+    /// than matching it. A bar that snapped gave no sense of how big a hit was;
+    /// this slides down to the new number over a fraction of a second.
+    /// </summary>
+    public float ShownHp = -1f;
+
+    /// <summary>
+    /// Damage numbers floating up off this character, with how long each has
+    /// left. Several can be in the air at once — a three-shot volley reads as
+    /// three numbers, not one that keeps being overwritten.
+    /// </summary>
+    public List<(int Amount, string Type, float Life)> Popups = new();
 
     // --- isometric grid state ---
 
@@ -90,6 +105,27 @@ public class CharacterInstance
         int best = int.MaxValue;
         foreach (var tile in other.Footprint) best = Math.Min(best, DistanceTo(tile));
         return best;
+    }
+
+    /// <summary>
+    /// True when the art is drawn mirrored. Sprites are authored facing RIGHT,
+    /// so this is set whenever a step carries the character leftwards across
+    /// the screen and cleared when one carries them right.
+    /// </summary>
+    public bool FacingLeft;
+
+    /// <summary>
+    /// Turns to follow a step. In this projection screen-x is (gx - gy), so a
+    /// step is leftwards when that total falls — which covers the diagonals
+    /// too, without anybody having to enumerate eight directions.
+    ///
+    /// A step that is level on screen (equal change in both axes) leaves the
+    /// facing alone rather than snapping it to a default.
+    /// </summary>
+    public void Face(Point from, Point to)
+    {
+        int screenX = (to.X - from.X) - (to.Y - from.Y);
+        if (screenX != 0) FacingLeft = screenX < 0;
     }
 
     /// <summary>Movement points per turn (from Classes.txt / Enemies.txt).</summary>
@@ -221,28 +257,16 @@ public class CharacterInstance
         party.Any(p => p.Alive && !p.IsPet);
 
     /// <summary>
-    /// The squares this character is covering, painted on the ground when they
-    /// stand their ground. Empty when they are not.
+    /// Ground this character is standing guard over. Empty when they are not.
     ///
-    /// The zone is a fixed patch of GROUND, worked out once when the card is
-    /// played and left there — not a radius that follows anybody around. That
-    /// is the whole point: they cannot move while it is up, so the ground they
-    /// are watching cannot move either. It lifts when they die or when their
-    /// next turn begins.
+    /// A fixed patch worked out once when the card is played and left there —
+    /// not a radius that follows anybody around. That is the point: they cannot
+    /// move while it is up, so the ground cannot move either. It lifts when they
+    /// die or when their next turn begins.
     /// </summary>
-    public HashSet<Point> GuardZone = new();
+    public GuardWatch Watch = new();
 
-    public bool IsGuarding => GuardZone.Count > 0;
-
-    /// <summary>Shots fired at whoever steps into the zone, and the damage each does.</summary>
-    public int GuardShots, GuardDamage;
-
-    /// <summary>
-    /// Who is standing inside the zone right now. Walking in draws one volley;
-    /// crossing more of it does not draw another, but leaving and coming back
-    /// does — stepping in is what sets it off.
-    /// </summary>
-    public List<CharacterInstance> GuardedAgainst = new();
+    public bool IsGuarding => Watch.Watching;
 
     /// <summary>Cards lifted off somebody else and playable until the clock runs out.</summary>
     public List<StolenCard> Stolen = new();
@@ -294,8 +318,6 @@ public class CharacterInstance
         copy.Curses = new List<(int, int)>(Curses);
         copy.Stolen = new List<StolenCard>(Stolen);
         copy.Lost = new List<StolenCard>(Lost);
-        copy.GuardedAgainst = new List<CharacterInstance>(GuardedAgainst);
-        copy.GuardZone = new HashSet<Point>(GuardZone);
         copy.Swapped = new Dictionary<string, string>(Swapped, StringComparer.OrdinalIgnoreCase);
         return copy;
     }
