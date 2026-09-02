@@ -26,7 +26,6 @@ Block: -9, -5, 0, MossyStone3.png, Main
 Block: -8, -5, 0, MossyStone3.png, Main
 Block: -7, -5, 0, MossyStone3.png, Main
 Block: -6, -5, 0, MossyStone2.png, Main
-Block: -4, -5, 0, MossyStone4.png, Room 2
 Block: -3, -5, 0, DarkStoneWeird2.png, Room 2
 Block: -1, -5, 2, DarkStoneWeird2.png, Room 2
 Block: 0, -5, 2, DarkStoneWeird2.png, Room 2
@@ -42,6 +41,7 @@ Block: -9, -4, 0, MossyStone4.png, Main
 Block: -8, -4, 0, MossyStone2.png, Main
 Block: -7, -4, 0, MossyStone1.png, Main
 Block: -6, -4, 0, MossyStoneMushroom1.png, Main
+Block: -5, -4, 0, GrassBlock1.png, -
 Block: -4, -4, 0, MossyStoneMushroom1.png, Room 2
 Block: -3, -4, 0, DarkStoneWeird2.png, Room 2
 Block: -2, -4, 0, DarkStoneWeird1.png, Main
@@ -59,6 +59,7 @@ Block: -9, -3, 0, MossyStoneMushroom1.png, Main
 Block: -8, -3, 0, MossyStone3.png, Main
 Block: -7, -3, 0, MossyStone2.png, Main
 Block: -6, -3, 0, MossyStone2.png, Main
+Block: -5, -3, 0, GrassBlock1.png, -
 Block: -4, -3, 0, MossyStone4.png, Room 2
 Block: -3, -3, 0, DarkStoneWeird2.png, Room 2
 Block: -2, -3, 0, DarkStoneWeird2.png, Room 2
@@ -86,74 +87,171 @@ Block: 2, -2, 2, DarkStoneSimple2.png, Room 2
 Block: 3, -2, 1, DarkStoneWeird2.png, Room 2
 Block: -13, -1, 0, MossyStone3.png, Main
 Block: -12, -1, 0, MossyStoneMushroom1.png, Main
-Block: -11, -1, 0, MossyStone2.png, Main
-Block: -10, -1, 0, MossyStoneMushroom1.png, Main
 Block: -4, -1, 0, DarkStoneWeird2.png, Room 2
-Block: -3, -1, 0, DarkStoneWeird2.png, Room 2
+Block: -3, -1, 0, DarkStoneWeird4.png, Room 2
 Block: -2, -1, 0, DarkStoneWeird2.png, Room 2
 Block: -1, -1, 0, DarkStoneWeird2.png, Room 2
 Block: 0, -1, 0, DarkStoneWeird2.png, Room 2
-Block: 1, -1, 0, DarkStoneWeird1.png, Room 2
+Block: 1, -1, 0, DarkStoneWeird4.png, Room 2
 Block: 2, -1, 0, DarkStoneWeird3.png, Room 2
 Block: 3, -1, 0, DarkStoneWeird1.png, Room 2
 Block: -4, 0, 0, DarkStoneWeird1.png, Room 2
-Block: -3, 0, 0, DarkStoneWeird1.png, Room 2
-Block: -2, 0, 0, DarkStoneWeird2.png, Room 2
-Block: -1, 0, 0, DarkStoneWeird2.png, Room 2
-Block: 0, 0, 0, DarkStoneWeird1.png, Room 2
-Block: 1, 0, 0, DarkStoneWeird3.png, Room 2
-Block: 2, 0, 0, DarkStoneWeird1.png, Room 2
-Block: 3, 0, 0, DarkStoneWeird2.png, Room 2
+Block: -3, 0, 0, DarkStoneWeird4.png, Room 2
+Block: -2, 0, 0, DarkStoneWeird4.png, Room 2
+Block: -1, 0, 0, DarkStoneWeird4.png, Room 2
+Block: 0, 0, 0, DarkStoneWeird4.png, Room 2
+Block: 1, 0, 0, DarkStoneWeird4.png, Room 2
+Block: 2, 0, 0, DarkStoneWeird4.png, Room 2
+Block: 3, 0, 0, DarkStoneWeird4.png, Room 2
 Block: -4, 1, 0, DarkStoneWeird4.png, Room 2
 Block: -3, 1, 0, DarkStoneWeird4.png, Room 2
-Block: -2, 1, 0, DarkStoneSimple1.png, Room 2
-Block: -1, 1, 0, DarkStoneWeird2.png, Room 2
+Block: -2, 1, 0, DarkStoneWeird4.png, Room 2
+Block: -1, 1, 0, DarkStoneWeird4.png, Room 2
 Block: 0, 1, 0, DarkStoneWeird4.png, Room 2
-Block: 1, 1, 0, DarkStoneWeird1.png, Room 2
+Block: 1, 1, 0, DarkStoneWeird4.png, Room 2
 Block: 2, 1, 0, DarkStoneWeird4.png, Room 2
-Block: 3, 1, 0, DarkStoneWeird3.png, Room 2
+Block: 3, 1, 0, DarkStoneWeird4.png, Room 2
+Block: -17, 2, 0, GrassBlockRoots.png, Room 3
+Block: -16, 2, 0, GrassBlockRoots.png, Room 3
+Block: -15, 2, 0, GrassBlockRoots.png, Room 3
+Block: -14, 2, 0, GrassBlockRoots.png, Room 3
+Block: -13, 2, 0, GrassBlockRoots.png, Room 3
+Block: -12, 2, 0, GrassBlockRoots.png, Room 3
+Block: -11, 2, 0, GrassBlockRoots.png, Room 3
+Block: -10, 2, 0, GrassBlockRoots.png, Room 3
+Block: -9, 2, 0, GrassBlockRoots.png, Room 3
 Block: -5, 2, 0, DarkStoneWeird2.png, Room 2
 Block: -4, 2, 0, DarkStoneWeird4.png, Room 2
 Block: -3, 2, 0, DarkStoneWeird4.png, Room 2
-Block: -2, 2, 0, DarkStoneWeird2.png, Room 2
-Block: -1, 2, 0, DarkStoneSimple1.png, Room 2
+Block: -2, 2, 0, DarkStoneWeird4.png, Room 2
+Block: -1, 2, 0, DarkStoneWeird4.png, Room 2
 Block: 0, 2, 0, DarkStoneWeird4.png, Room 2
-Block: 1, 2, 0, DarkStoneWeird1.png, Room 2
+Block: 1, 2, 0, DarkStoneWeird4.png, Room 2
 Block: 2, 2, 0, DarkStoneWeird4.png, Room 2
-Block: 3, 2, 0, DarkStoneWeird1.png, Room 2
+Block: 3, 2, 0, DarkStoneWeird4.png, Room 2
+Block: -17, 3, 0, GrassBlockRoots.png, Room 3
+Block: -16, 3, 0, PlaceholderSurface.png, Room 3
+Block: -15, 3, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -14, 3, 0, PlaceholderSurface.png, Room 3
+Block: -13, 3, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -12, 3, 0, PlaceholderSurface.png, Room 3
+Block: -11, 3, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -10, 3, 0, PlaceholderSurface.png, Room 3
+Block: -9, 3, 0, GrassBlockRoots.png, Room 3
 Block: -6, 3, 0, DarkStoneWeird2.png, Room 2
 Block: -4, 3, 0, DarkStoneWeird2.png, Room 2
-Block: -3, 3, 0, DarkStoneWeird2.png, Room 2
-Block: -2, 3, 0, DarkStoneWeird1.png, Room 2
-Block: -1, 3, 0, DarkStoneWeird3.png, Room 2
-Block: 0, 3, 0, DarkStoneWeird2.png, Room 2
-Block: 1, 3, 0, DarkStoneWeird2.png, Room 2
-Block: 2, 3, 0, DarkStoneWeird3.png, Room 2
+Block: -3, 3, 0, DarkStoneWeird4.png, Room 2
+Block: -2, 3, 0, DarkStoneWeird4.png, Room 2
+Block: -1, 3, 0, DarkStoneWeird4.png, Room 2
+Block: 0, 3, 0, DarkStoneWeird4.png, Room 2
+Block: 1, 3, 0, DarkStoneWeird4.png, Room 2
+Block: 2, 3, 0, DarkStoneWeird4.png, Room 2
 Block: 3, 3, 0, DarkStoneWeird1.png, Room 2
+Block: -17, 4, 0, GrassBlockRoots.png, Room 3
+Block: -16, 4, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -15, 4, 0, PlaceholderSurface.png, Room 3
+Block: -14, 4, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -13, 4, 0, PlaceholderSurface.png, Room 3
+Block: -12, 4, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -11, 4, 0, PlaceholderSurface.png, Room 3
+Block: -10, 4, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -9, 4, 0, GrassBlockRoots.png, Room 3
 Block: -4, 4, 0, DarkStoneWeird4.png, Room 2
 Block: -3, 4, 0, DarkStoneWeird1.png, Room 2
 Block: -2, 4, 0, DarkStoneWeird2.png, Room 2
 Block: -1, 4, 0, DarkStoneWeird1.png, Room 2
 Block: 0, 4, 0, DarkStoneWeird4.png, Room 2
-Block: 1, 4, 0, DarkStoneWeird1.png, Room 2
+Block: 1, 4, 0, DarkStoneWeird4.png, Room 2
 Block: 2, 4, 0, DarkStoneWeird1.png, Room 2
 Block: 3, 4, 0, DarkStoneWeird2.png, Room 2
-Enemy: 2, 4, Goblin
-Enemy: 3, -3, Goblin
-Enemy: 3, -6, Goblin
-Enemy: 1, -4, Goblin
-Enemy: 1, 0, Goblin
-Enemy: 3, 0, Imp
-Enemy: 3, -2, Imp
-Enemy: 3, -4, Imp
-Transition: -13, -4, 0
-Transition: -4, -6, 1
-Transition: -6, -5, 1
-Transition: -4, -5, 1
-Transition: -6, -4, 1
-Transition: -4, -4, 1
-Transition: -6, -3, 1
-Transition: -4, -3, 1
+Block: -17, 5, 0, GrassBlockRoots.png, Room 3
+Block: -16, 5, 0, PlaceholderSurface.png, Room 3
+Block: -15, 5, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -14, 5, 0, PlaceholderSurface.png, Room 3
+Block: -13, 5, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -12, 5, 0, PlaceholderSurface.png, Room 3
+Block: -11, 5, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -10, 5, 0, PlaceholderSurface.png, Room 3
+Block: -9, 5, 0, GrassBlockRoots.png, Room 3
+Block: -2, 5, 0, DarkStoneWeird2.png, Room 2
+Block: -1, 5, 0, DarkStoneWeird2.png, Room 2
+Block: -17, 6, 0, GrassBlockRoots.png, Room 3
+Block: -16, 6, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -15, 6, 0, PlaceholderSurface.png, Room 3
+Block: -14, 6, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -13, 6, 0, PlaceholderSurface.png, Room 3
+Block: -12, 6, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -11, 6, 0, PlaceholderSurface.png, Room 3
+Block: -10, 6, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -9, 6, 0, GrassBlockRoots.png, Room 3
+Block: -2, 6, 0, DarkStoneWeird2.png, Room 2
+Block: -1, 6, 0, DarkStoneWeird2.png, Room 2
+Block: -17, 7, 0, GrassBlockRoots.png, Room 3
+Block: -16, 7, 0, PlaceholderSurface.png, Room 3
+Block: -15, 7, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -14, 7, 0, PlaceholderSurface.png, Room 3
+Block: -13, 7, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -12, 7, 0, PlaceholderSurface.png, Room 3
+Block: -11, 7, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -10, 7, 0, PlaceholderSurface.png, Room 3
+Block: -9, 7, 0, GrassBlockRoots.png, Room 3
+Block: -8, 7, 0, DarkStoneWeird2.png, -
+Block: -7, 7, 0, DarkStoneWeird2.png, Room 2
+Block: -6, 7, 0, DarkStoneWeird2.png, Room 2
+Block: -5, 7, 0, DarkStoneWeird2.png, Room 2
+Block: -4, 7, 0, DarkStoneWeird2.png, Room 2
+Block: -3, 7, 0, DarkStoneWeird2.png, Room 2
+Block: -2, 7, 0, DarkStoneWeird2.png, Room 2
+Block: -1, 7, 0, DarkStoneWeird2.png, Room 2
+Block: -17, 8, 0, GrassBlockRoots.png, Room 3
+Block: -16, 8, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -15, 8, 0, PlaceholderSurface.png, Room 3
+Block: -14, 8, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -13, 8, 0, PlaceholderSurface.png, Room 3
+Block: -12, 8, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -11, 8, 0, PlaceholderSurface.png, Room 3
+Block: -10, 8, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -9, 8, 0, GrassBlockRoots.png, Room 3
+Block: -8, 8, 0, DarkStoneWeird2.png, -
+Block: -7, 8, 0, DarkStoneWeird2.png, Room 2
+Block: -6, 8, 0, DarkStoneWeird2.png, Room 2
+Block: -5, 8, 0, DarkStoneWeird2.png, Room 2
+Block: -4, 8, 0, DarkStoneWeird2.png, Room 2
+Block: -3, 8, 0, DarkStoneWeird2.png, Room 2
+Block: -2, 8, 0, DarkStoneWeird2.png, Room 2
+Block: -1, 8, 0, DarkStoneWeird2.png, Room 2
+Block: -17, 9, 0, GrassBlockRoots.png, Room 3
+Block: -16, 9, 0, PlaceholderSurface.png, Room 3
+Block: -15, 9, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -14, 9, 0, PlaceholderSurface.png, Room 3
+Block: -13, 9, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -12, 9, 0, PlaceholderSurface.png, Room 3
+Block: -11, 9, 0, PlaceholderSurfaceDark.png, Room 3
+Block: -10, 9, 0, PlaceholderSurface.png, Room 3
+Block: -9, 9, 0, GrassBlockRoots.png, Room 3
+Block: -17, 10, 0, GrassBlockRoots.png, Room 3
+Block: -16, 10, 0, GrassBlockRoots.png, Room 3
+Block: -15, 10, 0, GrassBlockRoots.png, Room 3
+Block: -14, 10, 0, GrassBlockRoots.png, Room 3
+Block: -13, 10, 0, GrassBlockRoots.png, Room 3
+Block: -12, 10, 0, GrassBlockRoots.png, Room 3
+Block: -11, 10, 0, GrassBlockRoots.png, Room 3
+Block: -10, 10, 0, GrassBlockRoots.png, Room 3
+Block: -9, 10, 0, GrassBlockRoots.png, Room 3
+Decoration: -8, -6, Tree1.png
+Door: -5, -4
+Door: -5, -3
+Door: -8, 7
+Door: -8, 8
+Enemy: -1, 2, Imp
+Enemy: 0, 0, Imp
+Enemy: 2, -2, Imp
+Enemy: 1, -5, Imp
+Enemy: -15, 7, Living Stone
+Enemy: -15, 3, Living Stone
+Enemy: 1, 0, Imp
+Trigger: -6, -4, door
+Trigger: -6, -3, door
 PlayerStart: -14, -5
 PlayerStart: -14, -4
 PlayerStart: -14, -3
