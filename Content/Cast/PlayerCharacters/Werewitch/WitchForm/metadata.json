@@ -1,0 +1,36 @@
+{
+  "group_id": "669e1ee8-187f-4f90-884e-c6ed9911f386",
+  "states": [
+    {
+      "character": {
+        "id": "fad6a0cb-4a0b-4a54-a629-f8bc4cae154f",
+        "name": "Idle",
+        "prompt": "A jagged, asymmetrical hair cut with a sharp split-color scheme\u2014deep amethyst purple on the left and vibrant toxic green on the right. The texture is wild and wind-swept.  Intense and defiant expression. Her eyes are sharp, framed by heavy dark eyeliner and a focused brow.  She wears a layered ensemble of charcoal-grey distressed fabrics. A sleeveless leather vest with silver studs sits over a tattered tunic. Heavy-duty silver chains are wrapped loosely around her waist and shoulders.  Tall, scuffed black leather combat boots with multiple silver buckles and thick platform soles.  A blackened, gnarled wooden staff. At its apex, a core of violet energy erupts into a steady, crackling purple flame that illuminates her silhouette.",
+        "size": {
+          "width": 64,
+          "height": 64
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-09-02T17:20:26.340985+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-09-04T13:15:57.076107"
+}
