@@ -76,6 +76,8 @@ public class DesktopInput : IInputSource
             state.Tap = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
 
         state.PointerPos = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
+        state.RawPointer = new Point(mouse.X, mouse.Y);
+        if (state.Tap.HasValue) state.RawTap = new Point(mouse.X, mouse.Y);
         state.PointerHeld = mouse.LeftButton == ButtonState.Pressed;
         if (mouse.LeftButton == ButtonState.Released && _prevMouse.LeftButton == ButtonState.Pressed)
             state.Released = state.PointerPos;
@@ -94,7 +96,10 @@ public class DesktopInput : IInputSource
             _rightDragged = true;
         if (mouse.RightButton == ButtonState.Released && _prevMouse.RightButton == ButtonState.Pressed
             && !_rightDragged)
+        {
             state.AltTap = viewport.ScreenToVirtual(new Point(mouse.X, mouse.Y));
+            state.RawAltTap = new Point(mouse.X, mouse.Y);
+        }
 
         state.Submit = Pressed(keys, Keys.Enter);
 

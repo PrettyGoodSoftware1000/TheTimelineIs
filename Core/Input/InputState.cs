@@ -88,6 +88,19 @@ public struct InputState
     /// <summary>The ~ key: show or hide the dev menu.</summary>
     public bool ToggleDevMenu;
 
+    /// <summary>
+    /// The pointer in real WINDOW pixels, before the design-space conversion.
+    /// The pixel build needs this: converting to a scaled space and back is
+    /// exactly the rounding it is trying to avoid.
+    /// </summary>
+    public Point RawPointer;
+
+    /// <summary>A click, in real window pixels. Null when nothing was clicked.</summary>
+    public Point? RawTap;
+
+    /// <summary>A right-click, in real window pixels.</summary>
+    public Point? RawAltTap;
+
     /// <summary>Either Alt down — the editor writes every block's height while it is.</summary>
     public bool AltHeld;
 

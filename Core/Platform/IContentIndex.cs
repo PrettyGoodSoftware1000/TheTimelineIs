@@ -29,6 +29,13 @@ public interface IContentIndex
     /// <summary>Every picture in a folder, whatever image format it is in.</summary>
     IReadOnlyList<string> Images(string folder) => Files(folder, ImageTypes);
 
+    /// <summary>
+    /// The names of the folders directly inside one, so art laid out as a
+    /// folder per animation can be found by looking rather than by being
+    /// listed somewhere. A missing folder comes back empty.
+    /// </summary>
+    IReadOnlyList<string> Folders(string folder);
+
     /// <summary>Image formats the texture loader can read.</summary>
     public static readonly string[] ImageTypes = { ".png", ".jpg", ".jpeg", ".bmp" };
 }

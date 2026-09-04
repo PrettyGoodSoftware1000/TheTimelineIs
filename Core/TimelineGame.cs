@@ -122,6 +122,17 @@ public class TimelineGame : Game
             GraphicsDevice.PresentationParameters.BackBufferWidth,
             GraphicsDevice.PresentationParameters.BackBufferHeight);
         GraphicsDevice.Clear(Color.Black);
+
+        // A pixel screen gets the whole window and sets up its own batch. The
+        // letterboxed design space below exists to scale a fixed layout onto
+        // any window, which is the one thing a pixel build must not do.
+        if (_ctx.Screen is IDrawsItself pixel)
+        {
+            pixel.DrawSelf(_batch, GraphicsDevice);
+            base.Draw(gameTime);
+            return;
+        }
+
         _viewport.Apply(GraphicsDevice);
         _batch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
             SamplerState.LinearClamp, null, null, null, _viewport.Matrix);

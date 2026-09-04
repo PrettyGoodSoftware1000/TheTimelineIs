@@ -19,6 +19,30 @@ public class DesktopContentIndex : IContentIndex
     private readonly Dictionary<string, IReadOnlyList<string>> _cache =
         new(StringComparer.OrdinalIgnoreCase);
 
+    public IReadOnlyList<string> Folders(string folder)
+    {
+        string key = folder + "|<dirs>";
+        if (_cache.TryGetValue(key, out var known)) return known;
+
+        var names = new List<string>();
+        try
+        {
+            if (Directory.Exists(folder))
+                names = Directory.GetDirectories(folder)
+                    .Select(Path.GetFileName)
+                    .Where(n => n != null)
+                    .Select(n => n!)
+                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Current.Warn(folder, 0, $"could not be listed ({ex.Message})");
+        }
+        _cache[key] = names;
+        return names;
+    }
+
     public IReadOnlyList<string> Files(string folder, params string[] extensions)
     {
         string key = folder + "|" + string.Join(",", extensions);
