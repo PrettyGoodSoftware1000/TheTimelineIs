@@ -65,21 +65,25 @@ public class PixelScreen : IScreen, IDrawsItself
     private void Populate()
     {
         var starts = _level.PlayerStarts.ToList();
-        var party = new (string Name, string State)[]
-        {
-            ("Gun-O-Mancer", "Idle"),
-            ("Werewitch", "WitchForm"),
-        };
+        var party = new[] { "Gun-O-Mancer", "Werewitch" };
         for (int i = 0; i < party.Length && i < starts.Count; i++)
         {
-            var (name, state) = party[i];
+            string name = party[i];
+            string folder = $"Content/Cast/PlayerCharacters/{name}";
+            string? state = StateFolder(folder);
+            if (state == null)
+            {
+                _ctx.ReportProblem(folder,
+                    $"no pixel art for '{name}' — expected a folder with " +
+                    "rotations/south-east.png inside it. Drawing a marker instead.");
+                continue;
+            }
             _cast.Add(new PixelActor
             {
                 Name = name,
                 IsPlayer = true,
                 Tile = starts[i],
-                Sprite = DirectionalSprite.Load(_ctx.Assets, _ctx.ContentIndex,
-                    $"Content/Cast/PlayerCharacters/{name}", state),
+                Sprite = DirectionalSprite.Load(_ctx.Assets, _ctx.ContentIndex, folder, state),
             });
         }
         foreach (var e in _level.Enemies)
@@ -96,6 +100,23 @@ public class PixelScreen : IScreen, IDrawsItself
                 $"no rotations found for '{who.Name}' — expected " +
                 $"rotations/south-east.png and friends. Drawing a marker instead.");
     }
+
+    /// <summary>
+    /// The state folder to draw a character from: the first one under their
+    /// folder that actually has rotations in it.
+    ///
+    /// The art tool names that folder after the state, and the state is named
+    /// whatever the artist typed — "WitchForm" for one character, the
+    /// character's own name for another. Looking for the rotations is the only
+    /// thing that holds for both, and it keeps a new export working without a
+    /// code change.
+    /// </summary>
+    private string? StateFolder(string characterFolder) =>
+        _ctx.ContentIndex.Folders(characterFolder)
+            .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(state =>
+                AssetLoader.Exists($"{characterFolder}/{state}/rotations/" +
+                    $"{Facings.Default.FileName()}.png"));
 
     // ---------------- update ----------------
 
@@ -247,9 +268,14 @@ public class PixelScreen : IScreen, IDrawsItself
                 continue;
             }
 
-            // Drawn at its own size, always. Bottom-centre on the middle of the
-            // square, so the feet land on the tile whatever the art's height.
-            var at = new Rectangle(foot.X - art.Width / 2, foot.Y - art.Height,
+            // Drawn at its own size, always — never stretched to fit a tile.
+            // The feet go on the middle of the square by the bottom-centre of
+            // the PICTURE, not of the file, so a character exported onto a
+            // roomy canvas stands on the ground like everyone else.
+            var solid = ArtBounds.Solid(art);
+            var at = new Rectangle(
+                foot.X - (solid.Left + solid.Right) / 2,
+                foot.Y - solid.Bottom,
                 art.Width, art.Height);
             batch.Draw(art, at, Color.White);
 
