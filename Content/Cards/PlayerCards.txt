@@ -24,7 +24,7 @@
 #                  single shot can be aimed at them. Sides are read from the
 #                  CASTER, so an enemy card with friendly fire hurts other
 #                  enemies too. No is the default, and every card should say.)
-# Projectile Art: (File in Content/Images/Effects/. Art must point RIGHT;
+# Projectile Art: (File in Content/Images/Pixel/Effects/. Art must point RIGHT;
 #                  it is rotated to match the shot's travel angle, so a shot
 #                  heading down-right appears rotated clockwise.)
 # Casting Sound:  ([File.wav] played the moment targeting completes.
@@ -102,7 +102,7 @@ Type: [ranged] AoE damage. Single Projectile
 Action Points: 1
 Friendly Fire: Yes
 Explosion Range: 3
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.2
 Speed: 18
@@ -135,7 +135,7 @@ Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
 Action Points: 1
 Friendly Fire: No
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
@@ -170,7 +170,7 @@ Action Points: 1
 Friendly Fire: No
 Range: 3
 Effects: Armor 8
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
@@ -187,7 +187,7 @@ Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
 Range: 5
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
@@ -224,7 +224,7 @@ Action Points: 1
 Friendly Fire: No
 Effects: Form Witch
 Range: 1
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
@@ -243,7 +243,7 @@ Action Points: 1
 Friendly Fire: No
 Effects: Form Werewolf, Nimble 5
 Range: 1
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
@@ -262,7 +262,7 @@ Action Points: 1
 Friendly Fire: No
 Effects: Curse 3
 Range: 6
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 1
 Speed: 10
@@ -280,7 +280,7 @@ Action Points: 1
 Friendly Fire: No
 Effects: Steal 3
 Range: 1
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
@@ -300,7 +300,7 @@ Explosion Range: 5
 Range: 12
 Effects: Channel 1, FireTiles 2
 Sky Angle: 110
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.6
 Speed: 22
@@ -319,7 +319,7 @@ Friendly Fire: No
 Range: 2
 Effects: Summon 1
 Summons: Gator
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.5
 Speed: 20
@@ -341,7 +341,7 @@ Action Points: 1
 Friendly Fire: Yes
 Range: 4
 Effects: Guard 4
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Speed: 20
@@ -382,7 +382,7 @@ Action Points: 1
 Friendly Fire: No
 Range: 8
 Effects: Vulnerable 3
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.3
 Speed: 24
@@ -413,7 +413,7 @@ Range: 15
 Explosion Range: 3
 Effects: Mower 15
 Blast: 1 to 15
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 1.5
 Speed: 5
@@ -437,7 +437,7 @@ Range: 1
 Effects: Swap 1
 Replaces: Hot Lead
 With: Shock Shot
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Speed: 20
@@ -457,7 +457,7 @@ Range: 1
 Effects: Swap 1
 Replaces: Shock Shot
 With: Hot Lead
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Speed: 20
@@ -503,7 +503,7 @@ Action Points: 3
 Friendly Fire: Yes
 Range: 1
 Effects: BathSalts 1
-Projectile Art: Placeholder.png
+Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 2
 Speed: 20

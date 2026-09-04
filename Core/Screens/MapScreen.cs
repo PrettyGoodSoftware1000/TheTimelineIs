@@ -46,7 +46,7 @@ public class MapScreen : IScreen
     {
         _ctx = ctx;
         _map = ctx.Assets.LoadTexture("Content/Images/Map/Map.png");
-        _scale = ctx.Config.GlobalScale;
+        _scale = 1f;
         var size = AssetLoader.DisplaySize(_map, AssetKind.Map) * _scale;
         _mapSize = new Point((int)size.X, (int)size.Y);
         _destinations = DestinationTable.Load();

@@ -42,7 +42,7 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
 {
     private enum Mode
     {
-        Explore, FreeMove, PlayerTurn, PlayerTarget, StealPick, EnemyTurn, Acting, Victory,
+        Explore, PlayerTurn, PlayerTarget, StealPick, EnemyTurn, Acting, Victory,
         /// <summary>Watching a recording. Nothing is decided here, only shown.</summary>
         Replay,
     }
@@ -100,7 +100,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         get => _picked.LastOrDefault(p => p.Alive);
         set { _picked.Clear(); if (value != null) _picked.Add(value); }
     }
-    private readonly HashSet<CharacterInstance> _freeMovers = new();
     private List<Card> _hand = new();
     private Card? _selectedCard;
     private readonly List<CharacterInstance> _targets = new();  // chosen targets, in click order
@@ -178,8 +177,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     /// <summary>The square the view opens on, and returns to when recentred.</summary>
     private Point _focus;
 
-    /// <summary>Rotations and placeholder cubes for everybody on the board.</summary>
-    private readonly CastSprites _sprites;
 
     /// <summary>
     /// Transition pads the party is standing on, by the pad's lowest square.
@@ -272,7 +269,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
 
     /// <summary>Seconds the Save Replay button stays turned green and saying so.</summary>
     private const float ReplaySavedShown = 2.5f;
-    private static readonly Rectangle DoneRect = new(3280, 60, 500, 160);
     private static readonly Rectangle WinRect = new(1620, 1250, 600, 180);
     private static readonly Rectangle DialogueBox = new(60, 1560, 3720, 420);
     private const int CardW = 400, CardH = 560, CardGap = 26;
@@ -313,7 +309,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         Replay? watching, string replayName)
     {
         _ctx = ctx;
-        _sprites = new CastSprites(ctx.Assets, ctx.ContentIndex, ctx.Game.GraphicsDevice);
         _level = level;
         _watching = watching;
         _replayMode = watching != null;
@@ -357,9 +352,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 Name = names[i],
                 OccurrenceIndex = _party.Count(p => p.Name.Equals(names[i], StringComparison.OrdinalIgnoreCase)),
                 IsPlayer = true,
-                SpriteFile = cls is { Forms.Count: > 0 }
-                    ? cls.SpriteForForm(cls.StartingForm)
-                    : PickSprite(cls?.SpriteFiles, names[i], _party),
                 Form = cls?.StartingForm ?? "",
                 MaxHp = cls?.Hp ?? 20,
                 Hp = cls?.Hp ?? 20,
@@ -381,7 +373,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 Name = def.Name,
                 OccurrenceIndex = _enemies.Count(e => e.Name.Equals(def.Name, StringComparison.OrdinalIgnoreCase)),
                 IsPlayer = false,
-                SpriteFile = PickSprite(def.SpriteFiles, def.Name, _enemies),
                 MaxHp = def.Hp,
                 Hp = def.Hp,
                 MoveMax = def.Movement,
@@ -390,14 +381,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 GX = spawn.X, GY = spawn.Y,
             });
         }
-    }
-
-    private static string PickSprite(IReadOnlyList<string>? variants, string name,
-        List<CharacterInstance> existing)
-    {
-        var list = variants is { Count: > 0 } ? variants : new List<string> { $"{name}.png" };
-        return list.OrderBy(v => existing.Count(e => e.SpriteFile.Equals(v, StringComparison.OrdinalIgnoreCase)))
-                   .First();
     }
 
     // ---------------- helpers ----------------
@@ -559,7 +542,7 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         _projFrom = _projTo = Vector2.Zero;
         _act = Act.Hits;
         _actT = _actDur;
-        foreach (var c in Everyone) { c.CastAnim = null; c.CastAnimTime = 0f; }
+        foreach (var c in Everyone) { c.CastFrames = null; c.CastAnimTime = 0f; }
     }
 
     /// <summary>
@@ -789,7 +772,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     private CharacterInstance? ActiveMover => _mode switch
     {
         Mode.Explore => _selected,
-        Mode.FreeMove => _selected != null && _freeMovers.Contains(_selected) ? _selected : null,
         Mode.PlayerTurn or Mode.PlayerTarget =>
             _petControl is { Alive: true } p && ActsWith(p, Current) ? p : Current,
         _ => null,
@@ -839,18 +821,25 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
             at = Vector2.Lerp(from, to, _walkT);
         }
         // a body wider than one square stands in the middle of its footprint,
-        // which in this projection is straight down the screen from its corner
-        // the middle of the footprint, which in this projection is straight
-        // down-screen for a square body and offset sideways for a long one
+        // which in this projection is straight down-screen for a square body
+        // and offset sideways for a long one
         at.X += (c.SizeX - c.SizeY) * (IsoMath.TileW / 2f) / 2f;
         at.Y += (c.SizeX + c.SizeY - 2) * (IsoMath.TileH / 2f) / 2f;
-        return at + new Vector2(0, 26) + Recoil.Offset(c);
+        // this IS the middle of the square: the picture's lowest solid pixel
+        // lands here, so a character stands exactly where the highlight says
+        return at + Recoil.Offset(c);
     }
 
     // ---------------- update ----------------
 
+    private Mode _lastTraced;
     public void Update(InputState input, float dt)
     {
+        if (_mode != _lastTraced && Environment.GetEnvironmentVariable("TIMELINE_TRACE") == "1")
+        {
+            Console.WriteLine($"[trace] mode {_lastTraced} -> {_mode}  current={Current?.Name}  walker={_walker?.Name} path={_walkPath.Count} act={_act}");
+            _lastTraced = _mode;
+        }
         _pointer = input.PointerPos;
         _tap = input.Tap;
         _ctrl = input.CtrlHeld;
@@ -921,13 +910,10 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
 
         // Tab or the middle button takes the whole party. Out of combat only:
         // in a fight it is one character's turn and there is nothing to pick.
-        if (_mode is Mode.Explore or Mode.FreeMove &&
-            (input.SelectAll || input.MiddleTap.HasValue))
+        if (_mode is Mode.Explore && (input.SelectAll || input.MiddleTap.HasValue))
         {
             _picked.Clear();
-            _picked.AddRange(_mode == Mode.FreeMove
-                ? _freeMovers.Where(p => p.Alive)
-                : LivingParty);
+            _picked.AddRange(LivingParty);
             _overlayKey = null;
         }
 
@@ -959,7 +945,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
             case Mode.Acting: UpdateAction(dt); break;
             case Mode.EnemyTurn: EnemyAct(); break;
             case Mode.Explore:
-            case Mode.FreeMove:
             case Mode.PlayerTurn:
             case Mode.PlayerTarget:
                 UpdateAim();
@@ -982,27 +967,26 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     {
         foreach (var c in Everyone)
         {
-            if (c.CastAnim == null) continue;
+            if (c.CastFrames == null) continue;
             c.CastAnimTime += dt;
-            if (c.CastAnimTime >= c.CastAnim.Duration)
+            if (c.CastAnimTime >= c.CastFrames.Count / DirectionalSprite.Fps)
             {
-                c.CastAnim = null;
+                c.CastFrames = null;
                 c.CastAnimTime = 0f;
             }
         }
     }
 
     /// <summary>
-    /// Swaps the caster's sprite for its casting sheet, from the first frame.
-    /// A shapeshifter picks up the sheet for the shape it is wearing right now,
-    /// so a card that changes form still casts in the form it started in.
-    /// Anyone with no animation declared simply stands there as before.
+    /// Plays the caster's casting animation over its sprite, from the first
+    /// frame, facing the way it is facing. A shapeshifter picks up the one for
+    /// the shape it is wearing right now, so a card that changes form still
+    /// casts in the form it started in. Anyone with no animation declared —
+    /// or none drawn yet — simply stands there.
     /// </summary>
     private void StartCastAnimation(CharacterInstance actor)
     {
-        actor.CastAnim = actor.CastAnimationPath is string path
-            ? SpriteAnimation.Load(_ctx.Assets, path)
-            : null;
+        actor.CastFrames = _ctx.Sprites.Frames(actor, actor.CastAnimation);
         actor.CastAnimTime = 0f;
     }
 
@@ -1684,14 +1668,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 if (CheckAggro(p)) break;
     }
 
-    /// <summary>
-    /// Who gets a free move when a fight starts. Only the Dirtbag, who cheats.
-    /// Named rather than flagged in Classes.txt because it is a joke about one
-    /// character, not a stat anybody else should be able to buy.
-    /// </summary>
-    private static bool IsCheat(CharacterInstance c) =>
-        c.Name.Equals("Dirtbag", StringComparison.OrdinalIgnoreCase);
-
     private bool CheckAggro(CharacterInstance mover)
     {
         var seen = VisibleEnemies.Where(e =>
@@ -1699,31 +1675,11 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         if (seen.Count == 0) return false;
 
         foreach (var e in seen) _aggroed.Add(e);
-        if (_mode is Mode.Explore)
-        {
-            // Nobody gets a free shuffle when a fight starts any more: you
-            // fight from where you were caught. The Dirtbag cheats, and gets
-            // one whatever happened — including when it was him who walked
-            // into them.
-            _freeMovers.Clear();
-            foreach (var p in LivingParty.Where(IsCheat))
-            {
-                p.MovePoints = p.MoveMax;
-                _freeMovers.Add(p);
-            }
-            if (_freeMovers.Count > 0)
-            {
-                _mode = Mode.FreeMove;
-                _selected = _freeMovers.FirstOrDefault();
-                _overlayKey = null;
-                Log(_ctx.Strings.Format("iso_spotted",
-                    ("name", _freeMovers.First().Name)));
-            }
-            else
-            {
-                StartCombat();
-            }
-        }
+        // Being spotted IS the start of the fight: everyone fights from where
+        // they were caught. There used to be a "free move" stage between the
+        // two, and from the outside it looked like the game had locked up —
+        // one character could act and nothing said why the others could not.
+        if (_mode is Mode.Explore) StartCombat();
         return true;
     }
 
@@ -2176,8 +2132,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         if (who is { IsPlayer: true })
         {
             if (_mode == Mode.Explore) { PickCharacter(who); _overlayKey = null; }
-            else if (_mode == Mode.FreeMove && _freeMovers.Contains(who))
-            { PickCharacter(who); _overlayKey = null; }
             else if (_mode is Mode.PlayerTurn or Mode.PlayerTarget) TakeControlOf(who);
             return;
         }
@@ -2550,10 +2504,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     {
         switch (_mode)
         {
-            case Mode.FreeMove when DoneRect.Contains(press):
-                _freeMovers.Clear();
-                StartCombat();
-                return true;
             case Mode.PlayerTurn or Mode.PlayerTarget when EndTurnRect.Contains(press):
                 NextTurn();
                 return true;
@@ -2901,7 +2851,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 OccurrenceIndex = _party.Count(p => p.Name.Equals(def.Name, StringComparison.OrdinalIgnoreCase)),
                 IsPlayer = true,
                 Owner = owner,
-                SpriteFile = def.SpriteFiles[0],
                 MaxHp = def.Hp, Hp = def.Hp,
                 MoveMax = def.Movement, MovePoints = def.Movement,
                 ActionsPerTurn = def.Actions,
@@ -3221,7 +3170,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
             return;
         }
         who.Form = target.Name;
-        who.SpriteFile = target.Sprite;
         if (who == Current)
             _hand = HandOf(who);
         report.AppendLine(_ctx.Strings.Format("iso_form", ("name", who.Name), ("form", target.Name)));
@@ -3450,8 +3398,7 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     /// The picture to draw for somebody: their rotation for the way they are
     /// facing, or their placeholder cube if nobody has drawn them yet.
     /// </summary>
-    private Texture2D ArtFor(CharacterInstance c) =>
-        _sprites.For(c)?.Rotation(c.Facing.Nearest()) ?? _sprites.Cube(c);
+    private Texture2D ArtFor(CharacterInstance c) => _ctx.Sprites.Standing(c);
 
     /// <summary>Never called: this screen draws itself. See DrawSelf.</summary>
     public void Draw(SpriteBatch batch) { }
@@ -3472,7 +3419,14 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
             device.PresentationParameters.BackBufferHeight);
         // the window's real size is only known here, so the opening view waits
         // for the first frame rather than guessing at load
-        if (!_framed) { CentreOnFocus(); _framed = true; }
+        if (!_framed)
+        {
+            CentreOnFocus();
+            _framed = true;
+            if (Environment.GetEnvironmentVariable("TIMELINE_TRACE") == "1")
+                foreach (var c in Everyone)
+                    Console.WriteLine($"[trace] {c.Name} at {Tile(c)} window {_camera.ToScreen(FootOf(c).ToPoint())}");
+        }
 
         device.Viewport = new Viewport(0, 0, _windowSize.X, _windowSize.Y);
         batch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
@@ -3751,11 +3705,18 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         var art = ArtFor(c);
         var rect = SpriteRect(c);
 
-        // While a cast is running its sheet stands in for the sprite, centred on
-        // the same point, so nothing jumps when it starts or stops.
-        if (c.CastAnim is SpriteAnimation anim)
-            batch.Draw(anim.Sheet, anim.RectFor(rect),
-                anim.SourceRect(anim.FrameAt(c.CastAnimTime)), Color.White * alpha);
+        // While a cast is running its frames stand in for the sprite, hung by
+        // the same feet, so nothing jumps when it starts or stops.
+        if (c.CastFrames is { Count: > 0 } frames)
+        {
+            int i = Math.Clamp((int)(c.CastAnimTime * DirectionalSprite.Fps), 0, frames.Count - 1);
+            var frame = frames[i];
+            var solid = ArtBounds.Solid(frame);
+            var foot = FootOf(c);
+            batch.Draw(frame, new Rectangle(
+                (int)foot.X - (solid.Left + solid.Right) / 2,
+                (int)foot.Y - solid.Bottom, frame.Width, frame.Height), Color.White * alpha);
+        }
         else
             batch.Draw(art, rect, Color.White * alpha);
 
@@ -3763,7 +3724,7 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         // thing saying which way it is turned. It goes on AFTER the cube: the
         // cube's base sits on the middle of the square, which is exactly where
         // the triangle is, so drawing it underneath hid it completely.
-        if (_sprites.For(c) == null) DrawFacingMark(batch, c, alpha);
+        if (_ctx.Sprites.For(c) == null) DrawFacingMark(batch, c, alpha);
 
         // About to be hit: a red line round them. Drawn for anything the aimed
         // card would actually catch, which with Friendly Fire on means your own
@@ -3948,11 +3909,11 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
 
     /// <summary>Everyone marked right now: the picked group, or whoever's turn it is.</summary>
     private IEnumerable<CharacterInstance> Picked =>
-        _mode is Mode.Explore or Mode.FreeMove
+        _mode is Mode.Explore
             ? _picked.Where(p => p.Alive)
             : Chosen is CharacterInstance one ? new[] { one } : Enumerable.Empty<CharacterInstance>();
 
-    private bool IsSelected(CharacterInstance c) => _mode is Mode.Explore or Mode.FreeMove
+    private bool IsSelected(CharacterInstance c) => _mode is Mode.Explore
         ? _picked.Contains(c)
         : c == Current && c.IsPlayer;
 
@@ -4051,8 +4012,8 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         var thumbRect = new Rectangle(DialogueBox.X + 36, DialogueBox.Y + 34, 350, 350);
         if (speaker != null)
         {
-            var thumb = _ctx.Assets.LoadFirstAvailable(speaker.ThumbPath, speaker.SpritePath);
-            batch.Draw(thumb, Ui.FitCentered(AssetLoader.DisplaySize(thumb, AssetKind.Thumb), thumbRect),
+            var thumb = _ctx.Sprites.Portrait(speaker);
+            batch.Draw(thumb, Ui.FitCentered(new Vector2(thumb.Width, thumb.Height), thumbRect),
                 Color.White);
         }
         batch.DrawString(_ctx.Font, line.Speaker,
@@ -4118,14 +4079,6 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
             case Mode.Explore:
                 Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("iso_explore_hint"),
                     new Rectangle(0, 40, VirtualViewport.Width, 90), Color.White * 0.7f, 0.34f);
-                break;
-            case Mode.FreeMove:
-                Ui.DrawTextCentered(batch, _ctx.Font,
-                    _ctx.Strings.Format("iso_spotted",
-                        ("name", _freeMovers.FirstOrDefault()?.Name ?? "")),
-                    new Rectangle(0, 40, VirtualViewport.Width, 90), Color.OrangeRed, 0.42f);
-                if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, DoneRect, _ctx.Strings.Get("iso_done"), _tap))
-                { _freeMovers.Clear(); StartCombat(); }
                 break;
             case Mode.PlayerTurn:
             case Mode.PlayerTarget:
@@ -4263,7 +4216,7 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 new Rectangle(slot.X - 4, slot.Y - 4, slot.Width + 8, slot.Height + 8), frame);
             Ui.FillRect(batch, _ctx.Pixel, slot, new Color(16, 16, 22));
 
-            var face = _ctx.Assets.LoadFirstAvailable(who.ThumbPath, who.SpritePath);
+            var face = _ctx.Sprites.Portrait(who);
             var fit = Ui.FitCentered(new Vector2(face.Width, face.Height),
                 new Rectangle(slot.X + 4, slot.Y + 4, slot.Width - 8, slot.Height - 8));
             batch.Draw(face, fit, active ? Color.White : Color.White * 0.65f);

@@ -1,8 +1,0 @@
-# Dialogue for TestLevel. A trigger square placed in the editor (G tool)
-# names one of these blocks; stepping on it plays the block once.
-# Format: "Speaker: text", one line each.
-
-Dialogue: Intro
-Gun-O-Mancer: The art direction is shit.
-Werewitch: Grrrr...
-Dirtbag: Less shit than last week.

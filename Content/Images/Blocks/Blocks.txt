@@ -1,161 +1,22 @@
-# Ground art for the isometric levels.
+# Ground art. Every piece is pixel art drawn at 1:1 - never scaled.
 #
 # Family: <name>        groups interchangeable art. The editor offers a family,
 #                       then a piece inside it or Random.
-# Piece: <file.png>     one image, drawn whole in a single draw.
+# Piece: <file.png>     one image, drawn whole.
 # Anchor: <x>, <y>      the pixel of that image that lands on the exact centre
-#                       of a grid square's top face.
-# Scale: <percent>      100 = one image pixel per virtual pixel.
+#                       of a grid square's top face. A 64x32 surface is
+#                       anchored at 32, 16.
+# Scale: 100            always 100 here. The line is kept so an old file
+#                       still reads; anything else is an error.
 #
 # CHECKERBOARD FAMILIES
 # Put "Checkerboard Dark:" and "Checkerboard Light:" headings inside a family
-# and it stops behaving randomly: which half a square draws from is decided by
-# the square's position, so a dark piece never lands beside another dark one.
-# Within a half the pieces are still picked at random, so several variants of
-# each shade keep the pattern from looking stamped. The piece dropdown does
-# nothing for such a family - the grid chooses.
+# and which half a square draws from is decided by its position, so a dark
+# piece never lands beside another dark one.
 #
-#   Family: StoneCheckerboard
-#   Checkerboard Dark:
-#   Piece: DarkSurface1.png
-#   Anchor: 360, 184
-#   Scale: 62
-#   Checkerboard Light:
-#   Piece: LightSurface1.png
-#   Anchor: 360, 184
-#   Scale: 62
-#
-# PLACEHOLDERS
-# PlaceholderSurface.png is exactly 360x180 - one grid square's top face at
-# 1:1 with virtual pixels - so Anchor is its centre and Scale is 100.
-# PlaceholderBlock.png is the same face over a 760px body, which is the depth
-# DarkStoneSimple1.png draws at. Use them to check that new art lines up.
+# A surface is 64x32: one square's top face. A block is the same face over a
+# 24px body, for ground with height.
 
-Family: Placeholder
-Piece: PlaceholderSurface.png
-Anchor: 180, 90
-Scale: 100
-Piece: PlaceholderBlock.png
-Anchor: 180, 90
-Scale: 100
-
-Family: PlaceholderDark
-Piece: PlaceholderSurfaceDark.png
-Anchor: 180, 90
-Scale: 100
-Piece: PlaceholderBlockDark.png
-Anchor: 180, 90
-Scale: 100
-
-Family: PlaceholderCheckerboard
-Checkerboard Dark:
-Piece: PlaceholderSurfaceDark.png
-Anchor: 180, 90
-Scale: 100
-Checkerboard Light:
-Piece: PlaceholderSurface.png
-Anchor: 180, 90
-Scale: 100
-
-
-Family: GrassSurface
-Piece: GrassSurface1.png
-Anchor: 360, 184
-Scale: 62
-
-Family: GrassBlock
-Piece: GrassBlock1.png
-Anchor: 325, 155
-Scale: 62
-Piece: GrassBlock2.png
-Anchor: 325, 155
-Scale: 62
-
-Family: GrassBlockTall
-Piece: GrassBlockTall.png
-Anchor: 329, 171
-Scale: 62
-
-Family: GrassBlockDetails
-Piece: GrassBlockRoots.png
-Anchor: 325, 155
-Scale: 62
-
-Family: MossyStone.png
-Piece: MossyStone1.png
-Anchor: 405, 303
-Scale: 62
-Piece: MossyStone2.png
-Anchor: 395, 280
-Scale: 62
-Piece: MossyStone3.png
-Anchor: 407, 293
-Scale: 62
-Piece: MossyStone4.png
-Anchor: 406, 268
-Scale: 62
-Piece: MossyStoneMushroom1.png
-Anchor: 403, 296
-Scale: 62
-
-Family: MossyStoneTall.png
-Piece: MossyStoneTall1.png
-Anchor: 398, 293
-Scale: 58.899
-
-
-Family: DarkStoneSimple
-Piece: DarkStoneSimple1.png
-Anchor: 400, 300
-Scale: 57.407
-Piece: DarkStoneSimple2.png
-Anchor: 405, 298
-Scale: 57.407
-Piece: DarkStoneSimple3.png
-Anchor: 404, 301
-Scale: 57.41
-Piece: DarkStoneSimple4.png
-Anchor: 400, 301
-Scale: 57.407
-
-Family: DarkStoneWeird
-Piece: DarkStoneWeird1.png
-Anchor: 405, 295
-Scale: 58.899
-Piece: DarkStoneWeird2.png
-Anchor: 403, 296
-Scale: 58.899
-Piece: DarkStoneWeird3.png
-Anchor: 401, 295
-Scale: 58.899
-Piece: DarkStoneWeird4.png
-Anchor: 407, 296
-Scale: 58.899
-
-Family: GrayBrick
-Piece: GrayBrick1.png
-Anchor: 405, 252
-Scale: 58.899
-Piece: GrayBrick2.png
-Anchor: 409, 253
-Scale: 58.899
-Piece: GrayBrick3.png
-Anchor: 403, 250
-Scale: 58.899
-
-
-Family: StoneBlock
-Piece: GrassBlock1.png
-Anchor: 325, 155
-Scale: 62
-
-
-
-
-
-# PIXEL GROUND
-# Drawn at 1:1 — 64x32 is exactly one square's top face, so Anchor is its
-# centre and Scale is 100. A block adds a 24px body under the same face.
 Family: PixelGrass
 Piece: PixelGrassSurface.png
 Anchor: 32, 16

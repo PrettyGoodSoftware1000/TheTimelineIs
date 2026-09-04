@@ -68,11 +68,12 @@ public class TimelineGame : Game
             LogStore = _platform.LogStore,
             ReplayStore = _platform.ReplayStore,
             ContentIndex = _platform.ContentIndex,
+            Sprites = new Pixel.CastSprites(new AssetLoader(GraphicsDevice), _platform.ContentIndex, GraphicsDevice),
             DevWriter = _platform.DevWriter,
         };
 
         ContentValidator.Run(_ctx.Cards, _ctx.EnemyCards, _ctx.Classes, _ctx.Enemies, _ctx.Strings,
-            _ctx.Assets);
+            _ctx.ContentIndex);
         _platform.LogStore.Write(Diagnostics.Current.RenderLog());
 
         IScreen home = _platform.CreateStartScreen(_ctx) ?? new TitleScreen(_ctx);

@@ -100,10 +100,33 @@ public class DirectionalSprite
         return null;
     }
 
-    /// <summary>Frames for an animation in a direction, or null if there are none.</summary>
-    public IReadOnlyList<Texture2D>? Animation(string name, Facing8 facing) =>
-        _animations.TryGetValue(name, out var byFacing) &&
-        byFacing.TryGetValue(facing, out var frames) ? frames : null;
+    /// <summary>
+    /// How many frames an animation shows a second. One number for every
+    /// animation in the game, changeable from the ~ menu while looking at one.
+    /// </summary>
+    public static float Fps = 12f;
+
+    /// <summary>
+    /// Frames for an animation in a direction, or null if there are none.
+    ///
+    /// A direction with no frames falls back to the nearest that has some,
+    /// round the compass, the same way a missing rotation does. While a
+    /// character has one direction of one animation drawn — which is where
+    /// the Gun-O-Mancer's GunShot is — it still plays from every angle rather
+    /// than only when he happens to be facing east.
+    /// </summary>
+    public IReadOnlyList<Texture2D>? Animation(string name, Facing8 facing)
+    {
+        if (!_animations.TryGetValue(name, out var byFacing)) return null;
+        if (byFacing.TryGetValue(facing, out var exact)) return exact;
+        for (int step = 1; step <= 4; step++)
+            foreach (int side in new[] { step, -step })
+            {
+                var near = Facings.All[(((int)facing + side) % 8 + 8) % 8];
+                if (byFacing.TryGetValue(near, out var found)) return found;
+            }
+        return null;
+    }
 
     /// <summary>Whether this animation exists in any direction at all.</summary>
     public bool HasAnimation(string name) => _animations.ContainsKey(name);

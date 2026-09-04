@@ -34,6 +34,9 @@ public class GameContext
 
     /// <summary>What is in a content folder, for art added by dropping files in.</summary>
     public required IContentIndex ContentIndex;
+
+    /// <summary>Everybody's rotations, animations and placeholder cubes.</summary>
+    public required Pixel.CastSprites Sprites;
     public IDevDestinationWriter? DevWriter;
 
     public IScreen Screen = null!;

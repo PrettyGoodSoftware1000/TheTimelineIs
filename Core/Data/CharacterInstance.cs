@@ -30,7 +30,6 @@ public class CharacterInstance
 {
     public string Name = "";
     public int OccurrenceIndex;      // 0 = first Goblin in a cast line, 1 = second...
-    public string SpriteFile = "";   // e.g. "Goblin2.png"
     public bool IsPlayer;
     public bool Alive = true;
 
@@ -276,42 +275,52 @@ public class CharacterInstance
     // --- transient render state: never saved, and cleared when the cast ends ---
 
     /// <summary>
-    /// The casting animation now playing over this character's sprite, or null
+    /// The frames of the animation now playing over this character, or null
     /// when it is standing still. Set when a card is played and cleared when
     /// the last frame has been shown.
     /// </summary>
-    public SpriteAnimation? CastAnim;
+    public IReadOnlyList<Microsoft.Xna.Framework.Graphics.Texture2D>? CastFrames;
 
-    /// <summary>Seconds into <see cref="CastAnim"/>.</summary>
+    /// <summary>Seconds into <see cref="CastFrames"/>.</summary>
     public float CastAnimTime;
 
     /// <summary>
-    /// The sheet this character plays while casting — a shapeshifter's current
-    /// form picks its own. Null when nobody declared one, which is the normal
-    /// case: the static sprite simply stays put.
+    /// The animation folder this character casts with — a shapeshifter's
+    /// current form picks its own. Empty when nobody declared one, which is
+    /// the normal case: the sprite simply stays put.
     /// </summary>
-    public string? CastAnimationPath => IsPlayer
-        ? ClassLibrary.Current.Get(Name)?.CastAnimationPath(Form)
-        : EnemyLibrary.Current.Get(Name)?.CastAnimationPath;
+    public string CastAnimation => IsPlayer
+        ? ClassLibrary.Current.Get(Name)?.CastAnimationFor(Form) ?? ""
+        : EnemyLibrary.Current.Get(Name)?.CastAnimation ?? "";
 
     /// <summary>
     /// Where this character's art lives. Asked of the class rather than built
-    /// from the name, because a summoned creature keeps its art in its
-    /// summoner's folder — a Gator's picture sits with the Florida Man's, since
-    /// it is his. Falls back to the by-name folder for anything the libraries
-    /// have never heard of.
+    /// from the name, because a summoned creature keeps its art inside its
+    /// summoner's folder. Falls back to the by-name folder for anything the
+    /// libraries have never heard of.
     /// </summary>
     public string Folder => IsPlayer
         ? ClassLibrary.Current.Get(Name)?.Folder ?? $"Content/Cast/PlayerCharacters/{Name}"
         : $"Content/Cast/EnemyCharacters/{Name}";
-    public string SpritePath => $"{Folder}/{SpriteFile}";
-    /// <summary>Optional: Goblin1.png -> Goblin1Thumb.png. Falls back to the full sprite.</summary>
-    public string ThumbPath => $"{Folder}/{System.IO.Path.GetFileNameWithoutExtension(SpriteFile)}Thumb.png";
+
+    /// <summary>
+    /// Which state folder under <see cref="Folder"/> to draw from. A
+    /// shapeshifter's changes with its form. Empty means the first folder with
+    /// rotations in it.
+    /// </summary>
+    public string Art => IsPlayer
+        ? ClassLibrary.Current.Get(Name)?.ArtFor(Form) ?? ""
+        : EnemyLibrary.Current.Get(Name)?.Art ?? "";
+
+    /// <summary>The colour of this character's placeholder cube.</summary>
+    public Microsoft.Xna.Framework.Color Colour => IsPlayer
+        ? ClassLibrary.Current.Get(Name)?.Colour ?? CastPlaceholder.DefaultColour
+        : EnemyLibrary.Current.Get(Name)?.Colour ?? CastPlaceholder.DefaultColour;
 
     public CharacterInstance Clone()
     {
         var copy = (CharacterInstance)MemberwiseClone();
-        copy.CastAnim = null;               // a snapshot is of somebody standing still
+        copy.CastFrames = null;             // a snapshot is of somebody standing still
         copy.CastAnimTime = 0f;
         copy.Burns = new List<int>(Burns);   // don't share the stack lists with the original
         copy.Curses = new List<(int, int)>(Curses);

@@ -1,16 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Xna.Framework;
 
 namespace TheTimelineIs.Core.Data;
 
 /// <summary>
-/// A shape a class can wear: its own name, its own art, and optionally its own
-/// casting animation. A blank animation falls back to the class's own line.
+/// A shape a class can wear: its own name, the folder its art is in, and
+/// optionally the animation it casts with. A blank animation falls back to
+/// the class's own line.
 /// </summary>
-public record ClassForm(string Name, string Sprite, string Animation = "");
+public record ClassForm(string Name, string Art, string Animation = "");
 
-/// <summary>One playable class: stats, sprites and forms in a Classes.txt block.</summary>
+/// <summary>One playable class: stats, art and forms from a Classes.txt block.</summary>
 public class PlayerClass
 {
     public string Name = "";
@@ -23,14 +25,26 @@ public class PlayerClass
     /// budget rather than an allowance to save up.
     /// </summary>
     public int Actions = CharacterInstance.DefaultActionsPerTurn;
-    public List<string> Sprites = new();   // defaults to {Name}.png
-    public List<string> CardTags = new();  // defaults to the class's own name
-    /// <summary>Declared with "Form: Name, Art.png". The first one is where the class starts.</summary>
-    public List<ClassForm> Forms = new();
+
     /// <summary>
-    /// Sheet played while this class casts a card, relative to its own folder.
-    /// A form carrying its own animation overrides it — the wolf never plays
-    /// the witch's spell.
+    /// Which state folder under the class's folder to draw from. Empty means
+    /// the first folder that has rotations in it — the common case, since
+    /// most characters have one state.
+    /// </summary>
+    public string Art = "";
+
+    /// <summary>The colour of this class's placeholder cube while it has no art.</summary>
+    public Color Colour = CastPlaceholder.DefaultColour;
+
+    public List<string> CardTags = new();  // defaults to the class's own name
+
+    /// <summary>Declared with "Form: Name, Folder". The first one is where the class starts.</summary>
+    public List<ClassForm> Forms = new();
+
+    /// <summary>
+    /// The animation folder played while this class casts a card, under its
+    /// state's animations/. A form carrying its own overrides it — the wolf
+    /// never plays the witch's spell.
     /// </summary>
     public string CastAnimation = "";
     public int Line;
@@ -52,79 +66,33 @@ public class PlayerClass
     public int SizeX = 1, SizeY = 1;
 
     /// <summary>
-    /// Where this class's art lives. A summon has no folder of its own: its art
-    /// sits with its summoner's, since it is that character's creature and is
-    /// drawn by whoever drew them.
+    /// Where this class's art lives. A summon's sits inside its summoner's
+    /// folder, since it is that character's creature — a Gator's pictures are
+    /// at "Florida Man/Gator/".
     /// </summary>
-    public string Folder =>
-        $"Content/Cast/PlayerCharacters/{(IsSummon ? SummonedBy : Name)}";
-
-    /// <summary>Sprites the class can wear: its forms' art, or its plain sprite list.</summary>
-    public IReadOnlyList<string> SpriteFiles =>
-        Forms.Count > 0 ? Forms.Select(f => f.Sprite).ToList()
-        : Sprites.Count > 0 ? Sprites
-        : new List<string> { $"{Name}.png" };
+    public string Folder => IsSummon
+        ? $"Content/Cast/PlayerCharacters/{SummonedBy}/{Name}"
+        : $"Content/Cast/PlayerCharacters/{Name}";
 
     public string StartingForm => Forms.Count > 0 ? Forms[0].Name : "";
 
     public ClassForm? FindForm(string name) =>
         Forms.FirstOrDefault(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Art for a form, falling back to the class's first sprite.</summary>
-    public string SpriteForForm(string form) =>
-        FindForm(form)?.Sprite ?? SpriteFiles[0];
+    /// <summary>The art folder for a form; the class's own when it has no forms.</summary>
+    public string ArtFor(string form) => FindForm(form)?.Art ?? Art;
 
     /// <summary>
-    /// The casting sheet to play in a given shape, as a full content path, or
-    /// null when neither the form nor the class declares one. Most specific
-    /// wins, the same rule Config.txt scales follow.
+    /// The animation to cast with in a given shape, or empty when neither the
+    /// form nor the class declares one. Most specific wins.
     /// </summary>
-    public string? CastAnimationPath(string form)
-    {
-        string file = FindForm(form)?.Animation is { Length: > 0 } own ? own : CastAnimation;
-        return file.Length > 0 ? $"{Folder}/{file}" : null;
-    }
-
-    /// <summary>Every animation this class can ever play, for the startup check.</summary>
-    public IEnumerable<string> AllCastAnimationPaths()
-    {
-        if (CastAnimation.Length > 0) yield return $"{Folder}/{CastAnimation}";
-        foreach (var form in Forms)
-            if (form.Animation.Length > 0) yield return $"{Folder}/{form.Animation}";
-    }
+    public string CastAnimationFor(string form) =>
+        FindForm(form)?.Animation is { Length: > 0 } own ? own : CastAnimation;
 }
 
 /// <summary>
 /// Parses Content/Cast/PlayerCharacters/Classes.txt, the single authoritative
-/// class file — the old per-character {Name}.txt manifests are gone. Format:
-///
-///   Class: Dirtbag
-///   HP: 15
-///   Movement: 8
-///   Actions: 2                 (optional; points a turn, default 2)
-///   Sprites: Dirtbag.png            (optional; defaults to {Name}.png)
-///   Card Tags: Dirtbag, 'Mancer     (optional; defaults to the class name)
-///   Cast Animation: Spell/Spell.png (optional; the sheet played while this
-///                                    class casts, relative to its own folder)
-///   Form: Werewolf, Wolf.png        (optional, repeatable; the first is the
-///                                    starting form. Cards with a matching
-///                                    "Form:" line only appear in that form.)
-///   Form: Witch, Witch.png, Cast/Cast.png
-///                                   (a third field gives that shape its own
-///                                    casting animation, beating the class's)
-///
-/// A creature a class summons is written the same way, with "Summon:" in place
-/// of "Class:" and a line naming who calls it:
-///
-///   Summon: Gator
-///   Summoned By: Florida Man        (required; also where its art lives)
-///   HP: 14
-///   Movement: 6
-///   Size: 2 x 1                     (optional; defaults to one square)
-///   Sprites: Gator.png              (found in the SUMMONER's folder)
-///
-/// A summon is on the player's side and holds player cards, so it belongs in
-/// this file and not in Enemies.txt. It is simply left out of the party picker.
+/// class file. The format is documented at the top of that file.
 /// </summary>
 public class ClassLibrary
 {
@@ -134,7 +102,7 @@ public class ClassLibrary
 
     public const string Path = "Content/Cast/PlayerCharacters/Classes.txt";
 
-    /// <summary>Set by Load; lets the old cast-resolution path see the same data.</summary>
+    /// <summary>Set by Load; lets a character look its own class up.</summary>
     public static ClassLibrary Current { get; private set; } = new();
 
     public IReadOnlyList<string> ClassNames => _order;
@@ -203,24 +171,43 @@ public class ClassLibrary
                     else diag.Error(Path, lineNo,
                         $"'{current.Name}': Actions must be a positive number of points a turn, got '{value}'");
                     break;
+                case "art":
+                    if (CastPlaceholder.LooksLikeAPicture(value))
+                        diag.Error(Path, lineNo, $"'{current.Name}': Art is a FOLDER now, not a picture — " +
+                            $"got '{value}'. Put rotations/ inside a folder and name the folder here.");
+                    else current.Art = value;
+                    break;
+                case "colour":
+                case "color":
+                    if (CastPlaceholder.TryParseColour(value, out var colour)) current.Colour = colour;
+                    else diag.Error(Path, lineNo,
+                        $"'{current.Name}': Colour must be three numbers 0-255 like '120, 80, 40', got '{value}'");
+                    break;
                 case "sprites":
-                    current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                    diag.Error(Path, lineNo, $"'{current.Name}': 'Sprites:' is gone — art is a folder of " +
+                        "rotations now. Delete the line, or use 'Art: FolderName' to pick a folder.");
                     break;
                 case "form":
-                    // "Form: Werewolf, WerewitchWerewolf.png" — and optionally a
-                    // third field, the casting sheet this shape plays
+                    // "Form: Witch, WitchForm" — and optionally a third field,
+                    // the animation this shape casts with
                     var bits = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                     if (bits.Length < 2)
                         diag.Error(Path, lineNo,
-                            $"'{current.Name}': Form needs a name and an image, e.g. 'Form: Witch, Witch.png'");
+                            $"'{current.Name}': Form needs a name and an art folder, e.g. 'Form: Witch, WitchForm'");
+                    else if (CastPlaceholder.LooksLikeAPicture(bits[1]) ||
+                             (bits.Length > 2 && CastPlaceholder.LooksLikeAPicture(bits[2])))
+                        diag.Error(Path, lineNo, $"'{current.Name}': a Form names an art FOLDER and an " +
+                            $"animation folder, not pictures — got '{value}'");
                     else if (current.Forms.Exists(f => f.Name.Equals(bits[0], StringComparison.OrdinalIgnoreCase)))
                         diag.Warn(Path, lineNo, $"'{current.Name}': form '{bits[0]}' is declared twice");
                     else
-                        current.Forms.Add(new ClassForm(bits[0], bits[1],
-                            bits.Length > 2 ? bits[2] : ""));
+                        current.Forms.Add(new ClassForm(bits[0], bits[1], bits.Length > 2 ? bits[2] : ""));
                     break;
                 case "cast animation":
-                    current.CastAnimation = value;
+                    if (CastPlaceholder.LooksLikeAPicture(value))
+                        diag.Error(Path, lineNo, $"'{current.Name}': Cast Animation names a folder under " +
+                            $"animations/ now, like 'GunShot' — got '{value}'");
+                    else current.CastAnimation = value;
                     break;
                 case "summoned by":
                     current.SummonedBy = value;
@@ -247,13 +234,13 @@ public class ClassLibrary
         }
 
         // A summon whose summoner is missing or misspelled would look for its
-        // art in a folder that isn't there and come out as a magenta
-        // checkerboard, with nothing said about why. Say it here instead.
+        // art in a folder that isn't there, with nothing said about why. Say
+        // it here instead.
         foreach (var s in lib._needsSummoner)
         {
             if (s.SummonedBy.Length == 0)
                 diag.Error(Path, s.Line, $"'{s.Name}' is a Summon but has no 'Summoned By:' line " +
-                    "naming the class that calls it — that is also the folder its art lives in");
+                    "naming the class that calls it — that is also where its art lives");
             else if (lib.Get(s.SummonedBy) is not { IsSummon: false })
                 diag.Error(Path, s.Line,
                     $"'{s.Name}' is summoned by '{s.SummonedBy}', which is not a class in this file");
@@ -277,13 +264,12 @@ public class ClassLibrary
         new(_order.SelectMany(CardTagsFor), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Declared classes whose first sprite actually exists — the party picker's
-    /// roster. Summons are left out: you get one by playing the card that calls
-    /// it, not by choosing it before the mission.
+    /// The party picker's roster: every declared class that is not a summon.
+    /// Having art is not a condition — a class with none is a cube, and a cube
+    /// can still be picked and played.
     /// </summary>
     public List<string> PlayableClasses() =>
-        _order.Where(n => Get(n) is PlayerClass c && !c.IsSummon &&
-            AssetLoader.Exists($"{c.Folder}/{c.SpriteFiles[0]}")).ToList();
+        _order.Where(n => Get(n) is { IsSummon: false }).ToList();
 
     /// <summary>Creatures declared with "Summon:" — everything a card can call up.</summary>
     public List<string> SummonNames() =>

@@ -1,37 +1,50 @@
-# One block per playable class. Stats live here now — the old per-character
-# {Name}.txt files are gone. Sprites default to {Name}.png in the class's
-# folder; add "Sprites: A.png, B.png" for variants.
-# "Card Tags:" is optional; without it a class plays cards tagged with its name.
+# One block per playable class.
+#
+# ART is a folder, not a picture. Inside a class's folder each state gets a
+# folder of its own holding rotations/ and animations/ — see the README there.
+# A class with no such folder yet is drawn as a cube with its initial on top.
+#
+#   Colour: r, g, b            what colour that cube is
+#   Art: FolderName            optional; which state folder to draw from.
+#                              Without it, the first folder with rotations in
+#                              it is used.
+#   Cast Animation: GunShot    optional; an animation folder played over the
+#                              sprite while a card is cast
+#   Form: Name, Folder, Anim   a shape a shapeshifter can wear: its name, its
+#                              art folder, and optionally its own cast
+#                              animation. The first Form is where it starts.
+#   Card Tags: A, B            optional; which cards it holds. Defaults to the
+#                              class's own name.
 
 Class: Dirtbag
 HP: 30
 Movement: 8
 Actions: 2
+Colour: 73, 66, 56
 
 Class: Gun-O-Mancer
 HP: 20
 Movement: 4
 Actions: 2
+Colour: 97, 92, 92
+Cast Animation: GunShot
 
 Class: Cyborg
 HP: 50
 Movement: 5
 Actions: 2
+Colour: 100, 97, 93
 
-# A shapeshifter. "Form:" lines give each shape its own art; the first one is
-# where she starts. Cards carrying a matching "Form:" line only appear while
+# A shapeshifter. Cards carrying a matching "Form:" line only appear while
 # she wears that shape, so the wolf's claws and the witch's curses never share
-# a hand.
-#
-# A third field on a Form line is that shape's casting animation, played over
-# the sprite from the moment a card is played. Each shape casts its own way:
-# the wolf has no sheet yet, so it just stands there and swings as before.
+# a hand. The wolf has no art folder yet, so she is a cube in that shape.
 Class: Werewitch
 HP: 80
 Movement: 8
 Actions: 2
-Form: Werewolf, WerewitchWerewolf.png
-Form: Witch, WerewitchWitch.png, WerewitchSpell1/WerewitchSpell1.png
+Colour: 60, 46, 65
+Form: Werewolf, WolfForm
+Form: Witch, WitchForm
 
 # The Gator he summons is on OUR side: it holds player cards and takes orders,
 # so it is written here rather than in Enemies.txt. "Summon:" opens the block
@@ -42,6 +55,7 @@ Class: Florida Man
 HP: 50
 Movement: 4
 Actions: 2
+Colour: 133, 93, 68
 
 Summon: Gator
 Summoned By: Florida Man
@@ -49,4 +63,4 @@ HP: 14
 Movement: 6
 Actions: 2
 Size: 2 x 1
-Sprites: Gator.png
+Colour: 69, 94, 59

@@ -34,12 +34,12 @@ public class PartySelectScreen : IScreen
         _classes = ctx.Classes.PlayableClasses();
     }
 
-    private string SpritePathFor(string name)
-    {
-        var cls = _ctx.Classes.Get(name);
-        string file = cls?.SpriteFiles[0] ?? $"{name}.png";
-        return $"Content/Cast/PlayerCharacters/{name}/{file}";
-    }
+    /// <summary>A class's face for the picker: its front rotation, or its cube.</summary>
+    private Texture2D PortraitOf(string name) =>
+        _ctx.Sprites.Portrait(new CharacterInstance
+        {
+            Name = name, IsPlayer = true, Form = _ctx.Classes.Get(name)?.StartingForm ?? "",
+        });
 
     public void Update(InputState input, float dt)
     {
@@ -63,8 +63,8 @@ public class PartySelectScreen : IScreen
             Ui.FillRect(batch, _ctx.Pixel, rect, new Color(30, 30, 45));
             if (i < _picked.Count)
             {
-                var tex = _ctx.Assets.LoadTexture(SpritePathFor(_picked[i]));
-                var fit = Ui.FitCentered(AssetLoader.DisplaySize(tex, AssetKind.Sprite),
+                var tex = PortraitOf(_picked[i]);
+                var fit = Ui.FitCentered(new Vector2(tex.Width, tex.Height),
                     new Rectangle(rect.X + 20, rect.Y + 20, rect.Width - 40, rect.Height - 130));
                 batch.Draw(tex, fit, Color.White);
                 Ui.DrawTextCentered(batch, _ctx.Font, _picked[i],
@@ -88,8 +88,8 @@ public class PartySelectScreen : IScreen
         {
             var rect = new Rectangle(optsX + i * (OptW + 60), OptY, OptW, OptH);
             Ui.FillRect(batch, _ctx.Pixel, rect, new Color(24, 34, 24));
-            var tex = _ctx.Assets.LoadTexture(SpritePathFor(_classes[i]));
-            var fit = Ui.FitCentered(AssetLoader.DisplaySize(tex, AssetKind.Sprite),
+            var tex = PortraitOf(_classes[i]);
+            var fit = Ui.FitCentered(new Vector2(tex.Width, tex.Height),
                 new Rectangle(rect.X + 16, rect.Y + 16, rect.Width - 32, rect.Height - 120));
             batch.Draw(tex, fit, Color.White);
             Ui.DrawTextCentered(batch, _ctx.Font, _classes[i],

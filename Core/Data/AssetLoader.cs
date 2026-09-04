@@ -84,54 +84,12 @@ public class AssetLoader
     }
 
     /// <summary>
-    /// How much of a texture's height, as a fraction, is transparent padding
-    /// below the last row that has anything drawn on it. 0 means the art runs
-    /// right to the bottom edge.
-    ///
-    /// Cast art is placed by its FEET: the bottom of the drawn rectangle lands
-    /// on the square's top face. Art with empty space under the feet therefore
-    /// hangs that much too high, and art whose canvas ends above the feet sinks
-    /// into the floor. Measuring where the paint actually stops lets both be
-    /// placed the same way, whatever the artist left around the edges.
-    ///
-    /// Measured once per texture and cached — reading pixels back off the GPU
-    /// is far too slow to do every frame.
-    /// </summary>
-    public float BottomPadding(Texture2D tex)
-    {
-        if (_bottomPad.TryGetValue(tex, out float known)) return known;
-
-        float pad = 0f;
-        try
-        {
-            var pixels = new Color[tex.Width * tex.Height];
-            tex.GetData(pixels);
-            int lastRow = -1;
-            for (int y = tex.Height - 1; y >= 0 && lastRow < 0; y--)
-                for (int x = 0; x < tex.Width; x++)
-                    if (pixels[y * tex.Width + x].A > OpaqueEnough) { lastRow = y; break; }
-            // a fully transparent image has nothing to measure; leave it alone
-            if (lastRow >= 0)
-                pad = (tex.Height - 1 - lastRow) / (float)tex.Height;
-        }
-        catch (Exception ex)
-        {
-            // an unreadable texture is a drawing problem, not a fatal one
-            Diagnostics.Current.Warn("AssetLoader", 0,
-                $"could not measure a sprite's feet ({ex.Message}); it will sit on its canvas edge");
-        }
-        _bottomPad[tex] = pad;
-        return pad;
-    }
-
-    /// <summary>
     /// Alpha at or below this counts as nothing drawn. Art exported with a
     /// soft edge often carries a whisker of alpha well past the visible art,
     /// and treating that as the feet would put the character back where it was.
     /// </summary>
     private const byte OpaqueEnough = 8;
 
-    private readonly Dictionary<Texture2D, float> _bottomPad = new();
 
     /// <summary>
     /// Alpha at or below this is nothing. Deliberately lower than the
@@ -207,17 +165,6 @@ public class AssetLoader
         }
         _outlines[key] = outline;
         return outline;
-    }
-
-    /// <summary>Loads the first path that exists, so thumbnails can fall back to the full sprite.</summary>
-    public Texture2D LoadFirstAvailable(params string[] paths)
-    {
-        for (int i = 0; i < paths.Length - 1; i++)
-        {
-            var tex = LoadTexture(paths[i], out bool found);
-            if (found) return tex;
-        }
-        return LoadTexture(paths[^1]);
     }
 
     public static List<string> TryReadLines(string path) =>

@@ -67,7 +67,7 @@ public class Card
     public Delivery Delivery = Delivery.Instant;
     /// <summary>One projectile aimed at the player's pick, vs one per target.</summary>
     public bool SingleProjectile;
-    public string ProjectileArt = "Projectile.png";
+    public string ProjectileArt = "Ball.png";
 
     public string? CastingSound;
     /// <summary>

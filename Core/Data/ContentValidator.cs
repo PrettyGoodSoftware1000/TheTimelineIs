@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using TheTimelineIs.Core.Iso;
+using TheTimelineIs.Core.Pixel;
 using TheTimelineIs.Core.Screens;
 
 namespace TheTimelineIs.Core.Data;
@@ -18,40 +19,74 @@ namespace TheTimelineIs.Core.Data;
 public static class ContentValidator
 {
     public static void Run(CardLibrary cards, CardLibrary enemyCards, ClassLibrary classes,
-        EnemyLibrary enemies, Strings strings, AssetLoader assets)
+        EnemyLibrary enemies, Strings strings, Platform.IContentIndex? index)
     {
         var diag = Diagnostics.Current;
         ValidateCards(cards, classes.AllPlayableTags(), diag);
         ValidateCards(enemyCards, enemies.AllTags(), diag);
         ValidateCardsAgainstClasses(cards, classes, diag);
         ValidateRoster(classes, cards, diag);
-        ValidateScales(classes, diag);
         ValidateEnemies(enemies, enemyCards, diag);
         ValidateLevels(enemies, diag);
         ValidateStrings(strings, diag);
         ValidateGround(diag);
-        ValidateCastAnimations(classes, enemies, assets);
+        ValidateArt(classes, enemies, index, diag);
     }
 
     /// <summary>
-    /// Loads every declared casting sheet up front. A broken one reports itself
-    /// through the same startup popup as everything else instead of surfacing
-    /// three hours into a playtest, and the ones that work are in the cache
-    /// before the first card is played, so nothing stutters on frame one.
+    /// Every art folder and animation somebody NAMED must exist. Not having
+    /// art at all is fine — that is a cube, and the cube is the plan while
+    /// the art is drawn — but naming a folder that is not there is a typo,
+    /// and a typo that quietly drew a cube would never get found.
     /// </summary>
-    private static void ValidateCastAnimations(ClassLibrary classes, EnemyLibrary enemies,
-        AssetLoader assets)
+    private static void ValidateArt(ClassLibrary classes, EnemyLibrary enemies,
+        Platform.IContentIndex? index, Diagnostics diag)
     {
-        var paths = new List<string>();
-        foreach (var name in classes.ClassNames)
-            paths.AddRange(classes.Get(name)!.AllCastAnimationPaths());
-        foreach (var name in enemies.EnemyNames)
-            if (enemies.Get(name)!.CastAnimationPath is string path)
-                paths.Add(path);
+        void CheckState(string file, int line, string who, string folder, string state, string animation)
+        {
+            // A named folder that is not there is a typo. A folder that IS
+            // there with no rotations in it yet is work in progress — the
+            // cube is what it is meant to draw — and does not need a note
+            // every time the game starts.
+            if (state.Length > 0 && index != null &&
+                !index.Folders(folder).Contains(state, StringComparer.OrdinalIgnoreCase))
+                diag.Warn(file, line, $"'{who}': there is no folder '{state}' under {folder} — " +
+                    "drawing a cube. Make the folder, or fix the name.");
+            if (animation.Length > 0 && index != null)
+            {
+                string root = state.Length > 0 ? state : FirstStateWithArt(index, folder) ?? "";
+                bool any = false;
+                foreach (var f in Pixel.Facings.All)
+                    if (index.Images($"{folder}/{root}/animations/{animation}/{f.FileName()}").Count > 0)
+                        any = true;
+                if (!any)
+                    diag.Warn(file, line, $"'{who}': cast animation '{animation}' has no frames under " +
+                        $"{folder}/{root}/animations/{animation}/<direction>/ — casting will not animate");
+            }
+        }
 
-        // Load reports anything wrong itself, in the terms the author needs
-        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
-            SpriteAnimation.Load(assets, path);
+        foreach (var name in classes.ClassNames)
+        {
+            var cls = classes.Get(name)!;
+            if (cls.Forms.Count == 0)
+                CheckState(ClassLibrary.Path, cls.Line, name, cls.Folder, cls.Art, cls.CastAnimation);
+            foreach (var form in cls.Forms)
+                CheckState(ClassLibrary.Path, cls.Line, $"{name} ({form.Name})", cls.Folder, form.Art,
+                    cls.CastAnimationFor(form.Name));
+        }
+        foreach (var name in enemies.EnemyNames)
+        {
+            var def = enemies.Get(name)!;
+            CheckState(EnemyLibrary.Path, def.Line, name, def.Folder, def.Art, def.CastAnimation);
+        }
+    }
+
+    private static string? FirstStateWithArt(Platform.IContentIndex index, string folder)
+    {
+        foreach (string state in index.Folders(folder))
+            if (AssetLoader.Exists($"{folder}/{state}/rotations/{Pixel.Facings.Default.FileName()}.png"))
+                return state;
+        return null;
     }
 
     /// <summary>
@@ -95,12 +130,13 @@ public static class ContentValidator
                         $"'{card.Name}': nothing declares the tag '{tag}', " +
                         "so nobody can ever hold this card");
 
-            if (card.Delivery == Delivery.Ranged)
+            if (card.Delivery == Delivery.Ranged && card.ProjectileArt.Length > 0)
             {
-                string art = $"Content/Images/Effects/{card.ProjectileArt}";
+                string art = $"Content/Images/Pixel/Effects/{card.ProjectileArt}";
                 if (!AssetLoader.Exists(art))
-                    diag.Error(card.Source, card.Line,
-                        $"'{card.Name}': Projectile Art '{card.ProjectileArt}' not found at {art}");
+                    diag.Warn(card.Source, card.Line,
+                        $"'{card.Name}': Projectile Art '{card.ProjectileArt}' not found at {art} — " +
+                        "the ball will be thrown instead");
             }
 
             CheckSound(card, card.CastingSound, "Casting Sound", diag);
@@ -215,26 +251,6 @@ public static class ContentValidator
                 $"'{card.Name}': {field} '{file}' is not a .wav — only PCM WAV can be played");
     }
 
-    /// <summary>
-    /// A shapeshifter's shapes are different art and want different sizes, so
-    /// each one carries its own scale line. A bare "{Class} scale" line would
-    /// sit above both of them and quietly size shapes it was never measured
-    /// against — the wolf resized because somebody was adjusting the witch.
-    /// </summary>
-    private static void ValidateScales(ClassLibrary classes, Diagnostics diag)
-    {
-        var cfg = GameConfig.Load();
-        foreach (string name in classes.ClassNames)
-        {
-            var cls = classes.Get(name)!;
-            if (cls.Forms.Count == 0 || cfg.RawScale(name) <= 0f) continue;
-            diag.Warn(GameConfig.Path, 0,
-                $"'{name} scale' applies to every one of its shapes at once. " +
-                $"{name} has forms, so size them separately: " +
-                string.Join(", ", cls.Forms.Select(f => $"'{name} {f.Name} scale'")));
-        }
-    }
-
     private static void ValidateRoster(ClassLibrary classes, CardLibrary cards, Diagnostics diag)
     {
         if (classes.ClassNames.Count == 0)
@@ -250,17 +266,12 @@ public static class ContentValidator
                         (c.Form.Length == 0 || c.Form.Equals(form.Name, StringComparison.OrdinalIgnoreCase))))
                     diag.Warn(ClassLibrary.Path, cls.Line,
                         $"class '{name}': form '{form.Name}' has no card that changes out of it");
-            foreach (var sprite in cls.SpriteFiles)
-                if (!AssetLoader.Exists($"{cls.Folder}/{sprite}"))
-                    diag.Error(ClassLibrary.Path, cls.Line,
-                        $"class '{name}': sprite '{sprite}' not found at {cls.Folder}/{sprite}");
-
-            // a class wears EITHER a form's art or its plain sprite list, so
+            // a class wears EITHER a form's art or its own Art line, so
             // declaring both silently throws one of them away
-            if (cls.Forms.Count > 0 && cls.Sprites.Count > 0)
+            if (cls.Forms.Count > 0 && cls.Art.Length > 0)
                 diag.Warn(ClassLibrary.Path, cls.Line,
-                    $"class '{name}': has both Form: and Sprites: lines. Forms win — " +
-                    $"'{string.Join(", ", cls.Sprites)}' is ignored. Give each form its own art instead.");
+                    $"class '{name}': has both Form: and Art: lines. Forms win — " +
+                    $"'{cls.Art}' is ignored. Give each form its own folder instead.");
 
             // a card that shifts into a shape the class never declared is a
             // dead card: the shift silently fails at the moment it is played
@@ -298,10 +309,6 @@ public static class ContentValidator
             else if (hand.All(c => c.TargetsAllies))
                 diag.Warn(EnemyLibrary.Path, def.Line,
                     $"enemy '{name}': every one of its cards targets allies, so it never attacks");
-            foreach (var sprite in def.SpriteFiles)
-                if (!AssetLoader.Exists($"{def.Folder}/{sprite}"))
-                    diag.Error(EnemyLibrary.Path, def.Line,
-                        $"enemy '{name}': sprite '{sprite}' not found at {def.Folder}/{sprite}");
         }
     }
 
@@ -504,7 +511,7 @@ public static class ContentValidator
             "replay_title", "replay_turn", "replay_end", "replay_next", "replay_card",
             "replay_over", "replay_none", "menu_replays",
             "error_title", "error_continue", "error_more", "error_log", "error_counts",
-            "iso_enter", "iso_explore_hint", "iso_spotted", "iso_done", "iso_clear",
+            "iso_enter", "iso_explore_hint", "iso_clear",
             "iso_end_turn", "iso_move_left", "iso_out_of_range",
             "iso_door_open", "iso_victory", "iso_card_range", "iso_transition",
             "iso_move_spent", "iso_pick_target", "iso_dialogue_next",
@@ -519,8 +526,7 @@ public static class ContentValidator
             "iso_vulnerable", "iso_vulnerable_hit",
             "iso_stunned", "iso_stun_skip", "iso_swapped",
             "iso_trip_start", "iso_trip_empty", "iso_trip_survivor", "iso_trip_woke",
-            "dev_title", "dev_win", "dev_die", "dev_scale", "dev_close",
-            "dev_scale_title", "dev_scale_hint", "dev_scale_saved", "dev_scale_unsaved",
+            "dev_title", "dev_win", "dev_die", "dev_fps", "dev_close",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

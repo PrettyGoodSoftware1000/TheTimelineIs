@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Xna.Framework;
 
 namespace TheTimelineIs.Core.Data;
 
@@ -17,6 +18,7 @@ public class EnemyDef
     /// budget rather than an allowance to save up.
     /// </summary>
     public int Actions = CharacterInstance.DefaultActionsPerTurn;
+
     /// <summary>
     /// How many squares the body covers, across and down. "Size: 2" is 2x2 —
     /// a Living Stone. "Size: 2 x 1" is two squares side by side, which is a
@@ -26,40 +28,26 @@ public class EnemyDef
 
     /// <summary>The longer side, for anything that wants one number.</summary>
     public int Size => Math.Max(SizeX, SizeY);
-    public List<string> Sprites = new();
+
+    /// <summary>Which state folder to draw from; empty means the first with rotations.</summary>
+    public string Art = "";
+
+    /// <summary>The colour of this enemy's placeholder cube while it has no art.</summary>
+    public Color Colour = CastPlaceholder.DefaultColour;
+
     /// <summary>Which cards in EnemyCards.txt this enemy holds; its own name by default.</summary>
     public List<string> CardTags = new();
-    /// <summary>Sheet played while this enemy casts, relative to its own folder.</summary>
+
+    /// <summary>The animation folder played while this enemy casts.</summary>
     public string CastAnimation = "";
     public int Line;
 
     public string Folder => $"Content/Cast/EnemyCharacters/{Name}";
-    public IReadOnlyList<string> SpriteFiles =>
-        Sprites.Count > 0 ? Sprites : new List<string> { $"{Name}.png" };
-
-    /// <summary>The casting sheet as a full content path, or null when it has none.</summary>
-    public string? CastAnimationPath =>
-        CastAnimation.Length > 0 ? $"{Folder}/{CastAnimation}" : null;
 }
 
 /// <summary>
-/// Parses Content/Cast/EnemyCharacters/Enemies.txt — one file for every enemy,
-/// replacing the per-enemy manifests. Format:
-///
-///   Enemy: Goblin
-///   HP: 30
-///   Movement: 3
-///   Actions: 5                      (optional; points a turn, default 5)
-///   Size: 2                          (optional; squares per side, so 2 = a
-///                                     four-tile body. Defaults to 1)
-///   Sprites: Goblin1.png, Goblin2.png, Goblin3.png
-///   Card Tags: Goblin                (optional; defaults to the enemy's name)
-///   Cast Animation: Swing/Swing.png  (optional; the sheet played while this
-///                                     enemy casts, relative to its own folder)
-///
-/// How hard an enemy hits, what it sounds like and how far it reaches all live
-/// on its CARDS now, in Content/Cards/EnemyCards.txt. An enemy with no card of
-/// its own is dealt the default one so it can still swing.
+/// Parses Content/Cast/EnemyCharacters/Enemies.txt — one file for every enemy.
+/// The format is documented at the top of that file.
 /// </summary>
 public class EnemyLibrary
 {
@@ -158,14 +146,30 @@ public class EnemyLibrary
                     else diag.Error(Path, lineNo,
                         $"'{current.Name}': Actions must be a positive number of points a turn, got '{value}'");
                     break;
+                case "art":
+                    if (CastPlaceholder.LooksLikeAPicture(value))
+                        diag.Error(Path, lineNo, $"'{current.Name}': Art is a FOLDER now, not a picture — " +
+                            $"got '{value}'. Put rotations/ inside a folder and name the folder here.");
+                    else current.Art = value;
+                    break;
+                case "colour":
+                case "color":
+                    if (CastPlaceholder.TryParseColour(value, out var colour)) current.Colour = colour;
+                    else diag.Error(Path, lineNo,
+                        $"'{current.Name}': Colour must be three numbers 0-255 like '120, 80, 40', got '{value}'");
+                    break;
                 case "sprites":
-                    current.Sprites = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                    diag.Error(Path, lineNo, $"'{current.Name}': 'Sprites:' is gone — art is a folder of " +
+                        "rotations now. Delete the line, or use 'Art: FolderName' to pick a folder.");
                     break;
                 case "card tags":
                     current.CardTags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
                     break;
                 case "cast animation":
-                    current.CastAnimation = value;
+                    if (CastPlaceholder.LooksLikeAPicture(value))
+                        diag.Error(Path, lineNo, $"'{current.Name}': Cast Animation names a folder under " +
+                            $"animations/ now, like 'Swing' — got '{value}'");
+                    else current.CastAnimation = value;
                     break;
                 default:
                     diag.Warn(Path, lineNo, $"'{current.Name}': unknown line '{line}' ignored");
