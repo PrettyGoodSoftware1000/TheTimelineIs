@@ -26,7 +26,7 @@ Short answers to things that come up twice. No jargon unless defined.
 |---|---|
 | `dotnet run --project Desktop` | The game |
 | `dotnet run --project Desktop -- --editor` | The editor |
-| `dotnet run --project Tools/SpriteTool` | The sprite tool |
+| `dotnet run --project Desktop -- --level PixelRooms` | Straight into a level |
 
 `--` splits `dotnet`'s arguments from the game's.
 
@@ -39,7 +39,7 @@ Short answers to things that come up twice. No jargon unless defined.
 | `Core/` | Game logic. Knows nothing about Windows. |
 | `Desktop/` | Keyboard, screen, disk. The editor. |
 | `Content/` | Every `.txt` and image. Edit without rebuilding. |
-| `Tools/SpriteTool/` | Video -> PNGs -> sprite sheet. |
+| `Core/Pixel/` | The pixel rules: camera, facings, rotations, cubes. |
 
 `Core` must be able to run on a tablet, so anything touching files or hardware
 goes in `Desktop`.
@@ -61,19 +61,21 @@ goes in `Desktop`.
 | Points a turn (2), how many carry (1) | `Core/Data/CharacterInstance.cs` |
 | What a card costs | `PlayerCards.txt`, `Action Points:` |
 | Burning damage and length | `Core/Data/CardEffects.cs` |
-| Art size, overlay opacity | `Content/Config.txt` |
+| Overlay opacity | `Content/Config.txt` |
+| Frame rate of every animation | the `~` menu, or `DirectionalSprite.Fps` |
+| A placeholder cube's colour | `Colour:` in `Classes.txt` / `Enemies.txt` |
 
 ---
 
-## Config.txt scale rules
+## Pixel rules
 
-- Most specific wins **outright** — replaces, never multiplies:
-  `Dirtbag scale` > `Cast scale` > `Global scale`.
-- `0` means "ignore this line", falling through to the next one up.
-  `Global scale: 0` has nothing above it, so it lands on 100%.
-- Same key twice: last wins.
-- Opacity lines differ: `0` is a real zero — outline, no fill.
-- The `~` menu's **Scale Stuff** edits all this live and writes the file.
+- Art is never scaled. One art pixel is `Zoom` screen pixels — a whole number.
+- A square is 64x32. A foot of height is 8 pixels.
+- Four poses: south-east, south-west, north-east, north-west. A walk only
+  ever ends in one of those, because a grid axis IS a screen diagonal.
+- Aiming may point at north/south/east/west; it is drawn as the nearest pose.
+- A character stands with its lowest **solid** pixel on the square's middle.
+- No art yet = a cube with the initial on top. Colour comes from the content file.
 
 ---
 
@@ -154,9 +156,7 @@ old room go dark. Does nothing in combat.
 `~` opens and closes it in a level.
 
 - **Win Level** / **Die!** — end the mission either way.
-- **Scale Stuff** — a percentage box per character, summon, enemy and
-  decoration. Type, watch it change, Enter applies and saves. `0` = no line of
-  its own. Tiles are never scaled.
+- **Frame rate** — press to step 4..30 fps. Every animation follows it.
 - On the world map `~` arms destination placement: click, name it, Enter.
 
 ---
@@ -172,36 +172,3 @@ old room go dark. Does nothing in combat.
   press again mid-animation to cut to the end.
 - Nothing is re-simulated, so a replay cannot disagree with the mission.
 - `Replays/` is gitignored. `git add -f` to keep one.
-
----
-
-## The two numbers in cutout
-
-One is a colour, one is an area.
-
-**Tolerance** — colour distance, 0-255, not pixels. How far R, G and B may each
-be off the background and still count as background.
-
-- Raise if background survives (mp4 frames want 20-30). Lower if pale art gets eaten.
-
-**Min-hole** — an area in pixels. 500 px is about 22x22, not 500 wide.
-
-- Touching means edge to edge; diagonal-only patches are separate.
-- Area grows with the square of resolution: halve the frame, divide by 4.
-
-Pick it by running once and reading the report:
-
-```
-figure.png   holes 7 kept (to 736px) / 1 cleared (from 16,213px)
-```
-
-Anything between those two numbers behaves the same. Detail eaten? Raise it.
-Gap survived? Lower it.
-
----
-
-## ffmpeg
-
-- Needed **only** for pulling frames out of a video.
-- Install: `winget install Gyan.FFmpeg`, then open a **new** terminal.
-- Check: option 6 in the sprite tool, or `ffmpeg -version`.

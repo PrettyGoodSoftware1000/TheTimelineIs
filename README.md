@@ -4,14 +4,16 @@ Story-driven tactics: pick a destination on a world map, fight the isometric
 level it opens, return to the map.
 
 MonoGame (DesktopGL) on .NET 10. Desktop now, structured so tablet heads can be
-added without rewriting game logic.
+added without rewriting game logic. **Pixel art**: every art pixel is drawn as
+a whole number of screen pixels, always. Nothing scales.
 
 ## Build and run
 
 ```
-dotnet tool restore                          # once, after cloning
-dotnet run --project Desktop                 # the game
-dotnet run --project Desktop -- --editor     # the level editor
+dotnet tool restore                             # once, after cloning
+dotnet run --project Desktop                    # the game
+dotnet run --project Desktop -- --level PixelRooms   # straight into a level
+dotnet run --project Desktop -- --editor        # the level editor
 ```
 
 ## Controls
@@ -19,6 +21,7 @@ dotnet run --project Desktop -- --editor     # the level editor
 | Action | Input |
 |---|---|
 | Pan | Arrows / WASD, or right-drag |
+| Zoom | Mouse wheel (whole steps, 1x-8x) |
 | Select, advance dialogue | Left click, Enter, Space |
 | End turn | Space or End |
 | Play card 1-10 | `1`-`9`, `0` |
@@ -35,8 +38,40 @@ dotnet run --project Desktop -- --editor     # the level editor
 - `Core/` — all game logic. No `Keyboard`, `Mouse`, or `System.IO` for assets;
   everything goes through `IInputSource`, `ISaveStore`, `IContentIndex`,
   `TitleContainer`. This is what makes a tablet port a new folder, not a rewrite.
+- `Core/Pixel/` — the pixel rules: the camera, facings, rotations, cubes.
 - `Desktop/` — the DesktopGL head: input, save location, dev writers, editor.
 - `Content/` — every asset and script, loaded raw. Only the font is baked at build time.
+
+---
+
+## The pixel grid
+
+- A square is a 64x32 diamond. One foot of height lifts it 8 pixels.
+- The board draws through `PixelCamera`: a whole-number zoom and a
+  whole-number scroll, PointClamp. One art pixel is exactly `Zoom` screen
+  pixels, everywhere, at every zoom.
+- The HUD — cards, text, buttons — is laid out at 3840x2160 and letterboxed,
+  as before. That art is not pixel art and may scale.
+- **Facing.** A character is drawn from four rotations: south-east,
+  south-west, north-east, north-west. A grid axis is a screen diagonal, so
+  those are the only poses a walk can end in. Aiming can point north, south,
+  east or west; it is rounded to the nearest pose.
+- **Walking never goes straight across the screen.** Three squares to the
+  right is down-right then up-right. Cones snap the same way.
+- A character stands with the **lowest solid pixel** of its picture on the
+  middle of its square. Transparent padding does not count.
+
+## Character art
+
+See `Content/Cast/README.txt`. In short:
+
+- A folder per character, a folder per state inside it, `rotations/` and
+  `animations/` inside that. `Classes.txt` names the folder; a form names its own.
+- **No art yet = a cube** with the character's initial, in that character's
+  `Colour:`, and a yellow triangle on the ground for its facing.
+- An animation is a folder per direction of numbered frames. A class casts
+  with the one its `Cast Animation:` line names (`GunShot`).
+- Every state has `Idle/`, `Walk/`, `Melee/`, `Cast/` waiting for frames.
 
 ---
 
@@ -46,12 +81,12 @@ dotnet run --project Desktop -- --editor     # the level editor
   turn's movement unless `Nimble` gives some back.
 - **Action points**: 2 a turn, and **one** unspent point may carry, so 3 is the
   most anyone ever holds. Walking is free — separate budget.
-- **Movement**: orthogonal 1, diagonal 2, +1 per foot climbed, 4 ft max step
-  up, drops free. Blue wash shows the budget **in combat only**.
+- **Movement**: one square per step along a grid axis, +1 per foot climbed,
+  4 ft max step up, drops free. Blue wash shows the budget **in combat only**.
 - **Party members do not block each other**, but cannot stop on an occupied
   square. Enemies wall a path off.
 - **Sight**: coming within 15 tiles of an enemy in a revealed room starts the
-  fight. Only the Dirtbag gets a free positioning move — he cheats.
+  fight. Everyone fights from where they were caught.
 - **Targeting is one click**, resolved by **square**, never by whichever sprite
   is under the cursor. If the caster must close first it walks the shortest
   route and strikes. Right-click cancels.
@@ -59,8 +94,8 @@ dotnet run --project Desktop -- --editor     # the level editor
   art itself. With `Friendly Fire: Yes` your own people light up too.
 - **Turn order** is a strip of faces across the top; whoever acts sits far left
   at double size.
-- **The combat log** is behind the `+` at the top left. Damage is never printed
-  over the level.
+- **The combat log** is behind the `+` at the top left. Damage numbers rise
+  off the health bar.
 
 ## Out of combat
 
@@ -95,7 +130,8 @@ Any card can carry these (`Effects: Burning 1, Armor 5`).
 
 - **Melee** reaches 1 tile; **ranged** defaults to `Range: 5`.
 - **Cone** (`Type: [cone] AoE damage`) is a staircase wedge: 1 tile deep 1,
-  3 at 2, 5 at 3. `Range` caps the depth. Rotates to all eight headings.
+  3 at 2, 5 at 3. `Range` caps the depth. Fires along a grid axis only — a
+  screen diagonal — never straight up, down, left or right.
 - **Blast** takes `Explosion Range: N` around the impact point, kept separate
   from how far it can be thrown.
 - **Area cards can be aimed at bare ground.**
@@ -103,13 +139,15 @@ Any card can carry these (`Effects: Burning 1, Armor 5`).
 - **`Friendly Fire: Yes/No`** decides whether a card touches its caster's own
   side. Read from the caster, so an enemy card with it hurts other enemies.
 - **`Dealt: No`** keeps a card out of the opening hand until something loads it.
+- **`Projectile Art:`** names a file in `Content/Images/Pixel/Effects/`.
+  Missing or absent, the 16x16 ball is thrown.
 - Damage may be a range: `1 to 20 damage` on the `Effect:` line.
 
 ## Rooms and doors
 
 - Rooms are labels on blocks.
-- **A door is one square belonging to no room, with rooms either side.** In the
-  editor: pick Door, click the square. That is all.
+- **A door is one square belonging to no room (`-`), with rooms either side.**
+  In the editor: pick Door, click the square. That is all.
 - Which rooms it joins is read off its neighbours — nothing to name, no width,
   no axis. Walk anybody beside it and it opens, revealing both sides.
 - Touching doorway squares are one wide door.
@@ -126,9 +164,8 @@ Any card can carry these (`Effects: Burning 1, Armor 5`).
 ## The ~ menu
 
 - **Win Level** / **Die!** — end the mission either way.
-- **Scale Stuff** — a percentage box for every character, summon, enemy and
-  decoration. Type, watch it change, Enter applies and writes `Config.txt`.
-  `0` = no line of its own. Tiles are never scaled.
+- **Frame rate** — one number for every animation. Press to step through
+  4..30; the board changes as you press.
 - On the world map, `~` arms destination placement: click, name it, Enter.
 
 ## Editor
@@ -146,8 +183,9 @@ Any card can carry these (`Effects: Burning 1, Armor 5`).
 - **`OK` / `! n`** counts what the startup validator would complain about.
 - **Ctrl+Z** undoes, 40 deep.
 - **Right-click a trigger** opens its dialogue file, stubbing it if needed.
-- Scroll or `+`/`-` for placement height. The editor pans on arrows and
-  right-drag only — WASD are tool keys there.
+- Wheel for placement height, **Ctrl+wheel to zoom**. The editor pans on
+  arrows and right-drag only — WASD are tool keys there.
+- Enemies are drawn as the game draws them: rotation or cube.
 
 ## Content files
 
@@ -161,63 +199,29 @@ All of them: `Key: value`, `#` comments, case-insensitive, blank lines ignored.
 | `Content/Cast/EnemyCharacters/Enemies.txt` | Enemies |
 | `Content/Cards/PlayerCards.txt`, `EnemyCards.txt` | Cards. Same format; the tag decides who holds one |
 | `Content/Text/Strings.txt` | Every player-facing string, as `key = text` |
-| `Content/Config.txt` | Art scale and overlay opacity |
+| `Content/Config.txt` | Overlay opacity |
+| `Content/Images/Blocks/Blocks.txt` | Ground families: 64x32 pixel pieces, anchor `32, 16` |
 
 - A card's `Tags:` are **labels, not class names**. A class holds its own name
   unless `Card Tags:` says otherwise, so several classes can share a pool.
 - A summon lives in `Classes.txt` with `Summoned By:`, keeping it out of the
-  party picker. Its art lives in its summoner's folder.
+  party picker. Its art lives inside its summoner's folder.
 - An enemy with no card of its own is dealt the one tagged `Default`.
-
-### Config.txt
-
-- Most specific wins **outright**: `Dirtbag scale` > `Cast scale` > `Global scale`.
-- `0` means "ignore this line", falling through to the next up.
-- Opacity lines differ: `0` there is a real zero — outline, no fill.
+- Old-style lines — `Sprites:`, a `.png` on a `Form:`, a `scale` line — are
+  reported at startup with what to write instead.
 
 ### Art
 
-Authored at 3840x2160, letterboxed to any window.
-
-| Asset | Path | Size |
+| Asset | Path | Notes |
 |---|---|---|
-| World map | `Content/Images/Map/Map.png` | 7680x4320 |
-| Sprites | `Content/Cast/.../{Name}/{Name}N.png` | 1200x1800, transparent |
-| Thumbnails | same folder, `{Name}NThumb.png` | 512x512, optional |
+| World map | `Content/Images/Map/Map.png` | painted; the map is not pixel art |
+| Ground | `Content/Images/Blocks/` | 64x32 surfaces, 64x56 blocks |
+| Characters | `Content/Cast/.../{Name}/{State}/rotations/*.png` | any size, drawn 1:1 |
+| Effects | `Content/Images/Pixel/Effects/` | 8x8 icons, 16x16 ball |
+| Decorations | `Content/Images/Decorations/` | hung by the bottom on the square |
 
-- Undersized art is scaled up, aspect preserved. Nothing is ever stretched.
-- Cast art hangs by its **feet** — the lowest drawn row.
 - Folders, files and declared names must match exactly: `Dirtbag`, not `Joe_dirtbag`.
 - Always refer to files repo-relative with forward slashes.
-
-## Casting animations
-
-- Declared on a class in `Classes.txt`, as a path inside that character's folder.
-  A third field on a `Form:` line gives that shape its own.
-- Needs the `.txt` beside the sheet that spritetool writes.
-- `FPS:` sets playback; the animation lasts as long as its frame count makes it.
-- `Scale: 100` draws a frame as tall as the character it replaces.
-- **Casting time and animation are independent clocks** — deliberately, so art
-  is timed to art and combat to combat.
-- A missing or broken sheet is reported at startup and falls back to the sprite.
-
-## spritetool
-
-`Tools/SpriteTool` turns an mp4 into numbered PNGs, builds sheets, and slices
-them back apart. Run it with no arguments for a menu.
-
-```
-dotnet run --project Tools/SpriteTool -- extract wolf.mp4 werewolf_attack -o out
-dotnet run --project Tools/SpriteTool -- sheet out -o WerewolfAttack.png
-dotnet run --project Tools/SpriteTool -- slice WerewolfAttack.png frames -o frames
-dotnet run --project Tools/SpriteTool -- detect WerewitchSpell1.png
-```
-
-- Extraction is lossless. `--odd` keeps frames 1, 3, 5 and renumbers 1..N.
-- Every sheet gets a `.txt` giving cell size and grid.
-- **`detect`** measures a sheet somebody else made, reading the grid off the art
-  rather than guessing width ÷ columns.
-- Only `extract` needs ffmpeg. Details in [`Tools/SpriteTool/README.md`](Tools/SpriteTool/README.md).
 
 ## Saves
 
@@ -239,3 +243,4 @@ save resumes there and an unfinished level restarts.
 - **Errors** mean something is broken. **Warnings** mean it will run but
   probably isn't what you meant.
 - Problems found mid-play raise the same popup through `GameContext.ReportProblem`.
+- `TIMELINE_TRACE=1` prints every mode change to the console while a level runs.

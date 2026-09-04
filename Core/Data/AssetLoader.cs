@@ -17,7 +17,8 @@ namespace TheTimelineIs.Core.Data;
 /// The size each kind of art is authored at. Undersized uploads are scaled up
 /// to match (see <see cref="DisplaySize"/>); oversized ones are left alone.
 /// </summary>
-public enum AssetKind { Map, Background, Sprite, Thumb, Effect }
+/// <summary>The one kind of art that is still sized to fit: the painted world map.</summary>
+public enum AssetKind { Map }
 
 public class AssetLoader
 {
@@ -28,14 +29,7 @@ public class AssetLoader
 
     public AssetLoader(GraphicsDevice device) => _device = device;
 
-    public static Point OptimalSize(AssetKind kind) => kind switch
-    {
-        AssetKind.Map => new Point(7680, 4320),
-        AssetKind.Background => new Point(3840, 2160),
-        AssetKind.Sprite => new Point(1200, 1800),
-        AssetKind.Effect => new Point(140, 140),
-        _ => new Point(512, 512),
-    };
+    public static Point OptimalSize(AssetKind kind) => new(7680, 4320);
 
     /// <summary>
     /// How big this texture should render. If it's smaller than the optimal
