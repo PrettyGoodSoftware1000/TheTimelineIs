@@ -14,10 +14,12 @@ public class DesktopPlatform : IPlatform
 
     /// <summary>A level to open at once, from --level. Empty for the title screen.</summary>
     private readonly string _level;
+    private readonly bool _editor;
 
-    public DesktopPlatform(bool devMap = false, string level = "")
+    public DesktopPlatform(bool devMap = false, string level = "", bool editor = false)
     {
         _level = level;
+        _editor = editor;
         if (devMap)
             DevWriter = new DesktopDevDestinationWriter();
     }
@@ -32,5 +34,7 @@ public class DesktopPlatform : IPlatform
     /// your way back to it every time.
     /// </summary>
     public TheTimelineIs.Core.Screens.IScreen? CreateStartScreen(TheTimelineIs.Core.GameContext ctx) =>
-        _level.Length > 0 ? new TheTimelineIs.Core.Iso.IsoLevelScreen(ctx, _level) : null;
+        _editor ? new IsoEditorScreen(ctx)
+        : _level.Length > 0 ? new TheTimelineIs.Core.Iso.IsoLevelScreen(ctx, _level)
+        : null;
 }
