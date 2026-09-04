@@ -41,6 +41,40 @@ public static class Facings
     };
 
     /// <summary>
+    /// The four directions anybody is actually drawn from.
+    ///
+    /// A grid axis is a screen diagonal, so these are the poses every walk ends
+    /// in and the only ones the art has. North, south, east and west are still
+    /// in the enum because aiming can point that way; they just get rounded to
+    /// a neighbour before anything is drawn.
+    /// </summary>
+    public static readonly Facing8[] Drawn =
+    {
+        Facing8.SouthEast, Facing8.SouthWest, Facing8.NorthEast, Facing8.NorthWest,
+    };
+
+    /// <summary>Whether this is one of the four a character is drawn from.</summary>
+    public static bool IsDrawn(this Facing8 f) => Array.IndexOf(Drawn, f) >= 0;
+
+    /// <summary>
+    /// The nearest direction there is art for.
+    ///
+    /// Aiming a ranged attack can point at a screen cardinal, and nobody has a
+    /// straight-on or straight-away pose. Each cardinal sits exactly between
+    /// two diagonals, so the tie is always broken towards the south-east side.
+    /// Which way it leans matters less than it always leaning the same way: a
+    /// character aiming due south does not flicker between two poses.
+    /// </summary>
+    public static Facing8 Nearest(this Facing8 f) => f switch
+    {
+        Facing8.North => Facing8.NorthEast,
+        Facing8.East => Facing8.SouthEast,
+        Facing8.South => Facing8.SouthEast,
+        Facing8.West => Facing8.SouthWest,
+        _ => f,
+    };
+
+    /// <summary>
     /// Where one square sits relative to another, in SCREEN terms rather than
     /// grid terms.
     ///

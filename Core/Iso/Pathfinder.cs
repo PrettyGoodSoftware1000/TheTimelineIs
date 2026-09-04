@@ -17,10 +17,20 @@ public static class Pathfinder
 {
     public const int MaxStepUpFeet = 4;
 
+    /// <summary>
+    /// The four steps a walk is made of.
+    ///
+    /// The grid is turned 45 degrees on screen, so a step along a grid axis is
+    /// a DIAGONAL to somebody looking at it, and a grid diagonal is what they
+    /// would call straight up, down, left or right. Characters are only drawn
+    /// from the four diagonals, so those grid diagonals are gone: a walk three
+    /// squares to the right of the screen goes down-right then up-right, in
+    /// steps somebody has art for, instead of sliding sideways with no pose to
+    /// draw it in.
+    /// </summary>
     private static readonly (int dx, int dy, int cost)[] Steps =
     {
         (1, 0, 1), (-1, 0, 1), (0, 1, 1), (0, -1, 1),
-        (1, 1, 2), (1, -1, 2), (-1, 1, 2), (-1, -1, 2),
     };
 
     /// <summary>Whether a tile can be stood on at all (terrain only, ignoring who's there).</summary>

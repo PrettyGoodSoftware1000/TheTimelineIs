@@ -4,3 +4,5 @@
 Florida                 4266    2299
 Not Ohio                4247    2004
 Fartstankil             5579    3113
+PixelFlat               3900    2600
+PixelRooms              4600    2700

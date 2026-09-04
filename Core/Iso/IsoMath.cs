@@ -4,16 +4,21 @@ using Microsoft.Xna.Framework;
 namespace TheTimelineIs.Core.Iso;
 
 /// <summary>
-/// The isometric projection: 2:1 diamonds, 360x180 px per tile, with block
-/// height in feet lifting things 90 px per foot. The camera never rotates.
-/// Grid distance is orthogonal 1 / diagonal 2 — which works out to plain
-/// Manhattan distance — and every range and movement rule measures with it.
+/// The isometric projection: 2:1 diamonds, 64x32 ART pixels per tile, with
+/// block height in feet lifting things 8 pixels per foot. The camera never
+/// rotates. Grid distance is orthogonal 1 / diagonal 2 — which works out to
+/// plain Manhattan distance — and every range and movement rule measures with
+/// it.
+///
+/// These are pixels in a source file, not pixels on a window. Nothing here is
+/// stretched to fit a screen: PixelCamera multiplies the lot by a whole number,
+/// so one art pixel stays square and the same size as every other one.
 /// </summary>
 public static class IsoMath
 {
-    public const int TileW = 360;
-    public const int TileH = 180;
-    public const int FootPx = 90;
+    public const int TileW = 64;
+    public const int TileH = 32;
+    public const int FootPx = 8;
 
     /// <summary>Screen position of the CENTER of a tile's top surface.</summary>
     public static Vector2 ToScreen(int gx, int gy, int heightFeet, Vector2 origin) => new(
@@ -44,18 +49,19 @@ public static class IsoMath
         Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
 
     /// <summary>
-    /// The aim direction snapped to one of the eight compass headings. Each
-    /// heading owns a 45-degree slice, so tan(22.5) = 0.4142 is the cutoff
-    /// between "straight along an axis" and "diagonal".
+    /// The aim direction snapped to one of the four grid axes — which are the
+    /// four DIAGONALS on screen, the only directions a character has a pose
+    /// for. A cone is therefore never sprayed straight up, down, left or right
+    /// across the screen; an aim that points that way falls to whichever axis
+    /// is nearer, and a dead tie goes to the X axis.
     /// </summary>
     private static Point SnapDirection(Point from, Point aim)
     {
         int dx = aim.X - from.X, dy = aim.Y - from.Y;
-        int ax = Math.Abs(dx), ay = Math.Abs(dy);
-        int sx = Math.Sign(dx), sy = Math.Sign(dy);
-        if (ay <= 0.4142f * ax) return new Point(sx, 0);
-        if (ax <= 0.4142f * ay) return new Point(0, sy);
-        return new Point(sx, sy);
+        if (dx == 0 && dy == 0) return Point.Zero;
+        return Math.Abs(dx) >= Math.Abs(dy)
+            ? new Point(Math.Sign(dx), 0)
+            : new Point(0, Math.Sign(dy));
     }
 
     /// <summary>
@@ -66,9 +72,9 @@ public static class IsoMath
     /// it lies at depth d (1..range) along the heading with an offset of at
     /// most d-1 tiles across it.
     ///
-    /// The same shape rotates to all eight headings. For a diagonal heading the
-    /// wedge is measured in diagonal steps, which keeps it exactly congruent to
-    /// the orthogonal one rather than fanning out over twice the ground.
+    /// The same shape rotates to all four headings, which on screen are the
+    /// four diagonals. There is no straight-up-the-screen cone, because there
+    /// is no pose to fire one from.
     /// </summary>
     public static bool InCone(Point from, Point aim, Point tile, int range)
     {
@@ -77,16 +83,10 @@ public static class IsoMath
         if (dir == Point.Zero) return false;
 
         // Rotate the offset into the heading's frame: 'dir' is forward and
-        // (dir.Y, -dir.X) is across it. A diagonal heading spans two grid steps
-        // per unit of depth, hence the divide.
+        // (dir.Y, -dir.X) is across it.
         int ox = tile.X - from.X, oy = tile.Y - from.Y;
-        int span = dir.X * dir.X + dir.Y * dir.Y;          // 1 orthogonal, 2 diagonal
-        int forward = ox * dir.X + oy * dir.Y;
-        int across = ox * dir.Y - oy * dir.X;
-        if (forward % span != 0 || across % span != 0) return false;  // off the lattice
-
-        int depth = forward / span;
-        int off = Math.Abs(across / span);
+        int depth = ox * dir.X + oy * dir.Y;
+        int off = Math.Abs(ox * dir.Y - oy * dir.X);
         return depth >= 1 && depth <= range && off <= depth - 1;
     }
 }

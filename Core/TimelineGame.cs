@@ -75,7 +75,7 @@ public class TimelineGame : Game
             _ctx.Assets);
         _platform.LogStore.Write(Diagnostics.Current.RenderLog());
 
-        IScreen home = _platform.CreateEditorScreen(_ctx) ?? new TitleScreen(_ctx);
+        IScreen home = _platform.CreateStartScreen(_ctx) ?? new TitleScreen(_ctx);
         _ctx.SwitchTo(Diagnostics.Current.Any
             ? new ErrorScreen(_ctx, Diagnostics.Current.Ordered(),
                 _platform.LogStore.DisplayPath, home)

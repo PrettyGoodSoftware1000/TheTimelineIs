@@ -11,12 +11,13 @@ public class DesktopPlatform : IPlatform
     public IReplayStore ReplayStore { get; } = new DesktopReplayStore();
     public IContentIndex ContentIndex { get; } = new DesktopContentIndex();
     public IDevDestinationWriter? DevWriter { get; }
-    private readonly bool _editor, _pixel;
 
-    public DesktopPlatform(bool devMap, bool editor, bool pixel = false)
+    /// <summary>A level to open at once, from --level. Empty for the title screen.</summary>
+    private readonly string _level;
+
+    public DesktopPlatform(bool devMap = false, string level = "")
     {
-        _editor = editor;
-        _pixel = pixel;
+        _level = level;
         if (devMap)
             DevWriter = new DesktopDevDestinationWriter();
     }
@@ -25,8 +26,11 @@ public class DesktopPlatform : IPlatform
 
     public IDevDestinationWriter? CreateDevWriter() => new DesktopDevDestinationWriter();
 
-    public TheTimelineIs.Core.Screens.IScreen? CreateEditorScreen(TheTimelineIs.Core.GameContext ctx) =>
-        _editor ? new IsoEditorScreen(ctx)
-        : _pixel ? new TheTimelineIs.Core.Pixel.PixelScreen(ctx)
-        : null;
+    /// <summary>
+    /// --level opens a named level straight away, skipping the title and the
+    /// map. It is how you look at a board you are working on without playing
+    /// your way back to it every time.
+    /// </summary>
+    public TheTimelineIs.Core.Screens.IScreen? CreateStartScreen(TheTimelineIs.Core.GameContext ctx) =>
+        _level.Length > 0 ? new TheTimelineIs.Core.Iso.IsoLevelScreen(ctx, _level) : null;
 }

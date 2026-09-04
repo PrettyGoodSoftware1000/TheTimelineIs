@@ -1,0 +1,158 @@
+# PixelRooms - two rooms with a door between them, and a raised ledge.
+#
+# The west room is where the party starts and is revealed at once. The east
+# room stays dark until somebody opens the door, which is what the door rules
+# are for. A doorway is ONE square belonging to no room ('-'), with a
+# different room on each side of it.
+#
+# The ledge in the east room is 3 feet up. Four feet is the most a step can
+# climb, so three is walkable and shows the height rules working.
+# Block: x, y, height(feet), type, room
+
+Block: 0, 0, 0, PixelStoneSurface, West
+Block: 1, 0, 0, PixelStoneSurface, West
+Block: 2, 0, 0, PixelStoneSurface, West
+Block: 3, 0, 0, PixelStoneSurface, West
+Block: 4, 0, 0, PixelStoneSurface, West
+Block: 5, 0, 0, PixelStoneSurface, West
+Block: 6, 0, 0, PixelStoneSurface, West
+Block: 0, 1, 0, PixelStoneSurface, West
+Block: 1, 1, 0, PixelStoneSurface, West
+Block: 2, 1, 0, PixelStoneSurface, West
+Block: 3, 1, 0, PixelStoneSurface, West
+Block: 4, 1, 0, PixelStoneSurface, West
+Block: 5, 1, 0, PixelStoneSurface, West
+Block: 6, 1, 0, PixelStoneSurface, West
+Block: 0, 2, 0, PixelStoneSurface, West
+Block: 1, 2, 0, PixelStoneSurface, West
+Block: 2, 2, 0, PixelStoneSurface, West
+Block: 3, 2, 0, PixelStoneSurface, West
+Block: 4, 2, 0, PixelStoneSurface, West
+Block: 5, 2, 0, PixelStoneSurface, West
+Block: 6, 2, 0, PixelStoneSurface, West
+Block: 0, 3, 0, PixelStoneSurface, West
+Block: 1, 3, 0, PixelStoneSurface, West
+Block: 2, 3, 0, PixelStoneSurface, West
+Block: 3, 3, 0, PixelStoneSurface, West
+Block: 4, 3, 0, PixelStoneSurface, West
+Block: 5, 3, 0, PixelStoneSurface, West
+Block: 6, 3, 0, PixelStoneSurface, West
+Block: 0, 4, 0, PixelStoneSurface, West
+Block: 1, 4, 0, PixelStoneSurface, West
+Block: 2, 4, 0, PixelStoneSurface, West
+Block: 3, 4, 0, PixelStoneSurface, West
+Block: 4, 4, 0, PixelStoneSurface, West
+Block: 5, 4, 0, PixelStoneSurface, West
+Block: 6, 4, 0, PixelStoneSurface, West
+Block: 0, 5, 0, PixelStoneSurface, West
+Block: 1, 5, 0, PixelStoneSurface, West
+Block: 2, 5, 0, PixelStoneSurface, West
+Block: 3, 5, 0, PixelStoneSurface, West
+Block: 4, 5, 0, PixelStoneSurface, West
+Block: 5, 5, 0, PixelStoneSurface, West
+Block: 6, 5, 0, PixelStoneSurface, West
+Block: 0, 6, 0, PixelStoneSurface, West
+Block: 1, 6, 0, PixelStoneSurface, West
+Block: 2, 6, 0, PixelStoneSurface, West
+Block: 3, 6, 0, PixelStoneSurface, West
+Block: 4, 6, 0, PixelStoneSurface, West
+Block: 5, 6, 0, PixelStoneSurface, West
+Block: 6, 6, 0, PixelStoneSurface, West
+Block: 0, 7, 0, PixelStoneSurface, West
+Block: 1, 7, 0, PixelStoneSurface, West
+Block: 2, 7, 0, PixelStoneSurface, West
+Block: 3, 7, 0, PixelStoneSurface, West
+Block: 4, 7, 0, PixelStoneSurface, West
+Block: 5, 7, 0, PixelStoneSurface, West
+Block: 6, 7, 0, PixelStoneSurface, West
+Block: 0, 8, 0, PixelStoneSurface, West
+Block: 1, 8, 0, PixelStoneSurface, West
+Block: 2, 8, 0, PixelStoneSurface, West
+Block: 3, 8, 0, PixelStoneSurface, West
+Block: 4, 8, 0, PixelStoneSurface, West
+Block: 5, 8, 0, PixelStoneSurface, West
+Block: 6, 8, 0, PixelStoneSurface, West
+Block: 8, 0, 0, PixelGrassSurface, East
+Block: 9, 0, 0, PixelGrassSurface, East
+Block: 10, 0, 0, PixelGrassSurface, East
+Block: 11, 0, 0, PixelGrassSurface, East
+Block: 12, 0, 0, PixelGrassSurface, East
+Block: 13, 0, 0, PixelGrassSurface, East
+Block: 14, 0, 0, PixelGrassSurface, East
+Block: 15, 0, 0, PixelGrassSurface, East
+Block: 8, 1, 0, PixelGrassSurface, East
+Block: 9, 1, 0, PixelGrassSurface, East
+Block: 10, 1, 0, PixelGrassSurface, East
+Block: 11, 1, 0, PixelGrassSurface, East
+Block: 12, 1, 0, PixelGrassSurface, East
+Block: 13, 1, 0, PixelGrassSurface, East
+Block: 14, 1, 0, PixelGrassSurface, East
+Block: 15, 1, 0, PixelGrassSurface, East
+Block: 8, 2, 0, PixelGrassSurface, East
+Block: 9, 2, 0, PixelGrassSurface, East
+Block: 10, 2, 0, PixelGrassSurface, East
+Block: 11, 2, 0, PixelGrassSurface, East
+Block: 12, 2, 0, PixelGrassSurface, East
+Block: 13, 2, 0, PixelGrassSurface, East
+Block: 14, 2, 0, PixelGrassSurface, East
+Block: 15, 2, 0, PixelGrassSurface, East
+Block: 8, 3, 0, PixelGrassSurface, East
+Block: 9, 3, 0, PixelGrassSurface, East
+Block: 10, 3, 0, PixelGrassSurface, East
+Block: 11, 3, 0, PixelGrassSurface, East
+Block: 12, 3, 0, PixelGrassSurface, East
+Block: 13, 3, 0, PixelGrassSurface, East
+Block: 14, 3, 0, PixelGrassSurface, East
+Block: 15, 3, 0, PixelGrassSurface, East
+Block: 8, 4, 0, PixelGrassSurface, East
+Block: 9, 4, 0, PixelGrassSurface, East
+Block: 10, 4, 0, PixelGrassSurface, East
+Block: 11, 4, 0, PixelGrassSurface, East
+Block: 12, 4, 0, PixelGrassSurface, East
+Block: 13, 4, 0, PixelGrassSurface, East
+Block: 14, 4, 0, PixelGrassSurface, East
+Block: 15, 4, 0, PixelGrassSurface, East
+Block: 8, 5, 0, PixelGrassSurface, East
+Block: 9, 5, 0, PixelGrassSurface, East
+Block: 10, 5, 0, PixelGrassSurface, East
+Block: 11, 5, 0, PixelGrassSurface, East
+Block: 12, 5, 3, PixelStoneBlock, East
+Block: 13, 5, 3, PixelStoneBlock, East
+Block: 14, 5, 3, PixelStoneBlock, East
+Block: 15, 5, 0, PixelGrassSurface, East
+Block: 8, 6, 0, PixelGrassSurface, East
+Block: 9, 6, 0, PixelGrassSurface, East
+Block: 10, 6, 0, PixelGrassSurface, East
+Block: 11, 6, 0, PixelGrassSurface, East
+Block: 12, 6, 3, PixelStoneBlock, East
+Block: 13, 6, 3, PixelStoneBlock, East
+Block: 14, 6, 3, PixelStoneBlock, East
+Block: 15, 6, 0, PixelGrassSurface, East
+Block: 8, 7, 0, PixelGrassSurface, East
+Block: 9, 7, 0, PixelGrassSurface, East
+Block: 10, 7, 0, PixelGrassSurface, East
+Block: 11, 7, 0, PixelGrassSurface, East
+Block: 12, 7, 3, PixelStoneBlock, East
+Block: 13, 7, 3, PixelStoneBlock, East
+Block: 14, 7, 3, PixelStoneBlock, East
+Block: 15, 7, 0, PixelGrassSurface, East
+Block: 8, 8, 0, PixelGrassSurface, East
+Block: 9, 8, 0, PixelGrassSurface, East
+Block: 10, 8, 0, PixelGrassSurface, East
+Block: 11, 8, 0, PixelGrassSurface, East
+Block: 12, 8, 0, PixelGrassSurface, East
+Block: 13, 8, 0, PixelGrassSurface, East
+Block: 14, 8, 0, PixelGrassSurface, East
+Block: 15, 8, 0, PixelGrassSurface, East
+Block: 7, 4, 0, PixelStoneSurface, -
+
+Door: 7, 4
+
+PlayerStart: 1, 3
+PlayerStart: 1, 4
+PlayerStart: 2, 3
+PlayerStart: 2, 5
+
+Enemy: 10, 2, Goblin
+Enemy: 13, 6, Goblin
+Enemy: 14, 3, Living Stone

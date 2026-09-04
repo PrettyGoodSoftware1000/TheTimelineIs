@@ -35,6 +35,11 @@ public interface IPlatform
     /// </summary>
     IDevDestinationWriter? CreateDevWriter();
 
-    /// <summary>The level editor, when launched with --editor (desktop only); null otherwise.</summary>
-    IScreen? CreateEditorScreen(GameContext ctx);
+    /// <summary>
+    /// A screen to open instead of the title, when the platform was told to.
+    /// Desktop uses it for --level, which drops straight into a named level
+    /// rather than clicking through the title and the map to reach it. Null
+    /// means the ordinary way in.
+    /// </summary>
+    IScreen? CreateStartScreen(GameContext ctx);
 }

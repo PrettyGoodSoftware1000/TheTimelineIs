@@ -6,6 +6,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheTimelineIs.Core.Data;
 using TheTimelineIs.Core.Input;
+using TheTimelineIs.Core.Pixel;
 using TheTimelineIs.Core.Render;
 using TheTimelineIs.Core.Screens;
 
@@ -37,7 +38,7 @@ namespace TheTimelineIs.Core.Iso;
 ///
 /// Stepping on a trigger square plays its dialogue block once.
 /// </summary>
-public partial class IsoLevelScreen : IScreen
+public partial class IsoLevelScreen : IScreen, IDrawsItself
 {
     private enum Mode
     {
@@ -160,8 +161,25 @@ public partial class IsoLevelScreen : IScreen
     private string _blastOpacityKey = "AoE";     // "Cone" for a wedge
     private object? _overlayKey;
 
-    private Vector2 _camera;
-    private Vector2 _baseOrigin;
+    /// <summary>
+    /// The window onto the board, in whole art pixels at a whole-number zoom.
+    /// Everything in the world is drawn at its own coordinates and this moves
+    /// instead, which is why <see cref="Origin"/> is nothing.
+    /// </summary>
+    private readonly PixelCamera _camera = new();
+
+    /// <summary>Where the pointer is on the BOARD, in art pixels.</summary>
+    private Vector2 _worldPointer;
+
+    /// <summary>Set once the real window size is known, on the first frame.</summary>
+    private bool _framed;
+    private Point _windowSize = new(1920, 1080);
+
+    /// <summary>The square the view opens on, and returns to when recentred.</summary>
+    private Point _focus;
+
+    /// <summary>Rotations and placeholder cubes for everybody on the board.</summary>
+    private readonly CastSprites _sprites;
 
     /// <summary>
     /// Transition pads the party is standing on, by the pad's lowest square.
@@ -295,6 +313,7 @@ public partial class IsoLevelScreen : IScreen
         Replay? watching, string replayName)
     {
         _ctx = ctx;
+        _sprites = new CastSprites(ctx.Assets, ctx.ContentIndex, ctx.Game.GraphicsDevice);
         _level = level;
         _watching = watching;
         _replayMode = watching != null;
@@ -309,11 +328,9 @@ public partial class IsoLevelScreen : IScreen
         if (_revealed.Count == 0 && _level.Blocks.Count > 0)
             _revealed.Add(_level.Blocks.Values.First().Room);
 
-        if (_party.Count > 0)
-        {
-            var focus = IsoMath.ToScreen(_party[0].GX, _party[0].GY, HeightAt(Tile(_party[0])), Vector2.Zero);
-            _baseOrigin = new Vector2(VirtualViewport.Width / 2f, VirtualViewport.Height / 2f) - focus;
-        }
+        // where the view opens; the camera is centred on it once the real
+        // window size is known, on the first frame drawn
+        _focus = _party.Count > 0 ? Tile(_party[0]) : Point.Zero;
         _replay.Party = _party.Select(p => p.Name).ToList();
         Log(_ctx.Strings.Get(_replayMode ? "replay_watching" : "iso_enter"));
 
@@ -387,7 +404,13 @@ public partial class IsoLevelScreen : IScreen
 
     private static Point Tile(CharacterInstance c) => new(c.GX, c.GY);
     private int HeightAt(Point p) => _level.BlockAt(p)?.Height ?? 0;
-    private Vector2 Origin => _baseOrigin - _camera;
+
+    /// <summary>
+    /// Nothing. The board is drawn where it is and the camera does the moving,
+    /// so a sprite's position never depends on where the view happens to be —
+    /// which is what keeps it on a whole pixel.
+    /// </summary>
+    private static Vector2 Origin => Vector2.Zero;
 
     private IEnumerable<CharacterInstance> Everyone => _party.Concat(_enemies);
     private List<CharacterInstance> LivingParty => _party.Where(p => p.Alive).ToList();
@@ -832,7 +855,17 @@ public partial class IsoLevelScreen : IScreen
         _tap = input.Tap;
         _ctrl = input.CtrlHeld;
         _shift = input.ShiftHeld;
-        _camera += input.PanDelta;
+
+        // The HUD is laid out in the 3840x2160 design space and reads _pointer.
+        // The board is drawn in art pixels through the camera, so pointing at a
+        // square has to start from the RAW window position — converting through
+        // the design space first would round the answer to the wrong tile.
+        _worldPointer = _camera.ToWorld(input.RawPointer).ToVector2();
+        // PanDelta arrives in design-space units; back to window pixels, then to
+        // art pixels, so a drag moves the board by the same amount at any zoom
+        _camera.Scroll(new Point(
+            (int)Math.Round(input.PanDelta.X * _ctx.Viewport.Scale / _camera.Zoom),
+            (int)Math.Round(input.PanDelta.Y * _ctx.Viewport.Scale / _camera.Zoom)));
         if (_toastTimer > 0) _toastTimer -= dt;
         if (_replaySavedTimer > 0) _replaySavedTimer -= dt;
         Recoil.Update(Everyone, dt);
@@ -862,10 +895,17 @@ public partial class IsoLevelScreen : IScreen
             if (_recording) SaveReplay("asked for"); else StartRecording();
             return;
         }
-        // the wheel scrolls the log back through history while it is open
-        if (_logOpen && LogPanel.Contains(_pointer) && input.ScrollDelta != 0)
-            _logScroll = Math.Clamp(_logScroll + input.ScrollDelta,
-                0, Math.Max(0, _log.Count - LogLines));
+        // the wheel scrolls the log back through history while it is open, and
+        // zooms the board everywhere else — in whole steps, so a pixel is still
+        // a whole number of screen pixels afterwards
+        if (input.ScrollDelta != 0)
+        {
+            if (_logOpen && LogPanel.Contains(_pointer))
+                _logScroll = Math.Clamp(_logScroll + input.ScrollDelta,
+                    0, Math.Max(0, _log.Count - LogLines));
+            else
+                _camera.ZoomBy(Math.Sign(input.ScrollDelta), input.RawPointer);
+        }
 
         if (DialogueActive)
         {
@@ -1188,10 +1228,15 @@ public partial class IsoLevelScreen : IScreen
     private void RecenterOn(CharacterInstance? who)
     {
         if (who == null) return;
-        var focus = IsoMath.ToScreen(who.GX, who.GY, HeightAt(Tile(who)), Vector2.Zero);
-        _baseOrigin = new Vector2(VirtualViewport.Width / 2f, VirtualViewport.Height / 2f) - focus;
-        _camera = Vector2.Zero;
+        _focus = Tile(who);
+        CentreOnFocus();
     }
+
+    /// <summary>Puts the camera over <see cref="_focus"/> at the current zoom.</summary>
+    private void CentreOnFocus() =>
+        _camera.CentreOn(
+            IsoMath.ToScreen(_focus.X, _focus.Y, HeightAt(_focus), Origin).ToPoint(),
+            _windowSize.X, _windowSize.Y);
 
     /// <summary>
     /// Pads the party is standing on, which cannot fire again until everybody
@@ -1930,7 +1975,7 @@ public partial class IsoLevelScreen : IScreen
 
         _blastOpacityKey = aiming.Delivery == Delivery.Cone ? "Cone" : "AoE";
 
-        if (FindTileAt(_pointer.ToVector2()) is Point c && ReachableAim(Acting, c, aiming))
+        if (FindTileAt(_worldPointer) is Point c && ReachableAim(Acting, c, aiming))
         {
             // For a summon the purple is the creature's own outline, and it is
             // only drawn where the creature will actually go. Painting it over
@@ -1967,7 +2012,7 @@ public partial class IsoLevelScreen : IScreen
         // chosen for a card that wants several
         foreach (var c in _targets) _doomed.Add(c);
         if (card.TargetsGround) return;
-        if (FindTileAt(_pointer.ToVector2()) is Point tile && WhoIsOn(tile) is CharacterInstance who
+        if (FindTileAt(_worldPointer) is Point tile && WhoIsOn(tile) is CharacterInstance who
             && reachable.Contains(who) && ReachableAim(Acting!, tile, card))
             _doomed.Add(who);
     }
@@ -2068,7 +2113,9 @@ public partial class IsoLevelScreen : IScreen
         // reachable, which clicking sprites could never manage. This used to be
         // what Ctrl did; now it is simply how clicking works, and Ctrl is left
         // to fade the board so the grid reads clearly.
-        if (FindTileAt(press.ToVector2()) is Point square) ClickSquare(square);
+        // a tap lands where the pointer is, so the board is asked in art
+        // pixels rather than in the design space the HUD uses
+        if (FindTileAt(_worldPointer) is Point square) ClickSquare(square);
     }
 
     /// <summary>
@@ -2527,6 +2574,12 @@ public partial class IsoLevelScreen : IScreen
         _actingCard = card;
         _victims = aimed;
         _aimPoint = blastCenter;
+
+        // Turn to face what is being aimed at. Unlike a walk this CAN point at
+        // a screen cardinal — nothing stops you shooting straight up the screen
+        // — and the drawing rounds that to the nearest pose there is art for.
+        if (_actor != null && blastCenter != Tile(_actor))
+            _actor.FaceTowards(Tile(_actor), blastCenter);
         _selectedCard = null;
         _targets.Clear();
         _blastSet.Clear();
@@ -3373,38 +3426,78 @@ public partial class IsoLevelScreen : IScreen
         return null;
     }
 
+    /// <summary>
+    /// Where a character's picture goes, at its OWN size.
+    ///
+    /// Nothing is stretched to fit a square: pixel art drawn at anything but
+    /// 1:1 stops being pixel art. A picture is placed instead — hung by the
+    /// bottom-centre of its solid pixels, so a character exported onto a roomy
+    /// canvas stands on the floor rather than floating above it, and a big
+    /// enemy is big because its art is.
+    /// </summary>
     private Rectangle SpriteRect(CharacterInstance c)
     {
-        var tex = _ctx.Assets.LoadTexture(c.SpritePath);
-        // a body covering N squares a side is drawn N times as tall, so a
-        // four-tile enemy looks like it fills the ground it stands on. Cast
-        // Scale in Config.txt still trims it either way.
-        float scale = _ctx.Config.CastScale(c.Name, c.Form) * c.Size;
-        int h = (int)(460 * scale);
-        int w = (int)(h * tex.Width / (float)tex.Height);
+        var art = ArtFor(c);
+        var solid = ArtBounds.Solid(art);
         var foot = FootOf(c);
-        // the art is hung by its FEET — the lowest row with anything drawn on
-        // it — not by the bottom edge of its canvas, so empty space under the
-        // feet doesn't sink the character into the floor
-        int slack = (int)(h * _ctx.Assets.BottomPadding(tex));
-        return new Rectangle((int)(foot.X - w / 2f), (int)(foot.Y - h + slack), w, h);
+        return new Rectangle(
+            (int)foot.X - (solid.Left + solid.Right) / 2,
+            (int)foot.Y - solid.Bottom,
+            art.Width, art.Height);
     }
 
-    public void Draw(SpriteBatch batch)
-    {
-        Ui.FillRect(batch, _ctx.Pixel,
-            new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height), Color.Black);
+    /// <summary>
+    /// The picture to draw for somebody: their rotation for the way they are
+    /// facing, or their placeholder cube if nobody has drawn them yet.
+    /// </summary>
+    private Texture2D ArtFor(CharacterInstance c) =>
+        _sprites.For(c)?.Rotation(c.Facing.Nearest()) ?? _sprites.Cube(c);
 
-        var byTile = new Dictionary<Point, List<CharacterInstance>>();
-        foreach (var c in Everyone.Where(c => c.Alive))
-        {
-            // keyed on the FAR corner of the body, so every square it stands on
-            // is already painted by the time the sprite goes down over them
-            var anchor = c == _walker && _walkPath.Count > 0 ? _walkPath[0] : Tile(c);
-            var key = new Point(anchor.X + c.SizeX - 1, anchor.Y + c.SizeY - 1);
-            if (!byTile.TryGetValue(key, out var list)) byTile[key] = list = new List<CharacterInstance>();
-            list.Add(c);
-        }
+    /// <summary>Never called: this screen draws itself. See DrawSelf.</summary>
+    public void Draw(SpriteBatch batch) { }
+
+    /// <summary>
+    /// Two passes, because the board and the HUD live in different worlds.
+    ///
+    /// The board is pixel art: it goes through the camera at a whole-number
+    /// zoom with PointClamp, so one art pixel is exactly Zoom screen pixels and
+    /// nothing is ever resampled. The HUD — cards, text, buttons — is still
+    /// laid out in the 3840x2160 design space and still letterboxed onto the
+    /// window, which is what keeps a fixed layout working at any window size.
+    /// </summary>
+    public void DrawSelf(SpriteBatch batch, GraphicsDevice device)
+    {
+        _windowSize = new Point(
+            device.PresentationParameters.BackBufferWidth,
+            device.PresentationParameters.BackBufferHeight);
+        // the window's real size is only known here, so the opening view waits
+        // for the first frame rather than guessing at load
+        if (!_framed) { CentreOnFocus(); _framed = true; }
+
+        device.Viewport = new Viewport(0, 0, _windowSize.X, _windowSize.Y);
+        batch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
+            SamplerState.PointClamp, null, null, null, _camera.Matrix);
+        DrawBoard(batch);
+        batch.End();
+
+        _ctx.Viewport.Apply(device);
+        batch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
+            SamplerState.LinearClamp, null, null, null, _ctx.Viewport.Matrix);
+        foreach (var who in Everyone.Where(w => w.Alive))
+            DrawCharacterNumbers(batch, who);
+        DrawHud(batch);
+        DrawLog(batch);
+        if (DialogueActive) DrawDialogue(batch);
+        // last, and over the top of everything: while the salts are working
+        // there is nothing to see but the pictures
+        DrawTrip(batch);
+        DrawDevMenu(batch);
+        batch.End();
+        _tap = null;
+    }
+
+    private void DrawBoard(SpriteBatch batch)
+    {
 
         bool armed = _cardArmed;
         // Ctrl fades everything standing on the ground so the grid reads clearly
@@ -3415,7 +3508,7 @@ public partial class IsoLevelScreen : IScreen
         // worth knowing whether or not anything is being aimed. FindTileAt
         // answers null off the edge of the level, so nothing lights up when the
         // cursor is over empty space.
-        var hovered = FindTileAt(_pointer.ToVector2());
+        var hovered = FindTileAt(_worldPointer);
 
         // Every square anybody is covering right now, plus the patch the card
         // in hand would cover if it were played. Gathered once instead of
@@ -3496,21 +3589,27 @@ public partial class IsoLevelScreen : IScreen
                     Color.White * alpha);
             if (_fires.ContainsKey(tile)) DrawFire(batch, tile, block.Height, alpha);
 
-            if (byTile.TryGetValue(tile, out var standing))
-                foreach (var c in standing)
-                    DrawCharacter(batch, c, alpha);
         }
+
+        // The cast goes down AFTER all of the ground, back to front.
+        //
+        // It cannot be interleaved with the tiles. A character is hung by their
+        // feet on the middle of a square, and the square in FRONT of them draws
+        // a diamond whose back half rises to that same middle — so any tile
+        // ahead of them, however flat, paints over their legs. Ground first
+        // fixes that for every sprite at once.
+        //
+        // The cost is that a raised block no longer hides somebody standing
+        // behind it. That is worth paying: the old way clipped everybody all
+        // the time, and this only shows on ground with height.
+        foreach (var c in Everyone.Where(c => c.Alive)
+                     .Where(c => _level.Shown(Tile(c), _revealed))
+                     .OrderBy(c => Tile(c).X + c.SizeX - 1 + Tile(c).Y + c.SizeY - 1)
+                     .ThenBy(c => Tile(c).X))
+            DrawCharacter(batch, c, alpha);
 
         DrawProjectile(batch);
         DrawMower(batch);
-        DrawHud(batch);
-        DrawLog(batch);
-        if (DialogueActive) DrawDialogue(batch);
-        // last, and over the top of everything: while the salts are working
-        // there is nothing to see but the pictures
-        DrawTrip(batch);
-        DrawDevMenu(batch);
-        _tap = null;
     }
 
     private void DrawBlock(SpriteBatch batch, LevelBlock block) =>
@@ -3574,9 +3673,9 @@ public partial class IsoLevelScreen : IScreen
     /// </summary>
     private void DrawSkull(SpriteBatch batch, Point tile, int height)
     {
-        var tex = _ctx.Assets.LoadTexture("Content/Images/Effects/Skull.png");
+        var tex = _ctx.Assets.LoadTexture("Content/Images/Pixel/Effects/Skull.png");
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
-        const int size = 62;
+        const int size = 12;
         batch.Draw(tex, new Rectangle((int)(c.X - size / 2f), (int)(c.Y - size / 2f), size, size),
             Color.White * 0.85f);
     }
@@ -3635,9 +3734,11 @@ public partial class IsoLevelScreen : IScreen
     {
         var tex = _ctx.Assets.LoadTexture(path);
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
-        int w = Math.Min(tex.Width, 420);
+        // a door or a tree is drawn at its own size when it is pixel art, and
+        // squeezed to a tile's width when it is still an old painted picture
+        int w = Math.Min(tex.Width, IsoMath.TileW);
         int h = (int)(w * tex.Height / (float)tex.Width);
-        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 30 - h), w, h), tint);
+        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 5 - h), w, h), tint);
     }
 
     /// <param name="alpha">
@@ -3647,76 +3748,142 @@ public partial class IsoLevelScreen : IScreen
     /// </param>
     private void DrawCharacter(SpriteBatch batch, CharacterInstance c, float alpha = 1f)
     {
+        var art = ArtFor(c);
         var rect = SpriteRect(c);
 
-        // While a cast is running its sheet stands in for the sprite, scaled to
-        // the same height and centred on the same point, so nothing jumps when
-        // it starts or stops. Everything below still hangs off the sprite's own
-        // rect, so a wide frame overflows sideways without dragging the health
-        // bar out with it.
-        var art = _ctx.Assets.LoadTexture(c.SpritePath);
-        // art is drawn facing right, so walking left mirrors it — the casting
-        // sheet included, or a character would turn round to cast and back again
-        var facing = c.FacingLeft ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
+        // While a cast is running its sheet stands in for the sprite, centred on
+        // the same point, so nothing jumps when it starts or stops.
         if (c.CastAnim is SpriteAnimation anim)
             batch.Draw(anim.Sheet, anim.RectFor(rect),
-                anim.SourceRect(anim.FrameAt(c.CastAnimTime)), Color.White * alpha,
-                0f, Vector2.Zero, facing, 0f);
+                anim.SourceRect(anim.FrameAt(c.CastAnimTime)), Color.White * alpha);
         else
-            batch.Draw(art, rect, null, Color.White * alpha, 0f, Vector2.Zero, facing, 0f);
+            batch.Draw(art, rect, Color.White * alpha);
+
+        // A placeholder cube has no front, so the yellow triangle is the only
+        // thing saying which way it is turned. It goes on AFTER the cube: the
+        // cube's base sits on the middle of the square, which is exactly where
+        // the triangle is, so drawing it underneath hid it completely.
+        if (_sprites.For(c) == null) DrawFacingMark(batch, c, alpha);
 
         // About to be hit: a red line round them. Drawn for anything the aimed
         // card would actually catch, which with Friendly Fire on means your own
         // people light up alongside the enemies — the point being that you find
         // that out while aiming rather than afterwards. Traced off the standing
         // sprite even mid-cast, so the shape does not flicker frame to frame.
-        if (_doomed.Contains(c)) OutlineSprite(batch, art, rect, c.FacingLeft);
+        if (_doomed.Contains(c)) OutlineSprite(batch, art, rect);
 
+        var back = BarRect(c);
         if (_targets.Contains(c))
             Ui.FillRect(batch, _ctx.Pixel,
-                new Rectangle(rect.X, rect.Y - 74, rect.Width, 12), Color.OrangeRed);
+                new Rectangle(rect.X, back.Y - 4, rect.Width, 2), Color.OrangeRed);
 
         // health bar above the head. Armor extends the bar in metallic grey, so
         // 10 health plus 5 armor makes the grey a third of its width.
-        int barW = Math.Min(190, Math.Max(140, rect.Width));
-        int barH = 34;
-        var back = new Rectangle(rect.X + (rect.Width - barW) / 2, rect.Y - barH - 14, barW, barH);
         Ui.FillRect(batch, _ctx.Pixel, back, Color.Black * 0.72f);
 
         int span = Math.Max(1, c.MaxHp + c.Armor);
-        int hpW = (int)(barW * Math.Clamp(c.Hp / (float)span, 0f, 1f));
-        int armW = (int)(barW * Math.Clamp(c.Armor / (float)span, 0f, 1f));
+        int hpW = (int)(back.Width * Math.Clamp(c.Hp / (float)span, 0f, 1f));
+        int armW = (int)(back.Width * Math.Clamp(c.Armor / (float)span, 0f, 1f));
 
         // The part that has been lost but not yet caught up shows pale behind
         // the bar, so a hit reads as a chunk sliding off rather than a number
         // that was simply different last time you looked.
-        int ghostW = (int)(barW * Math.Clamp(Math.Max(c.ShownHp, c.Hp) / span, 0f, 1f));
+        int ghostW = (int)(back.Width * Math.Clamp(Math.Max(c.ShownHp, c.Hp) / span, 0f, 1f));
         if (ghostW > hpW)
             Ui.FillRect(batch, _ctx.Pixel,
-                new Rectangle(back.X + hpW, back.Y, ghostW - hpW, barH),
+                new Rectangle(back.X + hpW, back.Y, ghostW - hpW, back.Height),
                 new Color(235, 225, 120));
 
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, hpW, barH),
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, hpW, back.Height),
             c.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
         if (armW > 0)
-            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, armW, barH),
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, armW, back.Height),
                 new Color(168, 172, 180));
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, barW, 3), Color.Black * 0.5f);
-        Ui.DrawTextCentered(batch, _ctx.Font,
-            c.Armor > 0 ? $"{c.Hp}+{c.Armor}" : c.Hp.ToString(), back, Color.White, 0.26f);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, back.Width, 1),
+            Color.Black * 0.5f);
 
         // whoever is selected wears a small arrow pointing down at their bar
         if (IsSelected(c)) DrawSelectionArrow(batch, back);
 
         if (c.CurseBonus > 0)
             Ui.FillRect(batch, _ctx.Pixel,
-                new Rectangle(back.X, back.Bottom + 3, barW, 6), new Color(150, 60, 200));
+                new Rectangle(back.X, back.Bottom + 1, back.Width, 1), new Color(150, 60, 200));
 
-        // Damage numbers, rising off the bar and fading as they go. Stacked so
-        // three shots read as three numbers instead of one that keeps changing.
+        // Marks under the bar, below the curse stripe so nothing overlaps.
+        // Side by side when a character has both, rather than stacked.
+        var marks = new List<string>();
+        if (c.IsVulnerable) marks.Add("Bullseye");
+        if (c.IsStunned) marks.Add("Stun");
+        for (int i = 0; i < marks.Count; i++)
+        {
+            int row = marks.Count * MarkPx + (marks.Count - 1);
+            int x = back.Center.X - row / 2 + i * (MarkPx + 1);
+            batch.Draw(_ctx.Assets.LoadTexture($"Content/Images/Pixel/Effects/{marks[i]}.png"),
+                new Rectangle(x, back.Bottom + 3, MarkPx, MarkPx), Color.White);
+        }
+
+        // burning: one flame per stack, sitting on the bar
+        if (c.BurningStacks > 0)
+        {
+            var flame = _ctx.Assets.LoadTexture("Content/Images/Pixel/Effects/Flame.png");
+            for (int i = 0; i < Math.Min(c.BurningStacks, 4); i++)
+                batch.Draw(flame,
+                    new Rectangle(back.X - MarkPx + 1 + i * (MarkPx - 2), back.Y - 2,
+                        MarkPx, MarkPx), Color.White);
+        }
+    }
+
+
+    /// <summary>How big a status icon is, in art pixels.</summary>
+    private const int MarkPx = 8;
+
+    /// <summary>
+    /// The health bar over somebody's head, in art pixels. Its width follows
+    /// the picture so a two-tile enemy gets a wider bar than a person, within
+    /// limits that keep a narrow sprite's bar readable and a wide one's from
+    /// running across the board.
+    /// </summary>
+    private Rectangle BarRect(CharacterInstance c)
+    {
+        var art = ArtFor(c);
+        var solid = ArtBounds.Solid(art);
+        var rect = SpriteRect(c);
+        int w = Math.Clamp(solid.Width, 20, 48);
+        return new Rectangle(
+            rect.X + (solid.Left + solid.Right) / 2 - w / 2,
+            rect.Y + solid.Top - 8, w, 4);
+    }
+
+    /// <summary>The triangle on the floor showing which way a placeholder faces.</summary>
+    private void DrawFacingMark(SpriteBatch batch, CharacterInstance c, float alpha)
+    {
+        var centre = IsoMath.ToScreen(c.GX, c.GY, HeightAt(Tile(c)), Origin);
+        batch.Draw(FacingMark.For(_ctx.Game.GraphicsDevice, c.Facing),
+            new Rectangle(
+                (int)centre.X - FacingMark.Width / 2,
+                (int)centre.Y - FacingMark.Height / 2,
+                FacingMark.Width, FacingMark.Height),
+            Color.White * (0.85f * alpha));
+    }
+
+    /// <summary>
+    /// Damage numbers and the health total, drawn in the HUD pass rather than
+    /// on the board. They are text, and the font is baked for the 3840-wide
+    /// design space — putting it through the pixel camera would either shrink
+    /// it to mush or blow it up over the whole level. So the bar's position is
+    /// carried across into design space and the numbers are drawn there, sharp.
+    /// </summary>
+    private void DrawCharacterNumbers(SpriteBatch batch, CharacterInstance c)
+    {
+        var back = ToDesign(BarRect(c));
+        if (back.Width <= 0) return;
+        Ui.DrawTextCentered(batch, _ctx.Font,
+            c.Armor > 0 ? $"{c.Hp}+{c.Armor}" : c.Hp.ToString(), back, Color.White,
+            back.Height * 0.0075f);
+
         for (int i = 0; i < c.Popups.Count; i++)
         {
-            var (amount, type, life) = c.Popups[i];
+            var (amount, _, life) = c.Popups[i];
             float gone = 1f - life / PopupSeconds;
             var where = new Vector2(back.Center.X, back.Y - 18 - gone * 70f - i * 44f);
             string text = $"-{amount}";
@@ -3729,34 +3896,24 @@ public partial class IsoLevelScreen : IScreen
                 new Color(255, 236, 120) * Math.Clamp(life / PopupSeconds * 1.6f, 0f, 1f),
                 0f, Vector2.Zero, 0.42f, SpriteEffects.None, 0f);
         }
+    }
 
-        // Marks under the bar, below the curse stripe so nothing overlaps.
-        // Side by side when a character has both, rather than stacked on top
-        // of one another.
-        const int mark = 40;
-        var marks = new List<string>();
-        if (c.IsVulnerable) marks.Add("Bullseye");
-        if (c.IsStunned) marks.Add("Stun");
-        for (int i = 0; i < marks.Count; i++)
-        {
-            int row = marks.Count * mark + (marks.Count - 1) * 6;
-            int x = back.Center.X - row / 2 + i * (mark + 6);
-            batch.Draw(_ctx.Assets.LoadTexture($"Content/Images/Effects/{marks[i]}.png"),
-                new Rectangle(x, back.Bottom + 12, mark, mark), Color.White);
-        }
-
-        // burning: one flame per stack, sitting on the bar
-        if (c.BurningStacks > 0)
-        {
-            var flame = _ctx.Assets.LoadTexture("Content/Images/Effects/Flame.png");
-            int fw = barH, gap = fw - 8;
-            for (int i = 0; i < Math.Min(c.BurningStacks, 4); i++)
-                batch.Draw(flame, new Rectangle(back.X - fw + 4 + i * gap, back.Y - 12, fw, fw), Color.White);
-            if (c.BurningStacks > 4)
-                batch.DrawString(_ctx.Font, $"x{c.BurningStacks}",
-                    new Vector2(back.Right + 8, back.Y), Color.Orange,
-                    0f, Vector2.Zero, 0.24f, SpriteEffects.None, 0f);
-        }
+    /// <summary>
+    /// A rectangle on the board, expressed in the design space the HUD uses.
+    /// Goes world -> window -> design, undoing the letterbox on the way.
+    /// </summary>
+    private Rectangle ToDesign(Rectangle world)
+    {
+        float scale = Math.Max(0.0001f, _ctx.Viewport.Scale);
+        var topLeft = _camera.ToScreen(new Point(world.X, world.Y));
+        var bottomRight = _camera.ToScreen(new Point(world.Right, world.Bottom));
+        var a = new Point(
+            (int)((topLeft.X - _ctx.Viewport.Offset.X) / scale),
+            (int)((topLeft.Y - _ctx.Viewport.Offset.Y) / scale));
+        var b = new Point(
+            (int)((bottomRight.X - _ctx.Viewport.Offset.X) / scale),
+            (int)((bottomRight.Y - _ctx.Viewport.Offset.Y) / scale));
+        return new Rectangle(a.X, a.Y, b.X - a.X, b.Y - a.Y);
     }
 
     /// <summary>How long a damage number stays in the air.</summary>
@@ -3800,7 +3957,8 @@ public partial class IsoLevelScreen : IScreen
         : c == Current && c.IsPlayer;
 
     /// <summary>How thick the "about to be hit" outline is, in the art's own pixels.</summary>
-    private const int DoomedOutline = 3;
+    /// <summary>How thick the red line round a doomed sprite is, in art pixels.</summary>
+    private const int DoomedOutline = 1;
 
     /// <summary>
     /// Traces a red line round the ART of a sprite — the drawn pixels, soft
@@ -3812,16 +3970,14 @@ public partial class IsoLevelScreen : IScreen
     /// outline is a texture built once per sprite and stretched over it, so
     /// this is one draw call however complicated the silhouette.
     /// </summary>
-    private void OutlineSprite(SpriteBatch batch, Texture2D art, Rectangle rect, bool flipped) =>
-        batch.Draw(_ctx.Assets.Outline(art, DoomedOutline), rect, null,
-            new Color(255, 45, 45), 0f, Vector2.Zero,
-            flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
+    private void OutlineSprite(SpriteBatch batch, Texture2D art, Rectangle rect) =>
+        batch.Draw(_ctx.Assets.Outline(art, DoomedOutline), rect, new Color(255, 45, 45));
 
     /// <summary>A small solid triangle pointing down, sitting on top of the health bar.</summary>
     private void DrawSelectionArrow(SpriteBatch batch, Rectangle bar)
     {
-        const int width = 46, height = 28;
-        int baseY = bar.Y - 10 - height;
+        const int width = 9, height = 5;
+        int baseY = bar.Y - 2 - height;
         for (int row = 0; row < height; row++)
         {
             int w = Math.Max(2, width - row * width / height);
@@ -3849,23 +4005,30 @@ public partial class IsoLevelScreen : IScreen
         var b = IsoMath.ToScreen(here.X, here.Y, HeightAt(here), Origin);
         var pos = Vector2.Lerp(a, b, t);
 
-        var tex = _ctx.Assets.LoadTexture($"Content/Images/Effects/{_actingCard.ProjectileArt}");
-        var size = AssetLoader.DisplaySize(tex, AssetKind.Effect) * 2f;
+        var tex = ProjectileArt(_actingCard.ProjectileArt);
         batch.Draw(tex, pos, null, Color.White, _clock * 14f,
-            new Vector2(tex.Width / 2f, tex.Height / 2f),
-            new Vector2(size.X / tex.Width, size.Y / tex.Height), SpriteEffects.None, 0f);
+            new Vector2(tex.Width / 2f, tex.Height / 2f), 1f, SpriteEffects.None, 0f);
     }
 
     private void DrawProjectile(SpriteBatch batch)
     {
         if (_mode != Mode.Acting || _act != Act.Projectile || _actingCard == null) return;
         float t = _actDur <= 0f ? 1f : MathHelper.Clamp(_actT / _actDur, 0f, 1f);
-        var tex = _ctx.Assets.LoadTexture($"Content/Images/Effects/{_actingCard.ProjectileArt}");
-        var size = AssetLoader.DisplaySize(tex, AssetKind.Effect);
+        var tex = ProjectileArt(_actingCard.ProjectileArt);
         var pos = Vector2.Lerp(_projFrom, _projTo, t);
         batch.Draw(tex, pos, null, Color.White, _projRotation,
-            new Vector2(tex.Width / 2f, tex.Height / 2f),
-            new Vector2(size.X / tex.Width, size.Y / tex.Height), SpriteEffects.None, 0f);
+            new Vector2(tex.Width / 2f, tex.Height / 2f), 1f, SpriteEffects.None, 0f);
+    }
+
+    /// <summary>
+    /// What a card throws. A card with pixel art of its own gets it; everything
+    /// else gets the ball, which is the placeholder every projectile starts as.
+    /// </summary>
+    private Texture2D ProjectileArt(string file)
+    {
+        string mine = $"Content/Images/Pixel/Effects/{file}";
+        return _ctx.Assets.LoadTexture(
+            AssetLoader.Exists(mine) ? mine : "Content/Images/Pixel/Effects/Ball.png");
     }
 
     private List<Rectangle> HandRects()

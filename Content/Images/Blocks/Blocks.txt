@@ -151,3 +151,37 @@ Scale: 62
 
 
 
+
+
+# PIXEL GROUND
+# Drawn at 1:1 — 64x32 is exactly one square's top face, so Anchor is its
+# centre and Scale is 100. A block adds a 24px body under the same face.
+Family: PixelGrass
+Piece: PixelGrassSurface.png
+Anchor: 32, 16
+Scale: 100
+
+Family: PixelStone
+Piece: PixelStoneSurface.png
+Anchor: 32, 16
+Scale: 100
+
+Family: PixelGrassBlock
+Piece: PixelGrassBlock.png
+Anchor: 32, 16
+Scale: 100
+
+Family: PixelStoneBlock
+Piece: PixelStoneBlock.png
+Anchor: 32, 16
+Scale: 100
+
+Family: PixelCheckerboard
+Checkerboard Dark:
+Piece: PixelStoneSurface.png
+Anchor: 32, 16
+Scale: 100
+Checkerboard Light:
+Piece: PixelGrassSurface.png
+Anchor: 32, 16
+Scale: 100

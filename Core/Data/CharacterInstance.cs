@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using TheTimelineIs.Core.Iso;
+using TheTimelineIs.Core.Pixel;
 
 namespace TheTimelineIs.Core.Data;
 
@@ -108,25 +109,23 @@ public class CharacterInstance
     }
 
     /// <summary>
-    /// True when the art is drawn mirrored. Sprites are authored facing RIGHT,
-    /// so this is set whenever a step carries the character leftwards across
-    /// the screen and cleared when one carries them right.
+    /// Which way this character is turned. Everyone starts facing south-east,
+    /// the pose a level opens on.
     /// </summary>
-    public bool FacingLeft;
+    public Facing8 Facing = Facings.Default;
 
     /// <summary>
-    /// Turns to follow a step. In this projection screen-x is (gx - gy), so a
-    /// step is leftwards when that total falls — which covers the diagonals
-    /// too, without anybody having to enumerate eight directions.
-    ///
-    /// A step that is level on screen (equal change in both axes) leaves the
-    /// facing alone rather than snapping it to a default.
+    /// Turns to follow a step of a walk. A walk only ever ends on one of the
+    /// four screen diagonals, because those are the only steps the pathfinder
+    /// makes and the only poses the art has.
     /// </summary>
-    public void Face(Point from, Point to)
-    {
-        int screenX = (to.X - from.X) - (to.Y - from.Y);
-        if (screenX != 0) FacingLeft = screenX < 0;
-    }
+    public void Face(Point from, Point to) => Facing = Facings.Walking(from, to, Facing);
+
+    /// <summary>
+    /// Turns to look at a square, for aiming rather than walking. This one CAN
+    /// point at a screen cardinal; the drawing rounds it to the nearest pose.
+    /// </summary>
+    public void FaceTowards(Point from, Point to) => Facing = Facings.Towards(from, to);
 
     /// <summary>Movement points per turn (from Classes.txt / Enemies.txt).</summary>
     public int MoveMax = 5;
