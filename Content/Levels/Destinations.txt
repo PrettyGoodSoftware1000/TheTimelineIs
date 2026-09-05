@@ -3,3 +3,5 @@
 # Coordinates are map-image pixels.
 PixelFlat               3900    2600
 PixelRooms              4600    2700
+TheThirdPixelLevel      6568    874
+TheThirdPixelLevel      4266    1970
