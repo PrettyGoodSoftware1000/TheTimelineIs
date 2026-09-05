@@ -104,6 +104,22 @@ public partial class IsoLevelScreen
 
     private void DrawBoard(SpriteBatch batch)
     {
+        // Everybody, filed under the DEPTH they stand at. Depth is (x + y):
+        // every tile on one diagonal band across the screen shares it, and a
+        // greater depth is nearer the viewer. A character goes down once its
+        // whole band of ground is painted — the tiles beside it on that band
+        // are level with it, not in front, so draining a band at a time is
+        // what lets a raised block one step NEARER cover them.
+        var byDepth = new Dictionary<int, List<CharacterInstance>>();
+        foreach (var c in Everyone.Where(c => c.Alive))
+        {
+            // the FAR corner of the body, so every square it stands on is
+            // already painted by the time the sprite goes down over them
+            var anchor = c == _walker && _walkPath.Count > 0 ? _walkPath[0] : Tile(c);
+            int depth = anchor.X + c.SizeX - 1 + anchor.Y + c.SizeY - 1;
+            if (!byDepth.TryGetValue(depth, out var list)) byDepth[depth] = list = new List<CharacterInstance>();
+            list.Add(c);
+        }
 
         bool armed = _cardArmed;
         // Ctrl fades everything standing on the ground so the grid reads clearly
@@ -126,10 +142,20 @@ public partial class IsoLevelScreen
             (_selectedCard ?? HoveredCard()) is { IsGuard: true } plant)
             _watchedGround.UnionWith(GuardZoneAround(Tile(planter), plant.GuardReach));
 
+        int band = int.MinValue;
         foreach (var block in _level.Blocks.Values
                      .Where(b => _level.Shown(new Point(b.X, b.Y), _revealed))
                      .OrderBy(b => b.X + b.Y).ThenBy(b => b.X))
         {
+            // a new band starting means the last one is complete, so anybody
+            // standing on it goes down now — over ground that is all painted,
+            // and under everything nearer than they are
+            if (block.X + block.Y != band)
+            {
+                DrawBandCast(batch, byDepth, band, alpha);
+                band = block.X + block.Y;
+            }
+
             DrawBlock(batch, block);
             var tile = new Point(block.X, block.Y);
 
@@ -194,28 +220,27 @@ public partial class IsoLevelScreen
                 Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, block.Height,
                     Color.White * alpha);
             if (_fires.ContainsKey(tile)) DrawFire(batch, tile, block.Height, alpha);
-
         }
+        DrawBandCast(batch, byDepth, band, alpha);
 
-        // The cast goes down AFTER all of the ground, back to front.
-        //
-        // It cannot be interleaved with the tiles. A character is hung by their
-        // feet on the middle of a square, and the square in FRONT of them draws
-        // a diamond whose back half rises to that same middle — so any tile
-        // ahead of them, however flat, paints over their legs. Ground first
-        // fixes that for every sprite at once.
-        //
-        // The cost is that a raised block no longer hides somebody standing
-        // behind it. That is worth paying: the old way clipped everybody all
-        // the time, and this only shows on ground with height.
-        foreach (var c in Everyone.Where(c => c.Alive)
-                     .Where(c => _level.Shown(Tile(c), _revealed))
-                     .OrderBy(c => Tile(c).X + c.SizeX - 1 + Tile(c).Y + c.SizeY - 1)
-                     .ThenBy(c => Tile(c).X))
-            DrawCharacter(batch, c, alpha);
+        // Anybody left is standing where no ground was drawn — off the edge of
+        // the level, or in a room nobody has revealed. They go down last rather
+        // than being dropped, so a character in the wrong place is visible
+        // instead of quietly missing.
+        foreach (var stranded in byDepth.Values)
+            foreach (var c in stranded)
+                DrawCharacter(batch, c, alpha);
 
         DrawProjectile(batch);
         DrawMower(batch);
+    }
+
+    /// <summary>Draws everybody standing at one depth, then forgets them.</summary>
+    private void DrawBandCast(SpriteBatch batch,
+        Dictionary<int, List<CharacterInstance>> byDepth, int depth, float alpha)
+    {
+        if (!byDepth.Remove(depth, out var standing)) return;
+        foreach (var c in standing) DrawCharacter(batch, c, alpha);
     }
 
     private void DrawBlock(SpriteBatch batch, LevelBlock block) =>

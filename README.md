@@ -60,6 +60,10 @@ dotnet run --project Desktop -- --editor        # the level editor
   right is down-right then up-right. Cones snap the same way.
 - A character stands with the **lowest solid pixel** of its picture on the
   middle of its square. Transparent padding does not count.
+- **Raised ground hides what is behind it.** The cast is drawn one depth band
+  at a time, in among the ground, so a block one step nearer covers anyone
+  standing behind it. Flat ground never does: its diamond's top corner lands
+  exactly on the feet of the square behind.
 
 ## Character art
 
