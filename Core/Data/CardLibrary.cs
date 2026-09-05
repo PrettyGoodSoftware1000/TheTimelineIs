@@ -135,6 +135,22 @@ public class Card
     /// </summary>
     public bool FriendlyFireDeclared;
 
+    /// <summary>
+    /// Whether playing this card ends the turn's walking. Yes for nearly
+    /// everything: a turn is a move and a card, not both over and over. No is
+    /// for cards that change what you are holding rather than doing something
+    /// with it — a shapeshift, a shell swap — where spending the walk as well
+    /// made the card cost far more than it was worth.
+    ///
+    /// Nimble is separate and adds on top either way: after a stopping card it
+    /// is the only movement left, and after a card that does not stop you it
+    /// is extra on what you still had.
+    /// </summary>
+    public bool StopsMovement = true;
+
+    /// <summary>Whether the card actually said, so the validator can ask for it.</summary>
+    public bool StopsMovementDeclared;
+
     /// <summary>A card that only helps (Armor, no damage) is aimed at the party instead.</summary>
     public bool TargetsAllies => Damage <= 0 && Effects.Exists(e => Effects_IsFriendly(e));
 
@@ -291,7 +307,7 @@ public class CardLibrary
     {
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
-        "explosion range", "action points", "friendly fire", "sky angle", "effects", "effect",
+        "explosion range", "action points", "friendly fire", "stops movement", "sky angle", "effects", "effect",
         "speed", "range", "summons", "replaces", "blast", "dealt", "with", "form", "tags", "type", "sounds",
     };
 
@@ -480,6 +496,17 @@ public class CardLibrary
                     diag.Error(card.Source, lineNo,
                         $"'{card.Name}': Blast must be a number or a range like '1 to 15', got '{value}'");
                 }
+                break;
+
+            case "stops movement":
+                // only yes and no, for the same reason Friendly Fire is: a typo
+                // here silently changes what a turn is worth
+                if (value.Equals("yes", StringComparison.OrdinalIgnoreCase))
+                { card.StopsMovement = true; card.StopsMovementDeclared = true; }
+                else if (value.Equals("no", StringComparison.OrdinalIgnoreCase))
+                { card.StopsMovement = false; card.StopsMovementDeclared = true; }
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Stops Movement must be Yes or No, got '{value}'");
                 break;
 
             case "friendly fire":

@@ -171,6 +171,11 @@ public static class ContentValidator
                     $"'{card.Name}': has no 'Friendly Fire:' line, so it is treated as No and " +
                     "will never touch its caster's own side");
 
+            if (!card.StopsMovementDeclared)
+                diag.Warn(card.Source, card.Line,
+                    $"'{card.Name}': has no 'Stops Movement:' line, so it is treated as Yes and " +
+                    "ends the turn's walking");
+
             foreach (var effect in card.Effects)
             {
                 if (effect.Amount <= 0)
@@ -526,7 +531,9 @@ public static class ContentValidator
             "iso_vulnerable", "iso_vulnerable_hit",
             "iso_stunned", "iso_stun_skip", "iso_swapped",
             "iso_trip_start", "iso_trip_empty", "iso_trip_survivor", "iso_trip_woke",
-            "dev_title", "dev_win", "dev_die", "dev_fps", "dev_close",
+            "dev_title", "dev_win", "dev_die", "dev_fps", "dev_anchor", "dev_close",
+            "dev_anchor_title", "dev_anchor_vertical", "dev_anchor_hint",
+            "dev_anchor_saved", "dev_anchor_unsaved",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

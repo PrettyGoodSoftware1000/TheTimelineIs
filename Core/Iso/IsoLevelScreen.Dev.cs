@@ -20,7 +20,7 @@ public partial class IsoLevelScreen
 {
     private bool _devMenu;
 
-    private static readonly Rectangle DevPanel = new(1180, 700, 1480, 760);
+    private static readonly Rectangle DevPanel = new(1180, 560, 1480, 1060);
 
     private static Rectangle DevButton(int i) =>
         new(DevPanel.X + 90, DevPanel.Y + 160 + i * 190, DevPanel.Width - 180, 150);
@@ -37,12 +37,21 @@ public partial class IsoLevelScreen
     /// </summary>
     private bool UpdateDevMenu(InputState input)
     {
-        if (input.ToggleDevMenu) { ToggleDevMenu(); return true; }
+        if (input.ToggleDevMenu)
+        {
+            // ~ closes the anchor page too, rather than leaving it open behind
+            // a menu that has just gone away
+            if (_anchorMenu) { _anchorMenu = false; return true; }
+            ToggleDevMenu();
+            return true;
+        }
+        if (UpdateAnchorMenu(input)) return true;
         return _devMenu;
     }
 
     private void DrawDevMenu(SpriteBatch batch)
     {
+        DrawAnchorMenu(batch);
         if (!_devMenu) return;
 
         Ui.FillRect(batch, _ctx.Pixel,
@@ -74,6 +83,9 @@ public partial class IsoLevelScreen
             int at = Array.IndexOf(FrameRates, (int)DirectionalSprite.Fps);
             DirectionalSprite.Fps = FrameRates[(at + 1) % FrameRates.Length];
         }
+
+        if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, DevButton(3), _ctx.Strings.Get("dev_anchor"), _tap))
+            OpenAnchorMenu();
 
         Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("dev_close"),
             new Rectangle(DevPanel.X, DevPanel.Bottom - 90, DevPanel.Width, 70),

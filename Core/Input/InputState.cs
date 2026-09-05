@@ -19,6 +19,12 @@ public struct InputState
     /// </summary>
     public Vector2 PanDeltaNoLetters;
 
+    /// <summary>
+    /// One step per arrow-key PRESS, rather than per frame held. For tuning a
+    /// number a pixel at a time, where a repeat rate would run away with it.
+    /// </summary>
+    public Point Nudge;
+
     /// <summary>Where the player tapped/clicked this frame, if anywhere.</summary>
     public Point? Tap;
 

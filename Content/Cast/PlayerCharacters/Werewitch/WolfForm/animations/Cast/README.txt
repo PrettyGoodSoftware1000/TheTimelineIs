@@ -1,3 +1,3 @@
-# Frames go in a folder per direction: south-east/, south-west/,
-# north-east/, north-west/ (east/ etc. also work and are rounded).
-# Name them so they sort in order: frame_000.png, frame_001.png ...
+# One folder per direction. Rotations only ever need the four diagonals,
+# but an ATTACK can face a cardinal - a target due north of the caster -
+# so those are here too. Frames sort by name: frame_000.png, frame_001.png

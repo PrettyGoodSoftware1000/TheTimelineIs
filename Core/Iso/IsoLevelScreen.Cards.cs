@@ -45,10 +45,12 @@ public partial class IsoLevelScreen
         Record(ReplayEventKind.Card, _actor, card: card.Name, to: blastCenter,
             target: string.Join("/", aimed.Select(v => v.Name)), amount: card.ActionCost);
         _actor!.ActionPoints = Math.Max(0, _actor.ActionPoints - card.ActionCost);
-        // changing shape is free of the movement penalty too: a shapeshifter can
-        // shift and then still walk, though the shift itself costs its points
-        if (card.BecomesForm == null)
-            _actor.MovePoints = 0;   // a card ends this turn's movement, unless Nimble gives it back
+        // Most cards end the turn's walking; the ones marked "Stops Movement: No"
+        // do not — a shapeshift or a shell swap changes what you are holding
+        // rather than doing something with it. Nimble is added afterwards
+        // either way, so it tops up whatever is left.
+        if (card.StopsMovement)
+            _actor.MovePoints = 0;
         _overlayKey = null;
 
         // A channelled card's FIRST play only starts the channel: it is paid

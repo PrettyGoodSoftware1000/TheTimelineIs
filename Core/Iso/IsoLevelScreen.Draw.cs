@@ -40,9 +40,13 @@ public partial class IsoLevelScreen
         var art = ArtFor(c);
         var solid = ArtBounds.Solid(art);
         var foot = FootOf(c);
+        // whatever the artist left round the figure, nudged by hand from the
+        // ~ menu. Sideways always; height only when the line asks for it,
+        // because the lowest solid pixel is normally exactly right.
+        var nudge = _ctx.Anchors.For(c.Name, c.Art);
         return new Rectangle(
-            (int)foot.X - (solid.Left + solid.Right) / 2,
-            (int)foot.Y - solid.Bottom,
+            (int)foot.X - (solid.Left + solid.Right) / 2 + nudge.X,
+            (int)foot.Y - (nudge.Vertical ? art.Height / 2 - nudge.Y : solid.Bottom),
             art.Width, art.Height);
     }
 
@@ -111,11 +115,15 @@ public partial class IsoLevelScreen
         // are level with it, not in front, so draining a band at a time is
         // what lets a raised block one step NEARER cover them.
         var byDepth = new Dictionary<int, List<CharacterInstance>>();
-        foreach (var c in Everyone.Where(c => c.Alive))
+        foreach (var c in Everyone.Where(c => c.Alive && _level.Shown(Tile(c), _revealed)))
         {
-            // the FAR corner of the body, so every square it stands on is
-            // already painted by the time the sprite goes down over them
-            var anchor = c == _walker && _walkPath.Count > 0 ? _walkPath[0] : Tile(c);
+            // Somebody mid-step is drawn part way to their next square, so
+            // they are filed under THAT square. Filing them under the one they
+            // are leaving would put them a band behind where they are drawn,
+            // and the ground they are walking onto — level ground, not raised —
+            // would paint over them for the length of the step. The walker and
+            // everyone walking with them are all in the middle of a step.
+            var anchor = MovingToward(c) ?? Tile(c);
             int depth = anchor.X + c.SizeX - 1 + anchor.Y + c.SizeY - 1;
             if (!byDepth.TryGetValue(depth, out var list)) byDepth[depth] = list = new List<CharacterInstance>();
             list.Add(c);
@@ -223,10 +231,11 @@ public partial class IsoLevelScreen
         }
         DrawBandCast(batch, byDepth, band, alpha);
 
-        // Anybody left is standing where no ground was drawn — off the edge of
-        // the level, or in a room nobody has revealed. They go down last rather
-        // than being dropped, so a character in the wrong place is visible
-        // instead of quietly missing.
+        // Anybody left is standing on ground the level never drew — off its
+        // edge. They go down last rather than being dropped, so a character in
+        // the wrong place is visible instead of quietly missing. People in a
+        // room nobody has opened are not here at all: they were left out above,
+        // with the ground they are standing on.
         foreach (var stranded in byDepth.Values)
             foreach (var c in stranded)
                 DrawCharacter(batch, c, alpha);
@@ -388,11 +397,15 @@ public partial class IsoLevelScreen
         {
             int i = Math.Clamp((int)(c.CastAnimTime * DirectionalSprite.Fps), 0, frames.Count - 1);
             var frame = frames[i];
+            // a frame is placed exactly as the standing picture is, so nothing
+            // jumps sideways when the animation starts
             var solid = ArtBounds.Solid(frame);
             var foot = FootOf(c);
+            var nudge = _ctx.Anchors.For(c.Name, c.Art);
             batch.Draw(frame, new Rectangle(
-                (int)foot.X - (solid.Left + solid.Right) / 2,
-                (int)foot.Y - solid.Bottom, frame.Width, frame.Height), Color.White * alpha);
+                (int)foot.X - (solid.Left + solid.Right) / 2 + nudge.X,
+                (int)foot.Y - (nudge.Vertical ? frame.Height / 2 - nudge.Y : solid.Bottom),
+                frame.Width, frame.Height), Color.White * alpha);
         }
         else
             batch.Draw(art, rect, Color.White * alpha);
@@ -495,7 +508,9 @@ public partial class IsoLevelScreen
     /// <summary>The triangle on the floor showing which way a placeholder faces.</summary>
     private void DrawFacingMark(SpriteBatch batch, CharacterInstance c, float alpha)
     {
-        var centre = IsoMath.ToScreen(c.GX, c.GY, HeightAt(Tile(c)), Origin);
+        // on the middle of the BODY, so a two-square Gator's arrow sits under
+        // the middle of the Gator rather than off one end of it
+        var centre = FootOf(c);
         batch.Draw(FacingMark.For(_ctx.Game.GraphicsDevice, c.Facing),
             new Rectangle(
                 (int)centre.X - FacingMark.Width / 2,

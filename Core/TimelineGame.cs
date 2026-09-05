@@ -68,6 +68,7 @@ public class TimelineGame : Game
             LogStore = _platform.LogStore,
             ReplayStore = _platform.ReplayStore,
             ContentIndex = _platform.ContentIndex,
+            Anchors = ArtAnchors.Load(),
             Sprites = new Pixel.CastSprites(new AssetLoader(GraphicsDevice), _platform.ContentIndex, GraphicsDevice),
             DevWriter = _platform.DevWriter,
         };

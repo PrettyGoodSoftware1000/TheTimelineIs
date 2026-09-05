@@ -19,6 +19,10 @@ public class DesktopInput : IInputSource
 {
     private const float KeyPanSpeed = 2200f; // virtual px/sec
 
+    /// <summary>True on the frame a key goes down, false while it stays down.</summary>
+    private bool Tapped(KeyboardState keys, Keys key) =>
+        keys.IsKeyDown(key) && _prevKeys.IsKeyUp(key);
+
     private KeyboardState _prevKeys;
     private MouseState _prevMouse;
     private Point _rightDownAt;
@@ -58,6 +62,11 @@ public class DesktopInput : IInputSource
         if (keys.IsKeyDown(Keys.D)) letters.X += 1;
         if (keys.IsKeyDown(Keys.W)) letters.Y -= 1;
         if (keys.IsKeyDown(Keys.S)) letters.Y += 1;
+
+        // one step per press, for nudging a number a pixel at a time
+        state.Nudge = new Point(
+            (Tapped(keys, Keys.Right) ? 1 : 0) - (Tapped(keys, Keys.Left) ? 1 : 0),
+            (Tapped(keys, Keys.Down) ? 1 : 0) - (Tapped(keys, Keys.Up) ? 1 : 0));
 
         state.PanDelta = KeyPan(arrows + letters, dt);
         state.PanDeltaNoLetters = KeyPan(arrows, dt);

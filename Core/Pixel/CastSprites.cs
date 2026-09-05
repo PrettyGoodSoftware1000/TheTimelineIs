@@ -74,9 +74,10 @@ public class CastSprites
     /// </summary>
     public Texture2D Cube(CharacterInstance who)
     {
-        string key = who.Name + "|" + who.Colour.PackedValue;
+        string key = $"{who.Name}|{who.Colour.PackedValue}|{who.SizeX}x{who.SizeY}";
         if (_cubes.TryGetValue(key, out var made)) return made;
-        return _cubes[key] = PlaceholderCube.Make(_device, InitialOf(who.Name), who.Colour);
+        return _cubes[key] = PlaceholderCube.Make(_device, InitialOf(who.Name), who.Colour,
+            who.SizeX, who.SizeY);
     }
 
     /// <summary>
@@ -97,6 +98,13 @@ public class CastSprites
     /// <summary>
     /// The frames of an animation for somebody, facing the way they are, or
     /// null when they have no such animation in a direction near enough.
+    ///
+    /// This uses the character's TRUE facing, cardinals included. A ranged
+    /// attack can point due north, and if somebody has drawn a north frame it
+    /// plays; without one it falls back round the compass to the nearest
+    /// direction that has frames. The standing pose rounds to one of the four
+    /// diagonals, because those are the only rotations there will ever be —
+    /// but an attack is allowed to face straight up the screen.
     /// </summary>
     public IReadOnlyList<Texture2D>? Frames(CharacterInstance who, string animation) =>
         animation.Length == 0 ? null : For(who)?.Animation(animation, who.Facing);

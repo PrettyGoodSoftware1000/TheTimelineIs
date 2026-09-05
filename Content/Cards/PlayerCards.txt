@@ -24,6 +24,11 @@
 #                  single shot can be aimed at them. Sides are read from the
 #                  CASTER, so an enemy card with friendly fire hurts other
 #                  enemies too. No is the default, and every card should say.)
+# Stops Movement: (Yes or No. Yes ends the turn's walking, which is what
+#                  nearly every card does. No is for cards that change what
+#                  you are holding rather than doing something with it - a
+#                  shapeshift, a shell swap. Nimble adds its movement on top
+#                  either way. No line means Yes, and every card should say.)
 # Projectile Art: (File in Content/Images/Pixel/Effects/. Art must point RIGHT;
 #                  it is rotated to match the shot's travel angle, so a shot
 #                  heading down-right appears rotated clockwise.)
@@ -101,8 +106,9 @@ Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
 Action Points: 1
 Friendly Fire: Yes
+Stops Movement: Yes
 Explosion Range: 3
-Projectile Art: Ball.png
+Projectile Art: Circle.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.2
 Speed: 18
@@ -118,6 +124,7 @@ Tags: Dirtbag
 Type: [melee] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Effects: Nimble 4
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -135,7 +142,8 @@ Tags: Cyborg
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
 Action Points: 1
 Friendly Fire: No
-Projectile Art: Ball.png
+Stops Movement: Yes
+Projectile Art: Circle.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
@@ -151,6 +159,7 @@ Tags: Gun-O-Mancer
 Type: [cone] AoE damage
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Range: 3
 Effects: Burning 1
 Casting Sound: [Blank.wav]
@@ -168,6 +177,7 @@ Tags: Cyborg
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Range: 3
 Effects: Armor 8
 Projectile Art: Ball.png
@@ -186,8 +196,9 @@ Tags: Dirtbag
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Range: 5
-Projectile Art: Ball.png
+Projectile Art: Circle.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
@@ -204,6 +215,7 @@ Form: Werewolf
 Type: [melee] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Effects: Leap 5
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -222,6 +234,7 @@ Form: Werewolf
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: No
 Effects: Form Witch
 Range: 1
 Projectile Art: Ball.png
@@ -241,6 +254,7 @@ Form: Witch
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: No
 Effects: Form Werewolf, Nimble 5
 Range: 1
 Projectile Art: Ball.png
@@ -260,6 +274,7 @@ Form: Witch
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Effects: Curse 3
 Range: 6
 Projectile Art: Ball.png
@@ -278,6 +293,7 @@ Tags: Dirtbag
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Effects: Steal 3
 Range: 1
 Projectile Art: Ball.png
@@ -296,11 +312,12 @@ Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
 Action Points: 3
 Friendly Fire: Yes
+Stops Movement: Yes
 Explosion Range: 5
 Range: 12
 Effects: Channel 1, FireTiles 2
 Sky Angle: 110
-Projectile Art: Ball.png
+Projectile Art: Circle.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.6
 Speed: 22
@@ -316,6 +333,7 @@ Tags: Florida Man
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Range: 2
 Effects: Summon 1
 Summons: Gator
@@ -339,6 +357,7 @@ Tags: Florida Man
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: Yes
+Stops Movement: Yes
 Range: 4
 Effects: Guard 4
 Projectile Art: Ball.png
@@ -361,6 +380,7 @@ Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Effects: Nimble 2
 Melee Time: 0.4
 Casting Sound: [Blank.wav]
@@ -380,6 +400,7 @@ Tags: Florida Man
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Range: 8
 Effects: Vulnerable 3
 Projectile Art: Ball.png
@@ -409,6 +430,7 @@ Tags: Florida Man
 Type: [ranged] Single target, X hits.
 Action Points: 2
 Friendly Fire: Yes
+Stops Movement: Yes
 Range: 15
 Explosion Range: 3
 Effects: Mower 15
@@ -433,6 +455,7 @@ Tags: Gun-O-Mancer
 Type: [ranged] Single target, X hits.
 Action Points: 0
 Friendly Fire: No
+Stops Movement: No
 Range: 1
 Effects: Swap 1
 Replaces: Hot Lead
@@ -453,6 +476,7 @@ Tags: Gun-O-Mancer
 Type: [ranged] Single target, X hits.
 Action Points: 0
 Friendly Fire: No
+Stops Movement: No
 Range: 1
 Effects: Swap 1
 Replaces: Shock Shot
@@ -477,6 +501,7 @@ Dealt: No
 Type: [cone] AoE damage
 Action Points: 2
 Friendly Fire: No
+Stops Movement: Yes
 Range: 3
 Effects: Stun 1
 Casting Sound: [Blank.wav]
@@ -501,6 +526,7 @@ Tags: Florida Man
 Type: [ranged] Single target, X hits.
 Action Points: 3
 Friendly Fire: Yes
+Stops Movement: Yes
 Range: 1
 Effects: BathSalts 1
 Projectile Art: Ball.png

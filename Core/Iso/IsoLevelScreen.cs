@@ -572,6 +572,19 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
             : LivingParty.Concat(_enemies.Where(e => e.Alive))
                 .Where(c => ActsWith(c, Current)).ToList();
 
+    /// <summary>
+    /// The square somebody is walking onto, or null when they are standing
+    /// still. Drawing and depth-sorting both ask this, so a sprite is always
+    /// filed under the square it is being drawn towards.
+    /// </summary>
+    private Point? MovingToward(CharacterInstance c)
+    {
+        if (c == _walker && _walkPath.Count > 0) return _walkPath[0];
+        foreach (var e in _escorts)
+            if (e.Who == c && e.Path.Count > 0) return e.Path[0];
+        return null;
+    }
+
     private Vector2 FootOf(CharacterInstance c)
     {
         var at = IsoMath.ToScreen(c.GX, c.GY, HeightAt(Tile(c)), Origin);

@@ -55,8 +55,21 @@ public class GuardWatch
     public void AlreadyHere(string key) => _inside.Add(key);
 
     /// <summary>
+    /// A body is about to start walking, so it stops counting as "already
+    /// standing here".
+    ///
+    /// Being marked as inside is only meant to stop the card shooting people
+    /// where they stand the moment it is played. Once they take their turn and
+    /// move, they are fair game — somebody caught inside the zone who shuffles
+    /// one square gets shot exactly like somebody who walked in from outside.
+    /// Without this they could cross the whole zone untouched, which read as
+    /// the card simply not working when a target started close.
+    /// </summary>
+    public void AboutToWalk(string key) => _inside.Remove(key);
+
+    /// <summary>
     /// A body has finished a step. Answers whether that step should draw a
-    /// volley — true only on the step that takes them from outside to inside.
+    /// volley — true on the first step that lands on watched ground.
     /// </summary>
     public bool Entered(string key, IEnumerable<Point> footprint)
     {

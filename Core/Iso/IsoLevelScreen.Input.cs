@@ -220,7 +220,19 @@ public partial class IsoLevelScreen
         var path = Pathfinder.PathTo(parent, Tile(who), goal);
         if (path.Count == 0) return;
         Record(ReplayEventKind.Move, who, from: Tile(who), to: goal, amount: path.Count);
+        ForgetWhereTheyStood(who);
         _escorts.Add(new Escort { Who = who, Path = path, From = Tile(who) });
+    }
+
+    /// <summary>
+    /// Starting to walk cancels the grace somebody gets for having been inside
+    /// a guard zone when it was planted. Their first step onto watched ground
+    /// draws a volley, wherever that step started.
+    /// </summary>
+    private void ForgetWhereTheyStood(CharacterInstance mover)
+    {
+        foreach (var guard in Everyone.Where(g => g.Alive && g.IsGuarding && g != mover))
+            guard.Watch.AboutToWalk(Key(mover));
     }
 
     private void BeginWalk(CharacterInstance mover, Point goal, Action? after, Card? via = null)
@@ -230,6 +242,7 @@ public partial class IsoLevelScreen
             OccupiedExcept(mover), via?.IgnoresHeight ?? false, PassThroughFor(mover), mover.SizeX, mover.SizeY);
         _walker = mover;
         _walkFrom = Tile(mover);
+        ForgetWhereTheyStood(mover);
         _escorts.Clear();          // a new walk is not the old one's group
         _walkPath = Pathfinder.PathTo(parent, _walkFrom, goal);
         if (_walkPath.Count > 0)

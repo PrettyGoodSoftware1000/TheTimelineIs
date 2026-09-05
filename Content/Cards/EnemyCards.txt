@@ -29,6 +29,7 @@ Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Melee Time: 0.2
 Casting Sound: [Blank.wav]
 Casting Time: 0.5
@@ -45,6 +46,7 @@ Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Melee Time: 0.2
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
@@ -61,6 +63,7 @@ Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Melee Time: 0.5
 Casting Sound: [Blank.wav]
 Casting Time: 0.75
@@ -77,6 +80,7 @@ Type: [ranged] Single target, X hits.
 Range: 7
 Action Points: 1
 Friendly Fire: No
+Stops Movement: Yes
 Projectile Art: Ball.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.3

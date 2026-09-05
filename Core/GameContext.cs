@@ -37,6 +37,9 @@ public class GameContext
 
     /// <summary>Everybody's rotations, animations and placeholder cubes.</summary>
     public required Pixel.CastSprites Sprites;
+
+    /// <summary>How far each character's art is nudged on its square.</summary>
+    public required ArtAnchors Anchors;
     public IDevDestinationWriter? DevWriter;
 
     public IScreen Screen = null!;
