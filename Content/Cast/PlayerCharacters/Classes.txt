@@ -5,6 +5,8 @@
 # A class with no such folder yet is drawn as a cube with its initial on top.
 #
 #   Colour: r, g, b            what colour that cube is
+#   Mind: 100                  nerve, or 'Infinite' for something that cannot
+#                              be frightened
 #   Art: FolderName            optional; which state folder to draw from.
 #                              Without it, the first folder with rotations in
 #                              it is used.

@@ -180,6 +180,8 @@ public partial class IsoLevelScreen
         _selectedCard = null;
         _targets.Clear();
         _blastSet.Clear();
+        _groundAims.Clear();
+        _overlaps.Clear();
         _overlayKey = null;
         if (_mode == Mode.PlayerTarget) _mode = Mode.PlayerTurn;
     }

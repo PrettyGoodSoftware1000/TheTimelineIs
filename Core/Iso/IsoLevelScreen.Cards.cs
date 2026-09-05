@@ -16,6 +16,9 @@ public partial class IsoLevelScreen
 {
     // ---------------- card + enemy actions ----------------
 
+    /// <summary>How far off its line a rocket wanders at the middle of its flight.</summary>
+    private const float RocketWander = 14f;
+
     private void PlayCard(List<CharacterInstance> aimed, Point blastCenter)
     {
         var card = _selectedCard;
@@ -33,6 +36,7 @@ public partial class IsoLevelScreen
         _selectedCard = null;
         _targets.Clear();
         _blastSet.Clear();
+        _groundAims.Clear();
         // playing a borrowed card uses it up and hands it straight back
         if (_actor != null && _actor.Stolen.FirstOrDefault(st =>
                 st.CardName.Equals(card.Name, StringComparison.OrdinalIgnoreCase)) is StolenCard spent)
@@ -129,6 +133,7 @@ public partial class IsoLevelScreen
                     var dir = new Vector2((float)Math.Cos(rad), (float)Math.Sin(rad));
                     _projFrom = _projTo - dir * SkyRunUp;
                     _projRotation = rad;
+                    _projWander = 0f;
                     EnterAct(Act.Projectile, SkyRunUp / Math.Max(1f, ranged.Speed * IsoMath.TileW));
                     break;
                 }
@@ -140,6 +145,9 @@ public partial class IsoLevelScreen
                 _projFrom = FootOf(_actor!) - new Vector2(0, 160);
                 _projTo = FootOf(aim) - new Vector2(0, 160);
                 _projRotation = (float)Math.Atan2(_projTo.Y - _projFrom.Y, _projTo.X - _projFrom.X);
+                // a salvo weaves; everything else flies true
+                _projWander = ranged.Aims > 1 ? RocketWander : 0f;
+                _projSeed = (float)(Rng.NextDouble() * Math.PI * 2);
                 EnterAct(Act.Projectile,
                     IsoMath.GridDistance(Tile(_actor!), Tile(aim)) / Math.Max(1f, ranged.Speed));
                 break;
@@ -182,10 +190,19 @@ public partial class IsoLevelScreen
         bool lastBlow = _hitIndex >= card.HitEvents.Count;
         if (lastBlow && card.Effects.Count > 0)
             ApplyEffects(card, struck, report);
+        // nerve after the wounds, so a card that does both is rolled against
+        // what it actually left behind
+        if (lastBlow) ApplyMind(card, struck, report);
         // the ground catches on the last blow, whether or not anyone was standing on it
         if (lastBlow && card.FireTileTurns > 0 && _burnArea.Count > 0)
         {
-            LightFires(_burnArea, card.FireTileTurns, report);
+            // A card with a Fire Chance scatters instead of setting the lot
+            // alight: each square rolls for itself, so a salvo leaves a
+            // handful of fires in a pattern nobody chose.
+            var caught = card.FireChance > 0
+                ? _burnArea.Where(_ => Rng.Next(100) < card.FireChance).ToHashSet()
+                : _burnArea;
+            if (caught.Count > 0) LightFires(caught, card.FireTileTurns, report);
             _burnArea.Clear();
         }
         if (report.Length > 0) Log(report.ToString().TrimEnd());
@@ -354,6 +371,7 @@ public partial class IsoLevelScreen
                 IsPlayer = true,
                 Owner = owner,
                 MaxHp = def.Hp, Hp = def.Hp,
+                Mind = def.Mind, MaxMind = def.Mind, MindImmune = def.MindImmune,
                 MoveMax = def.Movement, MovePoints = def.Movement,
                 ActionsPerTurn = def.Actions,
                 SizeX = def.SizeX, SizeY = def.SizeY,
@@ -417,9 +435,53 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>Runs a card's Effects against everything it hit.</summary>
-    private void ApplyEffects(Card card, IEnumerable<CharacterInstance> hit, StringBuilder report)
+    /// <summary>
+    /// Nerve first, then the effect it opens the door to.
+    ///
+    /// The chance is exactly how much nerve is MISSING once the card's damage
+    /// has landed, so a card is measured against the state it leaves behind: 25
+    /// off somebody at full takes hold a quarter of the time, and the same card
+    /// against somebody already shaken almost always does. Nothing about it is
+    /// hidden — the log says the roll it needed and the roll it got.
+    /// </summary>
+    private void ApplyMind(Card card, IEnumerable<CharacterInstance> hit, StringBuilder report)
     {
-        foreach (var effect in card.Effects)
+        if (card.MindDamage <= 0 && card.MindEffect == null) return;
+
+        foreach (var c in hit.Where(c => c.Alive))
+        {
+            if (c.MindImmune)
+            {
+                report.AppendLine(_ctx.Strings.Format("iso_mind_immune", ("name", c.Name)));
+                continue;
+            }
+            int lost = c.LoseMind(card.MindDamage);
+            if (lost > 0)
+            {
+                c.Popups.Add((lost, "Mind", PopupSeconds));
+                report.AppendLine(_ctx.Strings.Format("iso_mind_damage",
+                    ("name", c.Name), ("amount", lost.ToString()), ("left", c.Mind.ToString())));
+            }
+            if (card.MindEffect is not CardEffect wanted) continue;
+
+            float chance = c.MindEffectChance;
+            int rolled = Rng.Next(100);
+            bool took = rolled < (int)Math.Round(chance * 100);
+            report.AppendLine(_ctx.Strings.Format(took ? "iso_mind_took" : "iso_mind_held",
+                ("name", c.Name), ("effect", wanted.Name),
+                ("chance", ((int)Math.Round(chance * 100)).ToString()),
+                ("roll", (rolled + 1).ToString())));
+            if (took) ApplyEffects(card, new[] { c }, report, only: wanted);
+        }
+    }
+
+    private void ApplyEffects(Card card, IEnumerable<CharacterInstance> hit, StringBuilder report,
+        CardEffect? only = null)
+    {
+        // A mind effect comes back through here on its own, so a card that
+        // carries both an ordinary effect and a mind one does not fire the
+        // ordinary one twice.
+        foreach (var effect in only != null ? new List<CardEffect> { only } : card.Effects)
         {
             if (Data.Effects.IsSelfCast(effect.Name))
             {
@@ -497,6 +559,14 @@ public partial class IsoLevelScreen
                     c.StunTurns = Math.Max(c.StunTurns, effect.Amount);
                     report.AppendLine(_ctx.Strings.Format("iso_stunned",
                         ("name", c.Name), ("turns", c.StunTurns.ToString())));
+                }
+                else if (effect.Is(Data.Effects.Fear))
+                {
+                    // the longer of the two, as stun is: frightening somebody
+                    // twice keeps them running until the later clock is done
+                    c.FearTurns = Math.Max(c.FearTurns, effect.Amount);
+                    report.AppendLine(_ctx.Strings.Format("iso_afraid",
+                        ("name", c.Name), ("turns", c.FearTurns.ToString())));
                 }
                 else if (effect.Is(Data.Effects.Vulnerable))
                 {

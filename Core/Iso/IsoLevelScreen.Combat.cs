@@ -22,9 +22,22 @@ public partial class IsoLevelScreen
     /// </summary>
     private int RollDamage(Card card, CharacterInstance target)
     {
-        if (!card.VariableDamage) return card.Damage;
-        return target.IsVulnerable ? card.Damage : Rng.Next(card.DamageMin, card.Damage + 1);
+        int once = !card.VariableDamage ? card.Damage
+            : target.IsVulnerable ? card.Damage
+            : Rng.Next(card.DamageMin, card.Damage + 1);
+        return once * BlastsOver(target);
     }
+
+    /// <summary>
+    /// How many of a salvo's blasts are on top of this character. One for
+    /// everything else, so an ordinary card is unaffected. A body covering
+    /// several squares counts the worst square it is standing on rather than
+    /// adding them up, or a Living Stone would take four times the damage for
+    /// being four times the size.
+    /// </summary>
+    private int BlastsOver(CharacterInstance who) =>
+        _overlaps.Count == 0 ? 1
+        : Math.Max(1, who.Footprint.Max(t => _overlaps.TryGetValue(t, out int n) ? n : 0));
 
     /// <summary>
     /// Stepping on a trigger square plays its dialogue, once.
@@ -115,11 +128,45 @@ public partial class IsoLevelScreen
         NextTurn();
     }
 
+    /// <summary>
+    /// Runs, using the whole move. The square chosen is the one within reach
+    /// that puts the most ground between this character and the nearest thing
+    /// on the other side; with nowhere better to stand they simply stay put
+    /// and the turn still goes.
+    /// </summary>
+    private void Flee(CharacterInstance who)
+    {
+        var enemies = (who.IsPlayer ? _enemies : _party).Where(e => e.Alive).ToList();
+        var reach = Pathfinder.Reachable(_level, Tile(who), who.MovePoints, _revealed,
+            OccupiedExcept(who), sizeX: who.SizeX, sizeY: who.SizeY).Cost;
+        who.MovePoints = 0;
+        if (enemies.Count == 0 || reach.Count == 0) { NextTurn(); return; }
+
+        int Nearest(Point square) =>
+            enemies.Min(e => Pathfinder.Footprint(square, who.SizeX, who.SizeY)
+                .Min(t => IsoMath.GridDistance(t, Tile(e))));
+
+        int here = Nearest(Tile(who));
+        var away = reach.Keys.Where(t => Fits(who, t, new HashSet<Point>()))
+            .OrderByDescending(Nearest).ThenBy(t => reach[t]).FirstOrDefault();
+        if (away == default || Nearest(away) <= here) { NextTurn(); return; }
+        BeginWalk(who, away, NextTurn);
+    }
+
     private void NextTurn()
     {
         CancelCard();
         // finishing a turn in the fire catches you, the same as starting one there
-        if (Current is CharacterInstance leaving) Ignite(leaving);
+        if (Current is CharacterInstance leaving)
+        {
+            Ignite(leaving);
+            // nerve comes back at the end of a turn, a little at a time, so a
+            // fright wears off over a few turns rather than lasting the fight
+            if (leaving.Alive && leaving.RecoverMind(Rng) is int back && back > 0)
+                Log(_ctx.Strings.Format("iso_mind_back",
+                    ("name", leaving.Name), ("amount", back.ToString()),
+                    ("left", leaving.Mind.ToString())));
+        }
         if (PartyWiped) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
         if (!_aggroed.Any(e => e.Alive))
         {
@@ -160,6 +207,10 @@ public partial class IsoLevelScreen
         if (current.IsGuarding) StopGuarding(current);
         current.MovePoints = current.MoveMax;
         current.RefreshActionPoints();
+        if (current.IsBroken)
+            Log(_ctx.Strings.Format("iso_mind_broken", ("name", current.Name)));
+        else if (current.IsShaken)
+            Log(_ctx.Strings.Format("iso_mind_shaken", ("name", current.Name)));
         AgeFires(current);
         _overlayKey = null;
 
@@ -191,6 +242,21 @@ public partial class IsoLevelScreen
             RecenterOn(current);
             _stunHold = StunHoldSeconds;
             _mode = current.IsPlayer ? Mode.PlayerTurn : Mode.EnemyTurn;
+            return;
+        }
+
+        // Frightened: the turn is spent running. Movement goes on getting away
+        // from whoever is nearest on the other side, and nothing else happens
+        // — it is the one status that takes the choice away rather than the
+        // means, which is what makes it worth being afraid of.
+        if (current.IsAfraid)
+        {
+            current.FearTurns--;
+            current.ActionPoints = 0;
+            Log(_ctx.Strings.Format("iso_fear_flees", ("name", current.Name)));
+            RecenterOn(current);
+            _mode = current.IsPlayer ? Mode.PlayerTurn : Mode.EnemyTurn;
+            Flee(current);
             return;
         }
 

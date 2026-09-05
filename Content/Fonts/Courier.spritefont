@@ -15,6 +15,11 @@
         <Start>&#32;</Start>
         <End>&#126;</End>
       </CharacterRegion>
+      <CharacterRegion>
+        <!-- the infinity sign, for something whose nerve cannot be broken -->
+        <Start>&#8734;</Start>
+        <End>&#8734;</End>
+      </CharacterRegion>
     </CharacterRegions>
   </Asset>
 </XnaContent>

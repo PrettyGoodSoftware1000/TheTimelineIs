@@ -129,6 +129,21 @@ Any card can carry these (`Effects: Burning 1, Armor 5`).
 | `Swap 1` | Exchanges one card in the caster's own hand. Needs `Replaces:` and `With:`. |
 | `Mower N` | Sends a lawnmower N squares down a straight line. See `Core/Iso/MowerRun.cs`. |
 | `BathSalts 1` | Blacks the screen out, plays the caster's picture folder, and hurts everybody. |
+| `Fear N` | The victim runs. For N of their turns they spend the whole move getting away and do nothing else. |
+
+## Mind
+
+- A purple bar under the health bar. Everybody has **100**; nothing dies of it.
+- **`Mind Damage: N`** takes nerve instead of health. A card can do both.
+- **`Mind Effect: Fear 1`** is rolled AFTER that damage, at exactly the
+  percentage of nerve that is **missing**. 25 off somebody at full lands a
+  quarter of the time; the same card against somebody already shaken almost
+  always lands. The log prints the chance and the roll.
+- **5-15% comes back at the end of every turn**, so a fright wears off.
+- **0 nerve**: the turn arrives with no actions, and nothing carries into it.
+  **Under half**: one action, and at most one carried.
+- **`Mind: Infinite`** in Classes.txt or Enemies.txt is something that cannot
+  be frightened — a Living Stone. Its bar is grey with an infinity sign.
 
 ## Card shapes
 
@@ -136,8 +151,14 @@ Any card can carry these (`Effects: Burning 1, Armor 5`).
 - **Cone** (`Type: [cone] AoE damage`) is a staircase wedge: 1 tile deep 1,
   3 at 2, 5 at 3. `Range` caps the depth. Fires along a grid axis only — a
   screen diagonal — never straight up, down, left or right.
+- **Swipe** (`Type: [swipe] AoE damage`) is three squares side by side right
+  beside the caster, in whichever quarter is clicked. Same four directions.
 - **Blast** takes `Explosion Range: N` around the impact point, kept separate
   from how far it can be thrown.
+- **`Aims: N`** picks N squares before anything fires, and every blast goes off
+  at once. Where two overlap the damage lands twice. Those shots weave.
+- **`Fire Chance: N`** makes `FireTiles` a scattering: each square it touches
+  has an N-in-100 chance of catching, rather than all of them burning.
 - **Area cards can be aimed at bare ground.**
 - **`Sky Angle: N`** drops the shot out of the sky onto the aimed square.
 - **`Friendly Fire: Yes/No`** decides whether a card touches its caster's own

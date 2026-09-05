@@ -538,3 +538,74 @@ Effect: Single target. 1 times x 0 damage.
 Card Text: Black out and fuck shit up.
 Bottom Right: 0 ????
 []
+
+Card Name: Kick in the Nuts
+Tags: Dirtbag
+Type: [melee] Single target, 1 hits.
+Action Points: 1
+Friendly Fire: No
+Stops Movement: Yes
+Mind Damage: 20
+Casting Sound: [Blank]
+Casting Time: 0.1
+Hit Sound: [hitbasic.wav]
+Effect: 2 damage
+Effects: Stun 1, Nimble 2
+Card Text: Two damage, one lost turn, and you are already leaving.
+Bottom Right: 2 + Stun
+[]
+
+Card Name: Rocket Pods
+Tags: Cyborg
+Type: [ranged] AoE damage. Single Projectile
+Action Points: 2
+Friendly Fire: Yes
+Stops Movement: Yes
+Aims: 4
+Range: 8
+Explosion Range: 2
+Projectile Art: Circle.png
+Casting Sound: [Blank]
+Casting Time: 0.2
+Speed: 22
+Hit Sound: [hitbasic.wav]
+Effect: AoE 3 damage to enemies
+Effects: FireTiles 2
+Fire Chance: 15
+Card Text: Four rockets, picked one at a time. Where two blasts overlap, so
+Card Text: does the damage. Some of what they touch catches.
+Bottom Right: 4 x 3
+[]
+
+Card Name: Swipe
+Tags: Werewitch
+Form: Werewolf
+Type: [swipe] AoE damage
+Action Points: 1
+Friendly Fire: No
+Stops Movement: Yes
+Effect: AoE 7 damage to enemies
+Casting Sound: [Blank]
+Casting Time: 0.15
+Hit Sound: [hitbasic.wav]
+Card Text: Three squares at once, in whichever quarter you point at.
+Bottom Right: 7 Claw
+[]
+
+Card Name: Terror
+Tags: Werewitch
+Form: Witch
+Type: [cone] AoE damage
+Action Points: 2
+Friendly Fire: No
+Stops Movement: Yes
+Range: 4
+Mind Damage: 90
+Mind Effect: Fear 1
+Casting Sound: [Blank]
+Casting Time: 0.3
+Hit Sound: [Blank]
+Card Text: No wound at all. Ninety nerve out of everyone in the wedge, and
+Card Text: whoever breaks runs for a turn.
+Bottom Right: 90 Mind
+[]

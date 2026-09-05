@@ -160,11 +160,99 @@ public class CharacterInstance
     /// spending rather than hoarding, and the pile is cleared outright when the
     /// fight ends so nothing crosses between battles.
     /// </summary>
-    public void RefreshActionPoints() =>
-        ActionPoints = Math.Min(ActionPoints, MaxCarriedActions) + ActionsPerTurn;
+    public void RefreshActionPoints()
+    {
+        // Nerve decides what a turn is worth. Broken means the turn arrives
+        // with nothing at all — and nothing carried into it either, so a
+        // saved point cannot paper over it. Shaken is one action and one
+        // point of carry.
+        if (IsBroken) { ActionPoints = 0; return; }
+        int carry = Math.Min(ActionPoints, MaxCarriedActions);
+        ActionPoints = IsShaken ? 1 + Math.Min(carry, 1) : carry + ActionsPerTurn;
+    }
 
     /// <summary>Back to nothing saved up. Called when a fight begins and when it ends.</summary>
     public void ResetActionPoints() => ActionPoints = 0;
+
+    // --- mind ---
+
+    /// <summary>
+    /// Nerve. Everybody starts at 100 and cards that frighten rather than
+    /// wound take it away. It is not a second health bar: nothing dies of a
+    /// broken mind. What it does is decide how much of a turn you get, and how
+    /// likely the next frightening thing is to take hold.
+    /// </summary>
+    public int Mind = MaxMindDefault;
+    public int MaxMind = MaxMindDefault;
+    public const int MaxMindDefault = 100;
+
+    /// <summary>
+    /// Some things cannot be frightened. A Living Stone has no mind to break,
+    /// so nothing takes any, and its bar is drawn grey with an infinity sign
+    /// rather than a number.
+    /// </summary>
+    public bool MindImmune;
+
+    /// <summary>Where the mind bar is drawn from, chasing Mind the way ShownHp chases Hp.</summary>
+    public float ShownMind = -1f;
+
+    /// <summary>How much of it is left, 0..1. Always full for anything immune.</summary>
+    public float MindFraction =>
+        MindImmune ? 1f : MaxMind <= 0 ? 1f : Math.Clamp(Mind / (float)MaxMind, 0f, 1f);
+
+    /// <summary>
+    /// The chance a mind effect takes hold: exactly how much nerve is GONE.
+    /// A card doing 25 to somebody at full lands its effect a quarter of the
+    /// time; the same card against somebody already down to 10 lands nine
+    /// times in ten. The damage is taken first, so a card is measured against
+    /// the state it leaves behind.
+    /// </summary>
+    public float MindEffectChance => MindImmune ? 0f : 1f - MindFraction;
+
+    /// <summary>Takes nerve, and answers how much actually went.</summary>
+    public int LoseMind(int amount)
+    {
+        if (MindImmune || amount <= 0) return 0;
+        int before = Mind;
+        Mind = Math.Max(0, Mind - amount);
+        return before - Mind;
+    }
+
+    /// <summary>
+    /// Nerve returns at the end of every turn — somewhere between a twentieth
+    /// and a seventh of the whole bar, so a fright wears off over a few turns
+    /// rather than lasting the fight or vanishing at once.
+    /// </summary>
+    public const float MindRecoveryLow = 0.05f, MindRecoveryHigh = 0.15f;
+
+    public int RecoverMind(Random rng)
+    {
+        if (MindImmune || Mind >= MaxMind) return 0;
+        float part = MindRecoveryLow + (float)rng.NextDouble() * (MindRecoveryHigh - MindRecoveryLow);
+        int back = Math.Max(1, (int)Math.Round(MaxMind * part));
+        int before = Mind;
+        Mind = Math.Min(MaxMind, Mind + back);
+        return Mind - before;
+    }
+
+    /// <summary>
+    /// Below this much nerve a turn is worth one action instead of two, and
+    /// only one point may be carried into it.
+    /// </summary>
+    public const float ShakenBelow = 0.5f;
+
+    /// <summary>Nerve gone entirely: the turn arrives with nothing to spend.</summary>
+    public bool IsBroken => !MindImmune && Mind <= 0;
+
+    /// <summary>Nerve under half: one action a turn, and one may be carried.</summary>
+    public bool IsShaken => !MindImmune && !IsBroken && MindFraction < ShakenBelow;
+
+    /// <summary>
+    /// How many turns this character runs from whatever frightened it. While
+    /// it lasts they spend their whole move getting away and do nothing else.
+    /// </summary>
+    public int FearTurns;
+    public bool IsAfraid => FearTurns > 0;
 
     // --- status effects ---
     /// <summary>

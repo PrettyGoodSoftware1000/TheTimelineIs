@@ -32,6 +32,14 @@ public class EnemyDef
     /// <summary>Which state folder to draw from; empty means the first with rotations.</summary>
     public string Art = "";
 
+    /// <summary>
+    /// Nerve. "Mind: Infinite" is something that cannot be frightened at all —
+    /// a Living Stone — which is drawn grey with an infinity sign instead of
+    /// a number.
+    /// </summary>
+    public int Mind = CharacterInstance.MaxMindDefault;
+    public bool MindImmune;
+
     /// <summary>The colour of this enemy's placeholder cube while it has no art.</summary>
     public Color Colour = CastPlaceholder.DefaultColour;
 
@@ -145,6 +153,14 @@ public class EnemyLibrary
                     if (int.TryParse(value, out int ap) && ap > 0) current.Actions = ap;
                     else diag.Error(Path, lineNo,
                         $"'{current.Name}': Actions must be a positive number of points a turn, got '{value}'");
+                    break;
+                case "mind":
+                    if (value.Equals("infinite", StringComparison.OrdinalIgnoreCase) ||
+                        value.Equals("none", StringComparison.OrdinalIgnoreCase))
+                        current.MindImmune = true;
+                    else if (int.TryParse(value, out int nerve) && nerve > 0) current.Mind = nerve;
+                    else diag.Error(Path, lineNo, $"'{current.Name}': Mind must be a positive " +
+                        $"number or 'Infinite', got '{value}'");
                     break;
                 case "art":
                     if (CastPlaceholder.LooksLikeAPicture(value))

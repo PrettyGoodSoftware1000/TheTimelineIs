@@ -517,6 +517,8 @@ public static class ContentValidator
             "replay_over", "replay_none", "menu_replays",
             "error_title", "error_continue", "error_more", "error_log", "error_counts",
             "iso_enter", "iso_explore_hint", "iso_clear",
+            "iso_afraid", "iso_mind_damage", "iso_mind_immune", "iso_mind_took",
+            "iso_mind_held", "iso_mind_back", "iso_mind_broken", "iso_mind_shaken", "iso_fear_flees",
             "iso_end_turn", "iso_move_left", "iso_out_of_range",
             "iso_door_open", "iso_victory", "iso_card_range", "iso_transition",
             "iso_move_spent", "iso_pick_target", "iso_dialogue_next",

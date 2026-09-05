@@ -105,6 +105,19 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     private readonly List<CharacterInstance> _targets = new();  // chosen targets, in click order
     private HashSet<Point> _blastSet = new();
 
+    /// <summary>
+    /// Squares a salvo has been aimed at so far, while the player is still
+    /// placing them. Empty for every card that fires on one click.
+    /// </summary>
+    private readonly List<Point> _groundAims = new();
+
+    /// <summary>
+    /// How many of a salvo's blasts cover each square. Two rockets landing
+    /// beside each other hurt twice as much in the middle, which is the whole
+    /// reason for aiming them apart.
+    /// </summary>
+    private readonly Dictionary<Point, int> _overlaps = new();
+
     /// <summary>Ground the card in flight will set alight when it lands.</summary>
     private HashSet<Point> _burnArea = new();
 
@@ -243,6 +256,15 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     private Vector2 _projFrom, _projTo;
     private float _projRotation;
 
+    /// <summary>
+    /// How far a shot wanders off its own line on the way, in art pixels. 0
+    /// for anything that flies true; a rocket weaves.
+    /// </summary>
+    private float _projWander;
+
+    /// <summary>Where in the weave this shot starts, so a salvo does not fly in step.</summary>
+    private float _projSeed;
+
     // dialogue playback
     private List<DialogueLine>? _lines;
     private int _lineIndex;
@@ -355,6 +377,9 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 Form = cls?.StartingForm ?? "",
                 MaxHp = cls?.Hp ?? 20,
                 Hp = cls?.Hp ?? 20,
+                Mind = cls?.Mind ?? CharacterInstance.MaxMindDefault,
+                MaxMind = cls?.Mind ?? CharacterInstance.MaxMindDefault,
+                MindImmune = cls?.MindImmune ?? false,
                 MoveMax = cls?.Movement ?? 5,
                 ActionsPerTurn = cls?.Actions ?? CharacterInstance.DefaultActionsPerTurn,
                 GX = at.X, GY = at.Y,
@@ -375,6 +400,9 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 IsPlayer = false,
                 MaxHp = def.Hp,
                 Hp = def.Hp,
+                Mind = def.Mind,
+                MaxMind = def.Mind,
+                MindImmune = def.MindImmune,
                 MoveMax = def.Movement,
                 ActionsPerTurn = def.Actions,
                 SizeX = def.SizeX, SizeY = def.SizeY,

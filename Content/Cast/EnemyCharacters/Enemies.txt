@@ -7,6 +7,8 @@
 # no art folder yet is drawn as a cube with its initial on top.
 #
 #   Colour: r, g, b            what colour that cube is
+#   Mind: 100                  nerve, or 'Infinite' for something that cannot
+#                              be frightened - drawn grey with an infinity sign
 #   Art: FolderName            optional; which state folder to draw from
 #   Cast Animation: Swing      optional; an animation folder played while a
 #                              card is played
@@ -28,6 +30,7 @@ Movement: 2
 Actions: 2
 Size: 2
 Colour: 106, 105, 109
+Mind: Infinite
 
 Enemy: Imp
 HP: 10

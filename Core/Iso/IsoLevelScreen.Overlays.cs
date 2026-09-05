@@ -123,6 +123,10 @@ public partial class IsoLevelScreen
             if (aiming.IsSummon && !SummonFits(aiming, c)) return;
             _blastSet = AreaOf(aiming, Tile(Acting), c);
         }
+        // a salvo shows the blasts already placed alongside the one being
+        // aimed, so the pattern can be seen while it is still being built
+        foreach (var placed in _groundAims)
+            _blastSet.UnionWith(AreaOf(aiming, Tile(Acting), placed));
         MarkDoomed(aiming);
     }
 
@@ -197,6 +201,24 @@ public partial class IsoLevelScreen
             return lane;
         }
 
+        // A swipe is three squares side by side, right beside the caster, on
+        // the side they aimed at. It is a claw rather than a blast: the click
+        // picks which quarter it lands in and nothing else.
+        if (card.Delivery == Delivery.Swipe)
+        {
+            var swipe = new HashSet<Point>();
+            var step = SwipeStep(from, aim);
+            // the three ring squares centred on that step
+            foreach (var across in step.X != 0
+                         ? new[] { new Point(0, -1), Point.Zero, new Point(0, 1) }
+                         : new[] { new Point(-1, 0), Point.Zero, new Point(1, 0) })
+            {
+                var tile = new Point(from.X + step.X + across.X, from.Y + step.Y + across.Y);
+                if (_level.Shown(tile, _revealed)) swipe.Add(tile);
+            }
+            return swipe;
+        }
+
         var set = new HashSet<Point>();
         foreach (var block in _level.Blocks.Values)
         {
@@ -216,7 +238,22 @@ public partial class IsoLevelScreen
     /// do. Everything else has to be within reach of where the caster stands.
     /// </summary>
     private bool ReachableAim(CharacterInstance me, Point aim, Card card) =>
-        card.Delivery == Delivery.Cone || me.DistanceTo(aim) <= card.Range;
+        card.Delivery is Delivery.Cone or Delivery.Swipe || me.DistanceTo(aim) <= card.Range;
+
+    /// <summary>
+    /// Which of the four grid axes a swipe lands on: the one the aim leans
+    /// towards. Those axes are the screen's diagonals, so a swipe goes
+    /// north-east, north-west, south-east or south-west and never straight
+    /// across — the same four a character has poses for.
+    /// </summary>
+    private static Point SwipeStep(Point from, Point aim)
+    {
+        int dx = aim.X - from.X, dy = aim.Y - from.Y;
+        if (dx == 0 && dy == 0) return new Point(1, 0);
+        return Math.Abs(dx) >= Math.Abs(dy)
+            ? new Point(Math.Sign(dx), 0)
+            : new Point(0, Math.Sign(dy));
+    }
 
     /// <summary>
     /// Where the caster acts from: where it already stands if that works, else

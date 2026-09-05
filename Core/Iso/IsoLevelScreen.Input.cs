@@ -388,6 +388,34 @@ public partial class IsoLevelScreen
             Toast(_ctx.Strings.Format("iso_summon_no_room", ("name", card.Summons)));
             return;
         }
+        // A salvo picks several squares before anything is fired, the way a
+        // multi-target card picks several people. Nothing goes off until the
+        // last one is placed, so the whole pattern can be planned.
+        if (card.Aims > 1)
+        {
+            if (_groundAims.Contains(tile)) return;    // already picked; ignore the repeat
+            _groundAims.Add(tile);
+            _overlayKey = null;
+            if (_groundAims.Count < card.Aims)
+            {
+                Toast(_ctx.Strings.Format("iso_pick_more",
+                    ("count", (card.Aims - _groundAims.Count).ToString())));
+                return;
+            }
+            // every blast at once, and where two overlap the damage lands twice
+            var salvo = new HashSet<Point>();
+            _overlaps.Clear();
+            foreach (var at in _groundAims)
+                foreach (var t in AreaOf(card, Tile(me), at))
+                {
+                    salvo.Add(t);
+                    _overlaps[t] = _overlaps.TryGetValue(t, out int n) ? n + 1 : 1;
+                }
+            var centre = _groundAims[0];
+            _groundAims.Clear();
+            PlayArea(salvo, centre);
+            return;
+        }
         PlayArea(AreaOf(card, Tile(me), tile), tile);
     }
 

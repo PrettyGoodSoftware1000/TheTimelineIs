@@ -17,7 +17,11 @@ public enum CardKind
 /// How the card reaches its target: [melee] walks in, [ranged] throws a
 /// projectile, [cone] sprays a widening wedge from the caster.
 /// </summary>
-public enum Delivery { Instant, Melee, Ranged, Cone }
+/// <summary>
+/// How a card reaches what it hits. Cone and Swipe are aimed by DIRECTION
+/// rather than at a square: the click says which way, not how far.
+/// </summary>
+public enum Delivery { Instant, Melee, Ranged, Cone, Swipe }
 
 /// <summary>One blow in a card's hit sequence: wait Delay, play Sound, deal damage.</summary>
 public class HitEvent
@@ -50,6 +54,21 @@ public class Card
     public List<string> Tags = new();
     public string TypeLine = "";
     public CardKind Kind;
+    /// <summary>
+    /// Nerve this card takes off whatever it reaches, separately from any
+    /// damage it does. A card can do both, either, or only this.
+    /// </summary>
+    public int MindDamage;
+
+    /// <summary>
+    /// What a card tries to do to a victim whose nerve it just broke into,
+    /// and for how long. It is rolled AFTER the mind damage lands, against
+    /// exactly how much nerve is missing: a card taking 25 off somebody at
+    /// full takes hold a quarter of the time. Null when the card only takes
+    /// nerve without trying anything else.
+    /// </summary>
+    public CardEffect? MindEffect;
+
     public int Damage;      // per hit / per target / per enemy — the HIGHEST when it varies
     public int Hits = 1;    // SingleTargetHits only
     public int Targets = 1; // MultiTarget only
@@ -116,7 +135,23 @@ public class Card
     /// works the same way: point at the ground and let go.
     /// </summary>
     public bool TargetsGround =>
-        Kind == CardKind.AoEDamage || Delivery == Delivery.Cone || IsSummon || IsMower;
+        Kind == CardKind.AoEDamage || Delivery is Delivery.Cone or Delivery.Swipe ||
+        IsSummon || IsMower;
+
+    /// <summary>
+    /// The chance out of a hundred that any one square a card lands on
+    /// catches fire, for cards whose FireTiles is a scattering rather than a
+    /// certainty. 0 means every square it covers burns, which is what
+    /// FireTiles did before this existed.
+    /// </summary>
+    public int FireChance;
+
+    /// <summary>
+    /// How many separate squares this card is aimed at before it fires. One
+    /// for almost everything; a salvo picks several and goes off at all of
+    /// them at once, and where two blasts overlap the damage lands twice.
+    /// </summary>
+    public int Aims = 1;
 
     /// <summary>
     /// Whether this card hurts whoever it reaches, side regardless. A card
@@ -307,14 +342,15 @@ public class CardLibrary
     {
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
-        "explosion range", "action points", "friendly fire", "stops movement", "sky angle", "effects", "effect",
+        "explosion range", "aims", "fire chance", "action points", "friendly fire", "stops movement", "mind damage",
+        "mind effect", "sky angle", "effects", "effect",
         "speed", "range", "summons", "replaces", "blast", "dealt", "with", "form", "tags", "type", "sounds",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
     private static readonly Regex Ints = new(@"\d+");
     private static readonly Regex Decimal = new(@"\d+(?:\.\d+)?");
-    private static readonly Regex DeliveryTag = new(@"\[\s*(melee|ranged|cone)\s*\]", RegexOptions.IgnoreCase);
+    private static readonly Regex DeliveryTag = new(@"\[\s*(melee|ranged|cone|swipe)\s*\]", RegexOptions.IgnoreCase);
     private static readonly Regex Bracketed = new(@"\[([^\]]*)\]");
     private static readonly Regex HitToken =
         new(@"\[(?<snd>[^\]]*)\]|delay\s*(?<d>\d+(?:\.\d+)?)", RegexOptions.IgnoreCase);
@@ -398,6 +434,7 @@ public class CardLibrary
                     {
                         "melee" => Delivery.Melee,
                         "cone" => Delivery.Cone,
+                        "swipe" => Delivery.Swipe,
                         _ => Delivery.Ranged,
                     };
                     value = DeliveryTag.Replace(value, "").Trim();
@@ -496,6 +533,37 @@ public class CardLibrary
                     diag.Error(card.Source, lineNo,
                         $"'{card.Name}': Blast must be a number or a range like '1 to 15', got '{value}'");
                 }
+                break;
+
+            case "fire chance":
+                if (int.TryParse(value, out int chance) && chance is > 0 and <= 100)
+                    card.FireChance = chance;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Fire Chance must be 1 to 100, got '{value}'");
+                break;
+
+            case "aims":
+                if (int.TryParse(value, out int aims) && aims > 0) card.Aims = aims;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Aims must be a positive number of squares, got '{value}'");
+                break;
+
+            case "mind damage":
+                if (int.TryParse(value, out int mind) && mind > 0) card.MindDamage = mind;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Mind Damage must be a positive number, got '{value}'");
+                break;
+
+            case "mind effect":
+                // "Fear 1" — the same shape as an ordinary effect, but rolled
+                // against the nerve the card just took rather than landing flat
+                var bits = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (bits.Length is 1 or 2 && Data.Effects.IsKnown(bits[0]))
+                    card.MindEffect = new CardEffect(bits[0],
+                        bits.Length == 2 && int.TryParse(bits[1], out int turns) ? turns : 1);
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Mind Effect must be a known effect and a number, " +
+                    $"like 'Fear 1' — got '{value}'");
                 break;
 
             case "stops movement":
@@ -719,16 +787,22 @@ public class CardLibrary
     {
         if (c.Range <= 0)
             c.Range = c.Delivery == Delivery.Melee ? 1 : 5;   // melee reaches 1 tile; ranged defaults to 5
-        if (c.Kind == CardKind.AoEDamage && c.Delivery != Delivery.Cone && c.ExplosionRange <= 0)
+        // A swipe works out its own three squares from the direction it was
+        // aimed, exactly as a cone works out its wedge, so neither wants one
+        if (c.Kind == CardKind.AoEDamage && c.Delivery is not (Delivery.Cone or Delivery.Swipe) &&
+            c.ExplosionRange <= 0)
         {
             c.ExplosionRange = 1;
             diag.Warn(c.Source, c.Line, $"'{c.Name}': AoE card has no 'Explosion Range:' line; " +
                 "using 1 tile. Range is only how far it can be thrown.");
         }
 
-        if (c.Damage <= 0 && c.Effects.Count == 0)
+        // A card has to DO something. Damage, an effect, or nerve — a card
+        // that only frightens is a real card, and Terror is the whole reason
+        // this reads three ways rather than one.
+        if (c.Damage <= 0 && c.Effects.Count == 0 && c.MindDamage <= 0 && c.MindEffect == null)
             diag.Error(c.Source, c.Line,
-                $"'{c.Name}': no damage number in its Effect line, and no Effects to apply either");
+                $"'{c.Name}': does nothing — no damage, no Effects, no Mind Damage");
         if (c.Tags.Count == 0)
             diag.Error(c.Source, c.Line, $"'{c.Name}': no Tags, so no class can ever play it");
         if (c.CardText.Length == 0)

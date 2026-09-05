@@ -453,12 +453,31 @@ public partial class IsoLevelScreen
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, back.Width, 1),
             Color.Black * 0.5f);
 
+        // The mind bar under it. Purple for anything with nerve to lose; grey
+        // for a Living Stone, which has none to lose and is drawn full.
+        var mindBar = MindRect(c);
+        Ui.FillRect(batch, _ctx.Pixel, mindBar, Color.Black * 0.72f);
+        int mindW = (int)(mindBar.Width * c.MindFraction);
+        // the same pale ghost the health bar uses, so a fright reads as a
+        // chunk sliding off rather than a bar that is simply shorter now
+        if (!c.MindImmune && c.ShownMind > c.Mind)
+        {
+            int ghostMind = (int)(mindBar.Width *
+                Math.Clamp(c.ShownMind / Math.Max(1f, c.MaxMind), 0f, 1f));
+            if (ghostMind > mindW)
+                Ui.FillRect(batch, _ctx.Pixel,
+                    new Rectangle(mindBar.X + mindW, mindBar.Y, ghostMind - mindW, mindBar.Height),
+                    new Color(225, 200, 245));
+        }
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(mindBar.X, mindBar.Y, mindW, mindBar.Height),
+            c.MindImmune ? new Color(130, 130, 138) : new Color(150, 60, 200));
+
         // whoever is selected wears a small arrow pointing down at their bar
         if (IsSelected(c)) DrawSelectionArrow(batch, back);
 
         if (c.CurseBonus > 0)
             Ui.FillRect(batch, _ctx.Pixel,
-                new Rectangle(back.X, back.Bottom + 1, back.Width, 1), new Color(150, 60, 200));
+                new Rectangle(back.X, MindRect(c).Bottom + 1, back.Width, 1), new Color(180, 90, 230));
 
         // Marks under the bar, below the curse stripe so nothing overlaps.
         // Side by side when a character has both, rather than stacked.
@@ -470,7 +489,7 @@ public partial class IsoLevelScreen
             int row = marks.Count * MarkPx + (marks.Count - 1);
             int x = back.Center.X - row / 2 + i * (MarkPx + 1);
             batch.Draw(_ctx.Assets.LoadTexture($"Content/Images/Pixel/Effects/{marks[i]}.png"),
-                new Rectangle(x, back.Bottom + 3, MarkPx, MarkPx), Color.White);
+                new Rectangle(x, MindRect(c).Bottom + 3, MarkPx, MarkPx), Color.White);
         }
 
         // burning: one flame per stack, sitting on the bar
@@ -499,10 +518,24 @@ public partial class IsoLevelScreen
         var art = ArtFor(c);
         var solid = ArtBounds.Solid(art);
         var rect = SpriteRect(c);
-        int w = Math.Clamp(solid.Width, 20, 48);
+        int w = Math.Clamp(solid.Width + 8, 32, 64);
         return new Rectangle(
             rect.X + (solid.Left + solid.Right) / 2 - w / 2,
-            rect.Y + solid.Top - 8, w, 4);
+            rect.Y + solid.Top - (BarH + MindH + 5), w, BarH);
+    }
+
+    /// <summary>How tall the health and mind bars are, in art pixels.</summary>
+    private const int BarH = 7, MindH = 4;
+
+    /// <summary>
+    /// The mind bar: nerve, directly under the health bar and a little
+    /// shorter, so the two read as one block without being mistaken for each
+    /// other. Anything that cannot be frightened gets a grey one.
+    /// </summary>
+    private Rectangle MindRect(CharacterInstance c)
+    {
+        var bar = BarRect(c);
+        return new Rectangle(bar.X, bar.Bottom + 1, bar.Width, MindH);
     }
 
     /// <summary>The triangle on the floor showing which way a placeholder faces.</summary>
@@ -530,9 +563,20 @@ public partial class IsoLevelScreen
     {
         var back = ToDesign(BarRect(c));
         if (back.Width <= 0) return;
+        // the numbers fill the bars they sit in, so they grow with the zoom
         Ui.DrawTextCentered(batch, _ctx.Font,
             c.Armor > 0 ? $"{c.Hp}+{c.Armor}" : c.Hp.ToString(), back, Color.White,
-            back.Height * 0.0075f);
+            back.Height * 0.0125f);
+
+        // Nerve, in its own bar. An infinity sign for anything that cannot be
+        // frightened: a Living Stone showing "100" would look like a number
+        // somebody could get down.
+        var mindBox = ToDesign(MindRect(c));
+        if (mindBox.Width > 0)
+            Ui.DrawTextCentered(batch, _ctx.Font,
+                c.MindImmune ? "\u221e" : c.Mind.ToString(), mindBox,
+                c.MindImmune ? new Color(210, 210, 218) : Color.White,
+                mindBox.Height * 0.0125f);
 
         for (int i = 0; i < c.Popups.Count; i++)
         {
@@ -580,8 +624,20 @@ public partial class IsoLevelScreen
     /// ages the damage numbers floating off people. Runs on real time rather
     /// than on turns, so it keeps going while a card is mid-flight.
     /// </summary>
+    /// <summary>Nerve the mind bar closes per second while catching up.</summary>
+    private const float MindCatchUpPerSecond = 90f;
+
     private void UpdateHealthBars(float dt)
     {
+        // the mind bar chases its number the way the health bar does, so a
+        // fright reads as nerve draining rather than a bar that jumped
+        foreach (var c in Everyone)
+        {
+            if (c.ShownMind < 0) c.ShownMind = c.Mind;
+            else if (c.ShownMind > c.Mind)
+                c.ShownMind = Math.Max(c.Mind, c.ShownMind - MindCatchUpPerSecond * dt);
+            else c.ShownMind = c.Mind;
+        }
         foreach (var c in Everyone)
         {
             if (c.ShownHp < 0f) c.ShownHp = c.Hp;          // first sight of them
@@ -669,7 +725,26 @@ public partial class IsoLevelScreen
         float t = _actDur <= 0f ? 1f : MathHelper.Clamp(_actT / _actDur, 0f, 1f);
         var tex = ProjectileArt(_actingCard.ProjectileArt);
         var pos = Vector2.Lerp(_projFrom, _projTo, t);
-        batch.Draw(tex, pos, null, Color.White, _projRotation,
+        float angle = _projRotation;
+
+        // A rocket does not fly straight. It weaves across its own line and
+        // settles onto the target as it arrives — the wander is widest in the
+        // middle of the flight and nothing at either end, so it always leaves
+        // the caster and lands on the square it was aimed at.
+        if (_projWander != 0f)
+        {
+            var line = _projTo - _projFrom;
+            if (line != Vector2.Zero)
+            {
+                var across = Vector2.Normalize(new Vector2(-line.Y, line.X));
+                float taper = (float)Math.Sin(t * Math.PI);
+                float sway = (float)Math.Sin(t * Math.PI * 3.0 + _projSeed) * _projWander * taper;
+                pos += across * sway;
+                // point where it is actually going, not where it was aimed
+                angle += sway * 0.02f;
+            }
+        }
+        batch.Draw(tex, pos, null, Color.White, angle,
             new Vector2(tex.Width / 2f, tex.Height / 2f), 1f, SpriteEffects.None, 0f);
     }
 

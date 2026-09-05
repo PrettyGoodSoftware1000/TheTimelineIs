@@ -36,6 +36,10 @@ public class PlayerClass
     /// <summary>The colour of this class's placeholder cube while it has no art.</summary>
     public Color Colour = CastPlaceholder.DefaultColour;
 
+    /// <summary>Nerve. "Mind: Infinite" cannot be frightened at all.</summary>
+    public int Mind = CharacterInstance.MaxMindDefault;
+    public bool MindImmune;
+
     public List<string> CardTags = new();  // defaults to the class's own name
 
     /// <summary>Declared with "Form: Name, Folder". The first one is where the class starts.</summary>
@@ -170,6 +174,14 @@ public class ClassLibrary
                     if (int.TryParse(value, out int ap) && ap > 0) current.Actions = ap;
                     else diag.Error(Path, lineNo,
                         $"'{current.Name}': Actions must be a positive number of points a turn, got '{value}'");
+                    break;
+                case "mind":
+                    if (value.Equals("infinite", StringComparison.OrdinalIgnoreCase) ||
+                        value.Equals("none", StringComparison.OrdinalIgnoreCase))
+                        current.MindImmune = true;
+                    else if (int.TryParse(value, out int nerve) && nerve > 0) current.Mind = nerve;
+                    else diag.Error(Path, lineNo, $"'{current.Name}': Mind must be a positive " +
+                        $"number or 'Infinite', got '{value}'");
                     break;
                 case "art":
                     if (CastPlaceholder.LooksLikeAPicture(value))

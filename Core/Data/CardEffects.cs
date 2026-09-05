@@ -90,11 +90,18 @@ public static class Effects
     /// </summary>
     public const string BathSalts = "BathSalts";
 
+    /// <summary>
+    /// Fear N: the victim runs. For N of their turns they spend the whole
+    /// move getting away from whoever frightened them and do nothing else —
+    /// no card, no choice. It is what a broken nerve looks like on the board.
+    /// </summary>
+    public const string Fear = "Fear";
+
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
     public static readonly string[] Known =
     {
         Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles,
-        Summon, Guard, Vulnerable, Mower, Stun, Swap, BathSalts,
+        Summon, Guard, Vulnerable, Mower, Stun, Swap, BathSalts, Fear,
     };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
