@@ -46,7 +46,7 @@ dotnet run --project Desktop -- --editor        # the level editor
 
 ## The pixel grid
 
-- A square is a 64x32 diamond. One foot of height lifts it 8 pixels.
+- A square is a 128x64 diamond. One foot of height lifts it 16 pixels.
 - The board draws through `PixelCamera`: a whole-number zoom and a
   whole-number scroll, PointClamp. One art pixel is exactly `Zoom` screen
   pixels, everywhere, at every zoom.
@@ -225,7 +225,7 @@ All of them: `Key: value`, `#` comments, case-insensitive, blank lines ignored.
 | `Content/Cards/PlayerCards.txt`, `EnemyCards.txt` | Cards. Same format; the tag decides who holds one |
 | `Content/Text/Strings.txt` | Every player-facing string, as `key = text` |
 | `Content/Config.txt` | Overlay opacity |
-| `Content/Images/Blocks/Blocks.txt` | Ground families: 64x32 pixel pieces, anchor `32, 16` |
+| `Content/Images/Blocks/Blocks.txt` | Ground families: 128x64 pixel pieces, anchor `64, 32` |
 
 - A card's `Tags:` are **labels, not class names**. A class holds its own name
   unless `Card Tags:` says otherwise, so several classes can share a pool.
@@ -240,9 +240,9 @@ All of them: `Key: value`, `#` comments, case-insensitive, blank lines ignored.
 | Asset | Path | Notes |
 |---|---|---|
 | World map | `Content/Images/Map/Map.png` | painted; the map is not pixel art |
-| Ground | `Content/Images/Blocks/` | 64x32 surfaces, 64x56 blocks |
+| Ground | `Content/Images/Blocks/` | 128x64 surfaces, 128x112 blocks |
 | Characters | `Content/Cast/.../{Name}/{State}/rotations/*.png` | any size, drawn 1:1 |
-| Effects | `Content/Images/Pixel/Effects/` | 8x8 icons, 16x16 ball |
+| Effects | `Content/Images/Pixel/Effects/` | 16x16 icons, 32x32 ball |
 | Decorations | `Content/Images/Decorations/` | hung by the bottom on the square |
 
 - Folders, files and declared names must match exactly: `Dirtbag`, not `Joe_dirtbag`.

@@ -4,8 +4,8 @@
 #                       then a piece inside it or Random.
 # Piece: <file.png>     one image, drawn whole.
 # Anchor: <x>, <y>      the pixel of that image that lands on the exact centre
-#                       of a grid square's top face. A 64x32 surface is
-#                       anchored at 32, 16.
+#                       of a grid square's top face. A 128x64 surface is
+#                       anchored at 64, 32.
 # Scale: 100            always 100 here. The line is kept so an old file
 #                       still reads; anything else is an error.
 #
@@ -14,35 +14,35 @@
 # and which half a square draws from is decided by its position, so a dark
 # piece never lands beside another dark one.
 #
-# A surface is 64x32: one square's top face. A block is the same face over a
-# 24px body, for ground with height.
+# A surface is 128x64: one square's top face. A block is the same face over a
+# 48px body, for ground with height.
 
 Family: PixelGrass
 Piece: PixelGrassSurface.png
-Anchor: 32, 16
+Anchor: 64, 32
 Scale: 100
 
 Family: PixelStone
 Piece: PixelStoneSurface.png
-Anchor: 32, 16
+Anchor: 64, 32
 Scale: 100
 
 Family: PixelGrassBlock
 Piece: PixelGrassBlock.png
-Anchor: 32, 16
+Anchor: 64, 32
 Scale: 100
 
 Family: PixelStoneBlock
 Piece: PixelStoneBlock.png
-Anchor: 32, 16
+Anchor: 64, 32
 Scale: 100
 
 Family: PixelCheckerboard
 Checkerboard Dark:
 Piece: PixelStoneSurface.png
-Anchor: 32, 16
+Anchor: 64, 32
 Scale: 100
 Checkerboard Light:
 Piece: PixelGrassSurface.png
-Anchor: 32, 16
+Anchor: 64, 32
 Scale: 100

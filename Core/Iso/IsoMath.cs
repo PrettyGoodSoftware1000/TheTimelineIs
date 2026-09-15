@@ -4,8 +4,8 @@ using Microsoft.Xna.Framework;
 namespace TheTimelineIs.Core.Iso;
 
 /// <summary>
-/// The isometric projection: 2:1 diamonds, 64x32 ART pixels per tile, with
-/// block height in feet lifting things 8 pixels per foot. The camera never
+/// The isometric projection: 2:1 diamonds, 128x64 ART pixels per tile, with
+/// block height in feet lifting things 16 pixels per foot. The camera never
 /// rotates. Grid distance is orthogonal 1 / diagonal 2 — which works out to
 /// plain Manhattan distance — and every range and movement rule measures with
 /// it.
@@ -16,9 +16,25 @@ namespace TheTimelineIs.Core.Iso;
 /// </summary>
 public static class IsoMath
 {
-    public const int TileW = 64;
-    public const int TileH = 32;
-    public const int FootPx = 8;
+    /// <summary>
+    /// How wide one square is. THE number: every other length in the game is
+    /// a fraction of it, so moving to bigger art means changing this and
+    /// redrawing the art, not hunting through the drawing code.
+    /// </summary>
+    public const int TileW = 128;
+
+    /// <summary>Half as tall as it is wide — the 2:1 diamond every iso game uses.</summary>
+    public const int TileH = TileW / 2;
+
+    /// <summary>How far one foot of block height lifts a tile up the screen.</summary>
+    public const int FootPx = TileW / 8;
+
+    /// <summary>
+    /// A length that was picked by eye against a 64-wide tile, at whatever
+    /// size tiles are now. Bars, icons, outlines and boxes all go through
+    /// this, so they keep their proportions when the grid changes.
+    /// </summary>
+    public static int Px(int atSixtyFour) => Math.Max(1, atSixtyFour * TileW / 64);
 
     /// <summary>Screen position of the CENTER of a tile's top surface.</summary>
     public static Vector2 ToScreen(int gx, int gy, int heightFeet, Vector2 origin) => new(

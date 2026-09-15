@@ -70,7 +70,7 @@ goes in `Desktop`.
 ## Pixel rules
 
 - Art is never scaled. One art pixel is `Zoom` screen pixels — a whole number.
-- A square is 64x32. A foot of height is 8 pixels.
+- A square is 128x64. A foot of height is 16 pixels.
 - Four poses: south-east, south-west, north-east, north-west. A walk only
   ever ends in one of those, because a grid axis IS a screen diagonal.
 - Aiming may point at north/south/east/west; it is drawn as the nearest pose.

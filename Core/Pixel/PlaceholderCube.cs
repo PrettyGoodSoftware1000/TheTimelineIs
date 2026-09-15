@@ -25,7 +25,7 @@ namespace TheTimelineIs.Core.Pixel;
 public static class PlaceholderCube
 {
     /// <summary>Height of the box's side walls, in pixels.</summary>
-    private const int Walls = 12;
+    private static int Walls => IsoMath.Px(12);
 
     /// <summary>How wide a box is for a body of the given footprint.</summary>
     public static Point SizeOf(int sizeX, int sizeY) => new(

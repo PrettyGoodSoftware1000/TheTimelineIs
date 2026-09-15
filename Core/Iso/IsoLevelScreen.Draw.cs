@@ -294,10 +294,12 @@ public partial class IsoLevelScreen
     private const string FireArtPath = "Content/Images/Effects/FireTile.png";
 
     /// <summary>
-    /// How far back along its angle a sky shot starts, in virtual pixels. Well
-    /// past the top of the screen, so it is already falling when it appears.
+    /// How far back along its angle a sky shot starts, in art pixels. Well
+    /// past the top of the screen, so it is already falling when it appears —
+    /// which means it has to grow with the tiles, or a bigger grid starts the
+    /// shot inside the picture.
     /// </summary>
-    private const float SkyRunUp = 3000f;
+    private static float SkyRunUp => IsoMath.Px(3000);
 
     private Rectangle DiamondRect(Point tile, int height)
     {
@@ -315,7 +317,7 @@ public partial class IsoLevelScreen
     {
         var tex = _ctx.Assets.LoadTexture("Content/Images/Pixel/Effects/Skull.png");
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
-        const int size = 12;
+        int size = IsoMath.Px(12);
         batch.Draw(tex, new Rectangle((int)(c.X - size / 2f), (int)(c.Y - size / 2f), size, size),
             Color.White * 0.85f);
     }
@@ -378,7 +380,7 @@ public partial class IsoLevelScreen
         // squeezed to a tile's width when it is still an old painted picture
         int w = Math.Min(tex.Width, IsoMath.TileW);
         int h = (int)(w * tex.Height / (float)tex.Width);
-        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 5 - h), w, h), tint);
+        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + IsoMath.Px(5) - h), w, h), tint);
     }
 
     /// <param name="alpha">
@@ -505,7 +507,7 @@ public partial class IsoLevelScreen
 
 
     /// <summary>How big a status icon is, in art pixels.</summary>
-    private const int MarkPx = 8;
+    private static int MarkPx => IsoMath.Px(8);
 
     /// <summary>
     /// The health bar over somebody's head, in art pixels. Its width follows
@@ -518,14 +520,15 @@ public partial class IsoLevelScreen
         var art = ArtFor(c);
         var solid = ArtBounds.Solid(art);
         var rect = SpriteRect(c);
-        int w = Math.Clamp(solid.Width + 8, 32, 64);
+        int w = Math.Clamp(solid.Width + IsoMath.Px(8), IsoMath.Px(32), IsoMath.Px(64));
         return new Rectangle(
             rect.X + (solid.Left + solid.Right) / 2 - w / 2,
             rect.Y + solid.Top - (BarH + MindH + 5), w, BarH);
     }
 
     /// <summary>How tall the health and mind bars are, in art pixels.</summary>
-    private const int BarH = 7, MindH = 4;
+    private static int BarH => IsoMath.Px(7);
+    private static int MindH => IsoMath.Px(4);
 
     /// <summary>
     /// The mind bar: nerve, directly under the health bar and a little
@@ -667,7 +670,7 @@ public partial class IsoLevelScreen
 
     /// <summary>How thick the "about to be hit" outline is, in the art's own pixels.</summary>
     /// <summary>How thick the red line round a doomed sprite is, in art pixels.</summary>
-    private const int DoomedOutline = 1;
+    private static int DoomedOutline => IsoMath.Px(1);
 
     /// <summary>
     /// Traces a red line round the ART of a sprite — the drawn pixels, soft
@@ -685,7 +688,7 @@ public partial class IsoLevelScreen
     /// <summary>A small solid triangle pointing down, sitting on top of the health bar.</summary>
     private void DrawSelectionArrow(SpriteBatch batch, Rectangle bar)
     {
-        const int width = 9, height = 5;
+        int width = IsoMath.Px(9), height = IsoMath.Px(5);
         int baseY = bar.Y - 2 - height;
         for (int row = 0; row < height; row++)
         {

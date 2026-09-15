@@ -17,7 +17,13 @@ public partial class IsoLevelScreen
     // ---------------- card + enemy actions ----------------
 
     /// <summary>How far off its line a rocket wanders at the middle of its flight.</summary>
-    private const float RocketWander = 14f;
+    private static float RocketWander => IsoMath.Px(14);
+
+    /// <summary>
+    /// How far above the feet a shot leaves and lands — chest height, so
+    /// projectiles fly across bodies instead of along the floor.
+    /// </summary>
+    private static float MuzzleHeight => IsoMath.Px(24);
 
     private void PlayCard(List<CharacterInstance> aimed, Point blastCenter)
     {
@@ -142,8 +148,8 @@ public partial class IsoLevelScreen
                 // a self-cast has nobody to fly at, but its effects still have
                 // to resolve — skip the projectile, not the hit phase
                 if (aim == null) { _hitIndex = 0; EnterAct(Act.Hits, 0f); return; }
-                _projFrom = FootOf(_actor!) - new Vector2(0, 160);
-                _projTo = FootOf(aim) - new Vector2(0, 160);
+                _projFrom = FootOf(_actor!) - new Vector2(0, MuzzleHeight);
+                _projTo = FootOf(aim) - new Vector2(0, MuzzleHeight);
                 _projRotation = (float)Math.Atan2(_projTo.Y - _projFrom.Y, _projTo.X - _projFrom.X);
                 // a salvo weaves; everything else flies true
                 _projWander = ranged.Aims > 1 ? RocketWander : 0f;

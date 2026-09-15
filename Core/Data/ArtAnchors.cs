@@ -14,7 +14,7 @@ public record ArtAnchor(int X, int Y, bool Vertical);
 ///
 /// Art comes out of the tool with the figure wherever the artist drew it, and a
 /// character drawn a little left of centre stands a little left of centre — on
-/// a 64-wide square that is plain to see. So each one gets an offset, tuned by
+/// a square that is plain to see. So each one gets an offset, tuned by
 /// eye from the ~ menu while looking at the level, and written back here.
 ///
 /// SIDEWAYS ONLY, unless asked otherwise. Height already works: a character is

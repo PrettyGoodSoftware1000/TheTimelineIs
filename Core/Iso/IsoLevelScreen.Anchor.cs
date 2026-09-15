@@ -12,7 +12,7 @@ namespace TheTimelineIs.Core.Iso;
 /// <summary>
 /// Anchor Art: nudging a character's picture on its square while looking at it.
 ///
-/// Art arrives with the figure wherever the artist drew it, and on a 64-wide
+/// Art arrives with the figure wherever the artist drew it, and on a one-square-wide
 /// square being a couple of pixels off centre is plain to see. Rather than
 /// re-export, the offset is tuned here by eye and written to Anchors.txt.
 ///

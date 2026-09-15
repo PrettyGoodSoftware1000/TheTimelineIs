@@ -19,8 +19,8 @@ namespace TheTimelineIs.Core.Pixel;
 public static class FacingMark
 {
     /// <summary>The mark's footprint, half a tile across.</summary>
-    public const int Width = 32;
-    public const int Height = 16;
+    public static int Width => Iso.IsoMath.TileW / 2;
+    public static int Height => Iso.IsoMath.TileH / 2;
 
     private static readonly Dictionary<(GraphicsDevice, Facing8), Texture2D> Made = new();
 
