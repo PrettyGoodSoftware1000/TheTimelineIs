@@ -221,6 +221,7 @@ public partial class IsoLevelScreen
         if (path.Count == 0) return;
         Record(ReplayEventKind.Move, who, from: Tile(who), to: goal, amount: path.Count);
         ForgetWhereTheyStood(who);
+        who.Face(Tile(who), path[0]);
         _escorts.Add(new Escort { Who = who, Path = path, From = Tile(who) });
     }
 
@@ -246,8 +247,13 @@ public partial class IsoLevelScreen
         _escorts.Clear();          // a new walk is not the old one's group
         _walkPath = Pathfinder.PathTo(parent, _walkFrom, goal);
         if (_walkPath.Count > 0)
+        {
+            // turned before the first step, so the walk starts off facing the
+            // way it is going instead of swinging round after a square
+            mover.Face(_walkFrom, _walkPath[0]);
             Record(ReplayEventKind.Move, mover, from: _walkFrom, to: goal,
                 amount: _walkPath.Count);
+        }
         _walkT = 0f;
         _walkPause = 0f;
         _afterWalk = after;

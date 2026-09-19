@@ -35,9 +35,15 @@ public partial class IsoLevelScreen
     /// canvas stands on the floor rather than floating above it, and a big
     /// enemy is big because its art is.
     /// </summary>
-    private Rectangle SpriteRect(CharacterInstance c)
+    private Rectangle SpriteRect(CharacterInstance c) => RectFor(c, ArtFor(c));
+
+    /// <summary>
+    /// Where a picture of this character goes. Every frame of every animation
+    /// is placed by the same rule the standing pose is, so nothing jumps
+    /// sideways when one starts or stops.
+    /// </summary>
+    private Rectangle RectFor(CharacterInstance c, Texture2D art)
     {
-        var art = ArtFor(c);
         var solid = ArtBounds.Solid(art);
         var foot = FootOf(c);
         // whatever the artist left round the figure, nudged by hand from the
@@ -48,6 +54,24 @@ public partial class IsoLevelScreen
             (int)foot.X - (solid.Left + solid.Right) / 2 + nudge.X,
             (int)foot.Y - (nudge.Vertical ? art.Height / 2 - nudge.Y : solid.Bottom),
             art.Width, art.Height);
+    }
+
+    /// <summary>
+    /// The animation frame standing in for a character's rotation right now,
+    /// or null when it is simply standing there.
+    ///
+    /// A cast beats a walk, so a card played at the end of a move shows the
+    /// swing rather than the last step. The walk runs off the step's own
+    /// progress instead of a clock of its own: one cycle of the frames covers
+    /// exactly one square, however fast the walk is set to go.
+    /// </summary>
+    private Texture2D? AnimationFrame(CharacterInstance c)
+    {
+        if (c.CastFrames is { Count: > 0 } cast)
+            return cast[Math.Clamp((int)(c.CastAnimTime * DirectionalSprite.Fps), 0, cast.Count - 1)];
+        if (MovingToward(c) == null) return null;
+        if (_ctx.Sprites.Frames(c, DirectionalSprite.Walk) is not { Count: > 0 } walk) return null;
+        return walk[Math.Clamp((int)(_walkT * walk.Count), 0, walk.Count - 1)];
     }
 
     /// <summary>
@@ -393,24 +417,10 @@ public partial class IsoLevelScreen
         var art = ArtFor(c);
         var rect = SpriteRect(c);
 
-        // While a cast is running its frames stand in for the sprite, hung by
-        // the same feet, so nothing jumps when it starts or stops.
-        if (c.CastFrames is { Count: > 0 } frames)
-        {
-            int i = Math.Clamp((int)(c.CastAnimTime * DirectionalSprite.Fps), 0, frames.Count - 1);
-            var frame = frames[i];
-            // a frame is placed exactly as the standing picture is, so nothing
-            // jumps sideways when the animation starts
-            var solid = ArtBounds.Solid(frame);
-            var foot = FootOf(c);
-            var nudge = _ctx.Anchors.For(c.Name, c.Art);
-            batch.Draw(frame, new Rectangle(
-                (int)foot.X - (solid.Left + solid.Right) / 2 + nudge.X,
-                (int)foot.Y - (nudge.Vertical ? frame.Height / 2 - nudge.Y : solid.Bottom),
-                frame.Width, frame.Height), Color.White * alpha);
-        }
-        else
-            batch.Draw(art, rect, Color.White * alpha);
+        // A cast or a walk stands in for the standing pose while it runs.
+        var picture = AnimationFrame(c) ?? art;
+        batch.Draw(picture, ReferenceEquals(picture, art) ? rect : RectFor(c, picture),
+            Color.White * alpha);
 
         // A placeholder cube has no front, so the yellow triangle is the only
         // thing saying which way it is turned. It goes on AFTER the cube: the

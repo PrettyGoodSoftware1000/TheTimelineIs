@@ -12,8 +12,8 @@ namespace TheTimelineIs.Core.Pixel;
 ///
 /// Art is a folder per state inside the character's folder, with rotations/
 /// and animations/ inside it. Which folder is looked up by the character's
-/// form — a Werewitch in wolf shape asks for "WolfForm" — or, for anyone with
-/// no Art line, the first folder that has rotations in it.
+/// form — a Werewitch in wolf shape asks for "WolfForm" — and the state
+/// folder inside that is found by looking; see DirectionalSprite.RootOf.
 ///
 /// Anybody with no art yet gets a placeholder cube instead of vanishing. That
 /// is the normal state of this branch while the art is being drawn, so it is
@@ -49,23 +49,12 @@ public class CastSprites
         if (_sprites.TryGetValue(key, out var known)) return known;
 
         DirectionalSprite? found = null;
-        string? state = who.Art.Length > 0 ? who.Art : FirstStateWithArt(who.Folder);
-        if (state != null)
+        if (DirectionalSprite.RootOf(_index, who.Folder, who.Art) is string root)
         {
-            var sprite = DirectionalSprite.Load(_assets, _index, who.Folder, state);
+            var sprite = DirectionalSprite.Load(_assets, _index, root);
             if (sprite.HasArt) found = sprite;
         }
         return _sprites[key] = found;
-    }
-
-    /// <summary>The first state folder under a character that has rotations in it.</summary>
-    private string? FirstStateWithArt(string characterFolder)
-    {
-        foreach (string state in _index.Folders(characterFolder))
-            if (AssetLoader.Exists(
-                    $"{characterFolder}/{state}/rotations/{Facings.Default.FileName()}.png"))
-                return state;
-        return null;
     }
 
     /// <summary>

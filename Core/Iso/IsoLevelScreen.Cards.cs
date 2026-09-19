@@ -76,7 +76,7 @@ public partial class IsoLevelScreen
             Log(_ctx.Strings.Format("iso_channel_start",
                 ("name", _actor.Name), ("card", card.Name)));
             _ctx.Sounds.Play(card.CastingSound);
-            StartCastAnimation(_actor);
+            StartCastAnimation(_actor, card);
             _actingCard = null;
             _victims.Clear();
             ResumeAfterAction();
@@ -85,7 +85,7 @@ public partial class IsoLevelScreen
         if (card.IsChannelled) ClearChannel(_actor);
 
         _ctx.Sounds.Play(card.CastingSound);
-        StartCastAnimation(_actor!);
+        StartCastAnimation(_actor!, card);
         _mode = Mode.Acting;
         EnterAct(Act.Casting, card.CastingTime ?? _ctx.Sounds.Duration(card.CastingSound));
     }

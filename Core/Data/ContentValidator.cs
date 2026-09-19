@@ -52,16 +52,16 @@ public static class ContentValidator
                 !index.Folders(folder).Contains(state, StringComparer.OrdinalIgnoreCase))
                 diag.Warn(file, line, $"'{who}': there is no folder '{state}' under {folder} — " +
                     "drawing a cube. Make the folder, or fix the name.");
-            if (animation.Length > 0 && index != null)
+            if (animation.Length > 0 && index != null &&
+                Pixel.DirectionalSprite.RootOf(index, folder, state) is string root)
             {
-                string root = state.Length > 0 ? state : FirstStateWithArt(index, folder) ?? "";
                 bool any = false;
                 foreach (var f in Pixel.Facings.All)
-                    if (index.Images($"{folder}/{root}/animations/{animation}/{f.FileName()}").Count > 0)
+                    if (index.Images($"{root}/animations/{animation}/{f.FileName()}").Count > 0)
                         any = true;
                 if (!any)
                     diag.Warn(file, line, $"'{who}': cast animation '{animation}' has no frames under " +
-                        $"{folder}/{root}/animations/{animation}/<direction>/ — casting will not animate");
+                        $"{root}/animations/{animation}/<direction>/ — casting will not animate");
             }
         }
 
@@ -79,14 +79,6 @@ public static class ContentValidator
             var def = enemies.Get(name)!;
             CheckState(EnemyLibrary.Path, def.Line, name, def.Folder, def.Art, def.CastAnimation);
         }
-    }
-
-    private static string? FirstStateWithArt(Platform.IContentIndex index, string folder)
-    {
-        foreach (string state in index.Folders(folder))
-            if (AssetLoader.Exists($"{folder}/{state}/rotations/{Pixel.Facings.Default.FileName()}.png"))
-                return state;
-        return null;
     }
 
     /// <summary>

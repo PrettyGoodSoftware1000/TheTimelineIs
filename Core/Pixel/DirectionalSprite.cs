@@ -11,8 +11,8 @@ namespace TheTimelineIs.Core.Pixel;
 /// A character drawn from eight rotations, and whatever animations sit beside
 /// them, laid out the way the art tool exports:
 ///
-///   {Character}/{State}/rotations/south-east.png
-///   {Character}/{State}/animations/GunShot/east/*.png
+///   {Character}/{Form}/{State}/rotations/south-east.png
+///   {Character}/{Form}/{State}/animations/SpellCast/south-east/*.png
 ///
 /// Both are read by LOOKING, not by being told: the rotations are eight known
 /// compass names, and an animation is however many pictures are in its folder,
@@ -23,11 +23,17 @@ namespace TheTimelineIs.Core.Pixel;
 /// </summary>
 public class DirectionalSprite
 {
-    /// <summary>Where this character's states live, e.g. ".../Werewitch".</summary>
-    public string Folder { get; }
+    /// <summary>The animation played while a character walks between squares.</summary>
+    public const string Walk = "Walk";
 
-    /// <summary>Which state is loaded, e.g. "WitchForm".</summary>
-    public string State { get; }
+    /// <summary>
+    /// The animation played when a card is cast and nothing more specific was
+    /// asked for — not the card's own line, not the class's.
+    /// </summary>
+    public const string SpellCast = "SpellCast";
+
+    /// <summary>The folder holding this character's rotations/ and animations/.</summary>
+    public string Root { get; }
 
     private readonly Dictionary<Facing8, Texture2D> _rotations = new();
     private readonly Dictionary<string, Dictionary<Facing8, List<Texture2D>>> _animations =
@@ -38,17 +44,33 @@ public class DirectionalSprite
     /// <summary>The names of every animation found, for reporting.</summary>
     public IEnumerable<string> AnimationNames => _animations.Keys;
 
-    private DirectionalSprite(string folder, string state)
+    private DirectionalSprite(string root) => Root = root;
+
+    /// <summary>
+    /// The folder that actually holds rotations/ and animations/, starting
+    /// from a character's folder and whatever its Art or Form line named.
+    ///
+    /// The art tool nests a STATE inside that — "Idle" is the pose an
+    /// animation starts from — so the named folder is usually one level above
+    /// the pictures. Rather than make every content file spell the state out,
+    /// this walks down: the named folder if it has rotations in it, otherwise
+    /// the first folder inside it that does.
+    /// </summary>
+    public static string? RootOf(IContentIndex index, string folder, string art)
     {
-        Folder = folder;
-        State = state;
+        string start = art.Length > 0 ? $"{folder}/{art}" : folder;
+        if (HasRotations(start)) return start;
+        foreach (string state in index.Folders(start))
+            if (HasRotations($"{start}/{state}")) return $"{start}/{state}";
+        return null;
     }
 
-    public static DirectionalSprite Load(AssetLoader assets, IContentIndex index,
-        string folder, string state)
+    private static bool HasRotations(string root) =>
+        Facings.All.Any(f => AssetLoader.Exists($"{root}/rotations/{f.FileName()}.png"));
+
+    public static DirectionalSprite Load(AssetLoader assets, IContentIndex index, string root)
     {
-        var sprite = new DirectionalSprite(folder, state);
-        string root = $"{folder}/{state}";
+        var sprite = new DirectionalSprite(root);
 
         foreach (var facing in Facings.All)
         {

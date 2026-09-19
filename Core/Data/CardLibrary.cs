@@ -88,6 +88,14 @@ public class Card
     public bool SingleProjectile;
     public string ProjectileArt = "Ball.png";
 
+    /// <summary>
+    /// The animation folder the caster plays for THIS card, under its state's
+    /// animations/. Empty falls back to whatever the class or form casts with,
+    /// and failing that to SpellCast — so only a card that wants its own
+    /// swing has to say so.
+    /// </summary>
+    public string Animation = "";
+
     public string? CastingSound;
     /// <summary>
     /// Seconds to wait before launching. Null means "Use Sound Time" — the
@@ -343,7 +351,7 @@ public class CardLibrary
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
         "explosion range", "aims", "fire chance", "action points", "friendly fire", "stops movement", "mind damage",
-        "mind effect", "sky angle", "effects", "effect",
+        "mind effect", "sky angle", "animation", "effects", "effect",
         "speed", "range", "summons", "replaces", "blast", "dealt", "with", "form", "tags", "type", "sounds",
     };
 
@@ -447,6 +455,13 @@ public class CardLibrary
 
             case "projectile art":
                 if (value.Length > 0) card.ProjectileArt = Unbracket(value);
+                break;
+
+            case "animation":
+                if (CastPlaceholder.LooksLikeAPicture(value))
+                    diag.Error(card.Source, lineNo, $"'{card.Name}': Animation names a FOLDER under " +
+                        $"animations/, like 'SpellCast' — got '{value}'");
+                else card.Animation = value;
                 break;
 
             case "casting sound":

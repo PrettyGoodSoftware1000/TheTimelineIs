@@ -69,13 +69,17 @@ dotnet run --project Desktop -- --editor        # the level editor
 
 See `Content/Cast/README.txt`. In short:
 
-- A folder per character, a folder per state inside it, `rotations/` and
-  `animations/` inside that. `Classes.txt` names the folder; a form names its own.
+- `{Character}/{Form}/{State}/rotations/` and `.../animations/`.
+  `Classes.txt` names the form folder; the state inside it is found by looking.
+- **The state is the pose an animation starts from.** Everything drawn so far
+  starts from `Idle/`.
 - **No art yet = a cube** with the character's initial, in that character's
   `Colour:`, and a yellow triangle on the ground for its facing.
-- An animation is a folder per direction of numbered frames. A class casts
-  with the one its `Cast Animation:` line names (`GunShot`).
-- Every state has `Idle/`, `Walk/`, `Melee/`, `Cast/` waiting for frames.
+- An animation is a folder per direction of numbered frames.
+- **`Walk`** plays while a character crosses a square, in the direction it is
+  stepping. One cycle per square.
+- **Casting** tries three names and takes the first with frames: the card's
+  `Animation:`, then the class or form's `Cast Animation:`, then `SpellCast`.
 
 ---
 
@@ -165,7 +169,9 @@ Any card can carry these (`Effects: Burning 1, Armor 5`).
   side. Read from the caster, so an enemy card with it hurts other enemies.
 - **`Dealt: No`** keeps a card out of the opening hand until something loads it.
 - **`Projectile Art:`** names a file in `Content/Images/Pixel/Effects/`.
-  Missing or absent, the 16x16 ball is thrown.
+  Missing or absent, the ball is thrown.
+- **`Animation:`** names the animation folder the caster plays for this card.
+  Absent, the class's `Cast Animation:` is used, or `SpellCast`.
 - Damage may be a range: `1 to 20 damage` on the `Effect:` line.
 
 ## Rooms and doors
@@ -241,7 +247,7 @@ All of them: `Key: value`, `#` comments, case-insensitive, blank lines ignored.
 |---|---|---|
 | World map | `Content/Images/Map/Map.png` | painted; the map is not pixel art |
 | Ground | `Content/Images/Blocks/` | 128x64 surfaces, 128x112 blocks |
-| Characters | `Content/Cast/.../{Name}/{State}/rotations/*.png` | any size, drawn 1:1 |
+| Characters | `Content/Cast/.../{Name}/{Form}/{State}/rotations/*.png` | any size, drawn 1:1 |
 | Effects | `Content/Images/Pixel/Effects/` | 16x16 icons, 32x32 ball |
 | Decorations | `Content/Images/Decorations/` | hung by the bottom on the square |
 

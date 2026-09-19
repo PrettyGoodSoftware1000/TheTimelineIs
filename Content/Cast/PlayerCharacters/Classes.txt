@@ -1,8 +1,9 @@
 # One block per playable class.
 #
-# ART is a folder, not a picture. Inside a class's folder each state gets a
-# folder of its own holding rotations/ and animations/ — see the README there.
-# A class with no such folder yet is drawn as a cube with its initial on top.
+# ART is a folder, not a picture. Inside it a STATE folder holds rotations/
+# and animations/ — see the README in Content/Cast. The state folder is found
+# by looking, so nothing here names it. A class with no rotations yet is drawn
+# as a cube with its initial on top.
 #
 #   Colour: r, g, b            what colour that cube is
 #   Mind: 100                  nerve, or 'Infinite' for something that cannot
@@ -11,7 +12,9 @@
 #                              Without it, the first folder with rotations in
 #                              it is used.
 #   Cast Animation: GunShot    optional; an animation folder played over the
-#                              sprite while a card is cast
+#                              sprite while a card is cast. Without it, cards
+#                              play SpellCast. A card's own "Animation:" line
+#                              beats both.
 #   Form: Name, Folder, Anim   a shape a shapeshifter can wear: its name, its
 #                              art folder, and optionally its own cast
 #                              animation. The first Form is where it starts.
@@ -29,7 +32,6 @@ HP: 20
 Movement: 4
 Actions: 2
 Colour: 97, 92, 92
-Cast Animation: GunShot
 
 Class: Cyborg
 HP: 50

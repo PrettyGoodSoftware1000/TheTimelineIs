@@ -165,12 +165,20 @@ public partial class IsoLevelScreen
     /// Plays the caster's casting animation over its sprite, from the first
     /// frame, facing the way it is facing. A shapeshifter picks up the one for
     /// the shape it is wearing right now, so a card that changes form still
-    /// casts in the form it started in. Anyone with no animation declared —
-    /// or none drawn yet — simply stands there.
+    /// casts in the form it started in.
+    ///
+    /// Three names are tried in turn — the card's own, the class or form's,
+    /// then SpellCast — and the first with frames drawn for it wins. So a card
+    /// that wants its own swing says so, everything else gets the character's
+    /// usual one, and a character with neither still casts. Anyone with none
+    /// of the three drawn yet simply stands there.
     /// </summary>
-    private void StartCastAnimation(CharacterInstance actor)
+    private void StartCastAnimation(CharacterInstance actor, Card? card = null)
     {
-        actor.CastFrames = _ctx.Sprites.Frames(actor, actor.CastAnimation);
+        actor.CastFrames =
+            _ctx.Sprites.Frames(actor, card?.Animation ?? "")
+            ?? _ctx.Sprites.Frames(actor, actor.CastAnimation)
+            ?? _ctx.Sprites.Frames(actor, DirectionalSprite.SpellCast);
         actor.CastAnimTime = 0f;
     }
 
@@ -211,6 +219,10 @@ public partial class IsoLevelScreen
             _walkFrom = arrived;
             _walker.GX = arrived.X;
             _walker.GY = arrived.Y;
+            // then turn to the leg about to be walked, so the walking frames
+            // point where the feet are going rather than where they came from.
+            // On the last step there is no next leg and the line above stands.
+            if (_walkPath.Count > 0) _walker.Face(arrived, _walkPath[0]);
             _overlayKey = null;
 
             // crossing burning ground catches you as surely as standing in it
@@ -288,6 +300,7 @@ public partial class IsoLevelScreen
             e.Who.Face(Tile(e.Who), arrived);
             e.Who.GX = arrived.X;
             e.Who.GY = arrived.Y;
+            if (e.Path.Count > 0) e.Who.Face(arrived, e.Path[0]);
 
             Ignite(e.Who);
             if (!e.Who.Alive) { _escorts.RemoveAt(i); continue; }
