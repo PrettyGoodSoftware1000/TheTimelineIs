@@ -26,7 +26,7 @@ public partial class IsoLevelScreen
         new(DevPanel.X + 90, DevPanel.Y + 160 + i * 190, DevPanel.Width - 180, 150);
 
     /// <summary>The frame rates the menu steps through. 12 is where it opens.</summary>
-    private static readonly int[] FrameRates = { 4, 6, 8, 10, 12, 15, 18, 24, 30 };
+    private static readonly int[] FrameRates = { 4, 6, 8, 10, 12, 14, 18, 24, 30 };
 
     /// <summary>~ opens and closes it. Nothing else on screen answers while it is up.</summary>
     private void ToggleDevMenu() => _devMenu = !_devMenu;

@@ -613,19 +613,31 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         return null;
     }
 
-    private Vector2 FootOf(CharacterInstance c)
+    /// <summary>
+    /// How far from the square they are standing on a character is actually
+    /// drawn, part way through a step. Zero for anybody standing still.
+    ///
+    /// Anything meant to travel WITH them — the green under a selected
+    /// character's feet — adds this to its own square, so it slides instead
+    /// of waiting on the square being left and jumping a whole tile at the
+    /// end of each step.
+    /// </summary>
+    private Vector2 WalkOffset(CharacterInstance c)
     {
-        var at = IsoMath.ToScreen(c.GX, c.GY, HeightAt(Tile(c)), Origin);
         var leg = c == _walker && _walkPath.Count > 0 ? (_walkFrom, _walkPath[0])
             : _escorts.FirstOrDefault(e => e.Who == c) is Escort esc && esc.Path.Count > 0
                 ? (esc.From, esc.Path[0])
                 : ((Point, Point)?)null;
-        if (leg is var (legFrom, legTo) && leg != null)
-        {
-            var from = IsoMath.ToScreen(legFrom.X, legFrom.Y, HeightAt(legFrom), Origin);
-            var to = IsoMath.ToScreen(legTo.X, legTo.Y, HeightAt(legTo), Origin);
-            at = Vector2.Lerp(from, to, _walkT);
-        }
+        if (leg is not var (legFrom, legTo) || leg == null) return Vector2.Zero;
+        var from = IsoMath.ToScreen(legFrom.X, legFrom.Y, HeightAt(legFrom), Origin);
+        var to = IsoMath.ToScreen(legTo.X, legTo.Y, HeightAt(legTo), Origin);
+        return Vector2.Lerp(from, to, _walkT)
+            - IsoMath.ToScreen(c.GX, c.GY, HeightAt(Tile(c)), Origin);
+    }
+
+    private Vector2 FootOf(CharacterInstance c)
+    {
+        var at = IsoMath.ToScreen(c.GX, c.GY, HeightAt(Tile(c)), Origin) + WalkOffset(c);
         // a body wider than one square stands in the middle of its footprint,
         // which in this projection is straight down-screen for a square body
         // and offset sideways for a long one

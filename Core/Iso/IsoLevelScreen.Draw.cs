@@ -141,14 +141,17 @@ public partial class IsoLevelScreen
         var byDepth = new Dictionary<int, List<CharacterInstance>>();
         foreach (var c in Everyone.Where(c => c.Alive && _level.Shown(Tile(c), _revealed)))
         {
-            // Somebody mid-step is drawn part way to their next square, so
-            // they are filed under THAT square. Filing them under the one they
-            // are leaving would put them a band behind where they are drawn,
-            // and the ground they are walking onto — level ground, not raised —
-            // would paint over them for the length of the step. The walker and
-            // everyone walking with them are all in the middle of a step.
-            var anchor = MovingToward(c) ?? Tile(c);
-            int depth = anchor.X + c.SizeX - 1 + anchor.Y + c.SizeY - 1;
+            // Somebody mid-step stands BETWEEN two squares, so they are filed
+            // under whichever of the two is NEARER the viewer — the greater
+            // band. Whichever way they are walking, the ground they are half
+            // standing on is then already painted when they go down, and
+            // nothing level with them can paint over them.
+            //
+            // Filing them at the destination alone was only right walking
+            // toward the viewer. Walking away, the square being LEFT is the
+            // nearer one, and its ground was drawn after them: it covered
+            // their feet for the length of the step.
+            int depth = Math.Max(DepthOf(c, Tile(c)), DepthOf(c, MovingToward(c) ?? Tile(c)));
             if (!byDepth.TryGetValue(depth, out var list)) byDepth[depth] = list = new List<CharacterInstance>();
             list.Add(c);
         }
@@ -228,17 +231,6 @@ public partial class IsoLevelScreen
                 Edge(batch, tile, block.Height, Color.Violet * 0.8f);
             }
 
-            // Whose turn it is, or who is picked in Explore: green under their
-            // feet. Drawn before the yellow so the cursor still reads clearly
-            // when it is over the selected character's own square.
-            // green under everyone picked, not only the last one clicked, so a
-            // group selection is visible as a group
-            if (Picked.Any(p => p.Covers(tile)))
-            {
-                Fill(batch, tile, block.Height, Color.LimeGreen * _ctx.Config.Opacity("Selected"));
-                Edge(batch, tile, block.Height, Color.LimeGreen);
-            }
-
             if (hovered == tile)
             {
                 Fill(batch, tile, block.Height, Color.Yellow * _ctx.Config.Opacity("Hover"));
@@ -269,11 +261,39 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>Draws everybody standing at one depth, then forgets them.</summary>
+    /// <summary>
+    /// The depth band a body standing on a square occupies — its far corner,
+    /// since that is the band its whole footprint is clear of.
+    /// </summary>
+    private static int DepthOf(CharacterInstance c, Point at) =>
+        at.X + c.SizeX - 1 + at.Y + c.SizeY - 1;
+
     private void DrawBandCast(SpriteBatch batch,
         Dictionary<int, List<CharacterInstance>> byDepth, int depth, float alpha)
     {
         if (!byDepth.Remove(depth, out var standing)) return;
+        // Green under everyone picked — not only the last one clicked, so a
+        // group selection reads as a group. Drawn with the character rather
+        // than with the ground, because it travels with them: a wash left on
+        // the square they were last standing on trailed a whole tile behind
+        // them all the way across the board.
+        foreach (var c in standing.Where(p => Picked.Contains(p))) DrawPickedGround(batch, c);
         foreach (var c in standing) DrawCharacter(batch, c, alpha);
+    }
+
+    /// <summary>The green diamond under a selected character, sliding with them.</summary>
+    private void DrawPickedGround(SpriteBatch batch, CharacterInstance c)
+    {
+        var slide = WalkOffset(c);
+        foreach (var tile in c.Footprint)
+        {
+            var box = DiamondRect(tile, HeightAt(tile));
+            box.Offset((int)slide.X, (int)slide.Y);
+            batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayTop.png"), box,
+                Color.LimeGreen * _ctx.Config.Opacity("Selected"));
+            batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayEdge.png"), box,
+                Color.LimeGreen);
+        }
     }
 
     private void DrawBlock(SpriteBatch batch, LevelBlock block) =>

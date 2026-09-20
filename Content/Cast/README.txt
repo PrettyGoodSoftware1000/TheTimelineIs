@@ -37,4 +37,5 @@ Which animation a card plays, first one with frames wins:
     2. the class or form's "Cast Animation:" line in Classes.txt
     3. SpellCast
 
-Frame rate is one number for everything, changed live from the ~ menu.
+Frame rate is one number for everything — 14 a second, changed live from the
+~ menu.

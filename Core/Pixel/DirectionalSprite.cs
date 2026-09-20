@@ -126,16 +126,16 @@ public class DirectionalSprite
     /// How many frames an animation shows a second. One number for every
     /// animation in the game, changeable from the ~ menu while looking at one.
     /// </summary>
-    public static float Fps = 12f;
+    public static float Fps = 14f;
 
     /// <summary>
     /// Frames for an animation in a direction, or null if there are none.
     ///
     /// A direction with no frames falls back to the nearest that has some,
     /// round the compass, the same way a missing rotation does. While a
-    /// character has one direction of one animation drawn — which is where
-    /// the Gun-O-Mancer's GunShot is — it still plays from every angle rather
-    /// than only when he happens to be facing east.
+    /// character has only one or two directions of an animation drawn, it
+    /// still plays from every angle rather than only from the ones there are
+    /// frames for.
     /// </summary>
     public IReadOnlyList<Texture2D>? Animation(string name, Facing8 facing)
     {

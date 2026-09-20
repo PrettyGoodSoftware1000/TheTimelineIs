@@ -336,14 +336,12 @@ public partial class IsoLevelScreen
         }
 
         // A pure self-cast (changing shape, planting your feet) has nothing to
-        // aim at. A summon is the exception: it acts on the caster, but WHERE
-        // the creature lands is the player's call, so it still asks.
+        // aim at; see Card.IsSelfCast for what counts.
         //
         // A guard card goes off immediately even though it carries a damage
         // number, because that number is what the ground does to whoever walks
         // onto it later — there is nobody to point at now.
-        if (card.IsGuard || card.IsBathSalts || (card.Damage <= 0 && !card.IsSummon &&
-            card.Effects.All(e => Data.Effects.IsSelfCast(e.Name))))
+        if (card.IsGuard || card.IsBathSalts || card.IsSelfCast)
         {
             PlayCard(new List<CharacterInstance>(), Tile(Acting!));
             return;

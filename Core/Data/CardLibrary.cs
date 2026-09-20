@@ -256,6 +256,22 @@ public class Card
     public bool IsBathSalts => Effects.Exists(e => e.Is(Data.Effects.BathSalts));
 
     /// <summary>
+    /// A card with nothing to aim at: it acts on the caster and goes off the
+    /// moment it is played. Changing shape, swapping shells, planting your
+    /// feet.
+    ///
+    /// Three things have to be true, and the third is the one that was
+    /// missing. A cone or a blast is never a self-cast however little it does
+    /// to the person it hits — Terror wounds nobody and carries no Effects
+    /// line, and an empty list passes "all of them are self-cast" without
+    /// anything being true of it. It went off on the spot, sprayed at
+    /// nothing, and took nobody's nerve.
+    /// </summary>
+    public bool IsSelfCast =>
+        Damage <= 0 && !TargetsGround &&
+        Effects.Count > 0 && Effects.TrueForAll(e => Data.Effects.IsSelfCast(e.Name));
+
+    /// <summary>
     /// Whether this card is handed out at the start. "Dealt: No" keeps a card
     /// out of the opening hand while still letting its holder carry it once
     /// something puts it there — Shock Shot wears the Gun-O-Mancer's tag so he

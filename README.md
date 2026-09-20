@@ -195,8 +195,8 @@ Any card can carry these (`Effects: Burning 1, Armor 5`).
 ## The ~ menu
 
 - **Win Level** / **Die!** — end the mission either way.
-- **Frame rate** — one number for every animation. Press to step through
-  4..30; the board changes as you press.
+- **Frame rate** — one number for every animation, 14 by default. Press to
+  step through 4..30; the board changes as you press.
 - On the world map, `~` arms destination placement: click, name it, Enter.
 
 ## Editor
