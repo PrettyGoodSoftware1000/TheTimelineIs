@@ -16,11 +16,7 @@ public class DesktopLogStore : ILogStore
 
     public DesktopLogStore()
     {
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "TheTimelineIs");
-        Directory.CreateDirectory(dir);
-        _path = Path.Combine(dir, "ContentErrors.log");
+        _path = UserData.Path("ContentErrors.log");
         _repoPath = FindRepoRoot() is string root
             ? Path.Combine(root, "ContentErrors.log") : null;
     }

@@ -34,29 +34,34 @@
     </MonoGameContentReference>
   </ItemGroup>
   <!-- Raw game data: copied verbatim next to the executable so
-       TitleContainer can open it with repo-relative "Content/..." paths. -->
+       TitleContainer can open it with repo-relative "Content/..." paths.
+
+       Every glob excludes bin/ and obj/. A build leaves a copy of the content
+       inside the OUTPUT folder, and without this an output tree can be
+       collected as if it were source: publish then finds the same file twice
+       and stops with NETSDK1152. Build never noticed; publish always did. -->
   <ItemGroup>
-    <None Include="..\Content\Images\**\*.*">
+    <None Include="..\Content\Images\**\*.*" Exclude="..\Content\**\bin\**;..\Content\**\obj\**">
       <Link>Content\Images\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\Cast\**\*.*">
+    <None Include="..\Content\Cast\**\*.*" Exclude="..\Content\**\bin\**;..\Content\**\obj\**">
       <Link>Content\Cast\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\Text\**\*.*">
+    <None Include="..\Content\Text\**\*.*" Exclude="..\Content\**\bin\**;..\Content\**\obj\**">
       <Link>Content\Text\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\Cards\**\*.*">
+    <None Include="..\Content\Cards\**\*.*" Exclude="..\Content\**\bin\**;..\Content\**\obj\**">
       <Link>Content\Cards\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\Levels\**\*.*">
+    <None Include="..\Content\Levels\**\*.*" Exclude="..\Content\**\bin\**;..\Content\**\obj\**">
       <Link>Content\Levels\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\Sounds\**\*.*">
+    <None Include="..\Content\Sounds\**\*.*" Exclude="..\Content\**\bin\**;..\Content\**\obj\**">
       <Link>Content\Sounds\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

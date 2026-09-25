@@ -487,3 +487,6 @@ $RECYCLE.BIN/
 # session, not part of the game, so they stay on the machine that made them.
 # Delete the line if you ever want to commit a particular one on purpose.
 Replays/
+
+# Mac downloads built by Tools/mac/make-mac-app.sh
+/dist/

@@ -1406,7 +1406,16 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// lines of small text under the toolbar, which cost that space on every
     /// frame to say things you need once.
     /// </summary>
-    private static readonly string[] ControlLines =
+    /// <summary>
+    /// Written with Ctrl, printed with whatever that key is called here — on a
+    /// Mac every one of these is Command.
+    /// </summary>
+    private static string[] ControlLines =>
+        DesktopInput.ControlKeyName == "Ctrl"
+            ? CtrlLines
+            : CtrlLines.Select(l => l.Replace("Ctrl", DesktopInput.ControlKeyName)).ToArray();
+
+    private static readonly string[] CtrlLines =
     {
         "hold left            paint",
         "hold Del             rub out",

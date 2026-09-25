@@ -16,6 +16,21 @@ dotnet run --project Desktop -- --level PixelRooms   # straight into a level
 dotnet run --project Desktop -- --editor        # the level editor
 ```
 
+## The Mac download
+
+```
+Tools/mac/make-mac-app.sh            # both zips into dist/
+Tools/mac/make-mac-app.sh arm64      # just Apple Silicon
+```
+
+- Builds on **any** machine .NET runs on. Nothing here is an Apple tool: .NET
+  cross-builds the binary, the `.icns` is committed, a `.app` is a folder.
+- Or push a tag like `v0.3` and the workflow puts both zips on a Release.
+- The player unzips, drags to Applications, double-clicks. **Unsigned**, so the
+  first launch needs one trip through System Settings → Privacy & Security →
+  Open Anyway. `READ ME FIRST.txt` in the zip says how.
+- Signing it away costs $99/year to Apple. Nothing else about the build changes.
+
 ## Controls
 
 | Action | Input |
@@ -32,6 +47,10 @@ dotnet run --project Desktop -- --editor        # the level editor
 | Dev menu | `~` |
 | Ruler | F12 |
 | Back / quit | Escape |
+
+**On a Mac, Command does every job Control does, and Control does nothing.**
+macOS turns Ctrl+click into a right-click before the game sees it, and a
+right-click cancels the card you are aiming.
 
 ## Layout
 

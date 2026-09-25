@@ -4,19 +4,12 @@ using TheTimelineIs.Core.Platform;
 
 namespace TheTimelineIs.Desktop;
 
-/// <summary>Saves to %AppData%/TheTimelineIs/save.json (or the XDG equivalent).</summary>
+/// <summary>Saves to save.json in the player's own folder — see UserData.</summary>
 public class DesktopSaveStore : ISaveStore
 {
     private readonly string _path;
 
-    public DesktopSaveStore()
-    {
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "TheTimelineIs");
-        Directory.CreateDirectory(dir);
-        _path = Path.Combine(dir, "save.json");
-    }
+    public DesktopSaveStore() => _path = UserData.Path("save.json");
 
     public bool Exists => File.Exists(_path);
 

@@ -1,0 +1,53 @@
+name: Mac download
+
+# Builds the two Mac zips and attaches them to a Release, so getting a build
+# is: push a tag, wait, download. Nobody types a command.
+#
+#   - push a tag like v0.3        -> a Release with both zips on it
+#   - or press "Run workflow"     -> the zips as downloadable artifacts
+#
+# Runs on Linux on purpose. Nothing here is an Apple tool: .NET cross-builds
+# the Mac binary, the .icns is committed, and a .app is a folder.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Build the Mac app
+        run: ./Tools/mac/make-mac-app.sh
+
+      - name: Keep the zips
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-zips
+          path: dist/*.zip
+
+      - name: Attach them to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          body: |
+            **Apple Silicon** (any Mac from late 2020 on) — `TheTimelineIs-mac-arm64.zip`
+            **Intel** (older Macs) — `TheTimelineIs-mac-x64.zip`
+
+            Unzip, drag to Applications, double-click. The first launch needs
+            one trip through System Settings > Privacy & Security > Open Anyway;
+            READ ME FIRST.txt in the zip walks through it.

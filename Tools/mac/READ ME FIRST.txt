@@ -1,0 +1,50 @@
+THE TIMELINE IS — Mac
+
+
+PUTTING IT ON YOUR MAC
+
+1. Drag "The Timeline Is" into your Applications folder.
+2. Double-click it.
+
+
+THE FIRST TIME, MACOS WILL REFUSE
+
+You will see something like:
+
+    "The Timeline Is" can't be opened because Apple cannot check it
+    for malicious software.
+
+This is not a problem with the game. It means nobody has paid Apple to
+vouch for it. You only have to get past it once.
+
+1. Click Done on that message.
+2. Open System Settings.
+3. Go to Privacy & Security.
+4. Scroll down. There is a line about "The Timeline Is" being blocked,
+   with an "Open Anyway" button. Click it.
+5. Confirm with your password or Touch ID.
+
+It opens normally from then on. You never have to do this again.
+
+
+THE CONTROLS
+
+Move the view       arrows, or WASD, or drag with the right button
+Zoom                scroll wheel, or two fingers on a trackpad
+Pick someone        click them
+Add to the pick     Shift-click
+Add or drop one     Command-click
+Everyone            Tab
+Play a card         click it, or press its number
+End your turn       Space
+Cancel              right-click, or Escape
+See the grid        hold Command
+
+Command does every job Control does on a PC. Control is not used.
+
+
+WHERE YOUR SAVE LIVES
+
+    ~/Library/Application Support/TheTimelineIs/
+
+Deleting that folder starts you over. Deleting the app leaves it alone.

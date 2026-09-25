@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>                    <string>The Timeline Is</string>
+  <key>CFBundleDisplayName</key>             <string>The Timeline Is</string>
+  <key>CFBundleExecutable</key>              <string>TheTimelineIs</string>
+  <key>CFBundleIdentifier</key>              <string>com.prettygoodsoftware.thetimelineis</string>
+  <key>CFBundlePackageType</key>             <string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key>   <string>6.0</string>
+  <key>CFBundleShortVersionString</key>      <string>__VERSION__</string>
+  <!-- Apple wants this one numeric; the friendly name is above. -->
+  <key>CFBundleVersion</key>                 <string>1.0</string>
+  <key>CFBundleIconFile</key>                <string>AppIcon</string>
+  <key>LSApplicationCategoryType</key>       <string>public.app-category.strategy-games</string>
+
+  <!-- arm64 needs Big Sur; the Intel build runs on the same floor. -->
+  <key>LSMinimumSystemVersion</key>          <string>11.0</string>
+
+  <!-- Without this macOS hands the game a half-size buffer and blows it up
+       2x. Every art pixel would land on four screen pixels, blurred, which
+       is the one thing this renderer exists to prevent. -->
+  <key>NSHighResolutionCapable</key>         <true/>
+</dict>
+</plist>

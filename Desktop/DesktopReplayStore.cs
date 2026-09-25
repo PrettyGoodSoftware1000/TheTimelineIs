@@ -15,7 +15,8 @@ namespace TheTimelineIs.Desktop;
 /// by eye while working out why a fight went the way it did, and later handed
 /// over in a batch to work out what tactics a player favours. A folder nobody
 /// can find serves neither. Falls back to beside the executable if the repo
-/// is not there, which is what a shipped build would do.
+/// is not there — a shipped build has no repo, and writing beside the
+/// executable would mean writing inside /Applications.
 /// </summary>
 public class DesktopReplayStore : IReplayStore
 {
@@ -35,7 +36,7 @@ public class DesktopReplayStore : IReplayStore
                     return Path.Combine(dir.FullName, "Replays");
                 dir = dir.Parent;
             }
-            return Path.Combine(AppContext.BaseDirectory, "Replays");
+            return Path.Combine(UserData.Folder, "Replays");
         }
     }
 

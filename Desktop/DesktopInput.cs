@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -18,6 +19,25 @@ namespace TheTimelineIs.Desktop;
 public class DesktopInput : IInputSource
 {
     private const float KeyPanSpeed = 2200f; // virtual px/sec
+
+    /// <summary>
+    /// On a Mac the COMMAND key does every job Control does elsewhere, and
+    /// Control does nothing at all.
+    ///
+    /// Not a preference. macOS turns Ctrl+click into a right-click before the
+    /// game ever sees it, and a right-click here cancels the card you are
+    /// aiming — so ctrl-click to add somebody to the selection was
+    /// unreachable. Command is not intercepted by anything, and Cmd+Z, Cmd+C
+    /// and Cmd+V are what a Mac user reaches for anyway.
+    /// </summary>
+    private static readonly bool CommandForControl = OperatingSystem.IsMacOS();
+
+    /// <summary>The name of that key on this machine, for anything that prints it.</summary>
+    public static string ControlKeyName => CommandForControl ? "Cmd" : "Ctrl";
+
+    private static bool ModifierHeld(KeyboardState keys) => CommandForControl
+        ? keys.IsKeyDown(Keys.LeftWindows) || keys.IsKeyDown(Keys.RightWindows)
+        : keys.IsKeyDown(Keys.LeftControl) || keys.IsKeyDown(Keys.RightControl);
 
     /// <summary>True on the frame a key goes down, false while it stays down.</summary>
     private bool Tapped(KeyboardState keys, Keys key) =>
@@ -125,7 +145,7 @@ public class DesktopInput : IInputSource
         state.ToggleRuler = Pressed(keys, Keys.F12);
         state.Delete = Pressed(keys, Keys.Delete) || Pressed(keys, Keys.Back);
         state.DeleteHeld = keys.IsKeyDown(Keys.Delete) || keys.IsKeyDown(Keys.Back);
-        state.CtrlHeld = keys.IsKeyDown(Keys.LeftControl) || keys.IsKeyDown(Keys.RightControl);
+        state.CtrlHeld = ModifierHeld(keys);
         state.ShiftHeld = keys.IsKeyDown(Keys.LeftShift) || keys.IsKeyDown(Keys.RightShift);
         state.AltHeld = keys.IsKeyDown(Keys.LeftAlt) || keys.IsKeyDown(Keys.RightAlt);
         state.SpaceHeld = keys.IsKeyDown(Keys.Space);
