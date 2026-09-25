@@ -1,3 +1,0 @@
-# Frames go in a folder per direction: south-east/, south-west/,
-# north-east/, north-west/ (east/ etc. also work and are rounded).
-# Name them so they sort in order: frame_000.png, frame_001.png ...
