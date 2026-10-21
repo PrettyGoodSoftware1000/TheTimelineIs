@@ -28,7 +28,7 @@ dotnet run --project Desktop -- --editor        # the level editor
 | Add to selection | Shift+click |
 | Toggle one in selection | Ctrl+click |
 | Select whole party | Tab or middle mouse |
-| Fade the board to read the grid | Hold Ctrl |
+| Fade the board, show every bar | Hold Ctrl |
 | Dev menu | `~` |
 | Ruler | F12 |
 | Back / quit | Escape |
@@ -101,7 +101,11 @@ See `Content/Cast/README.txt`. In short:
 - Everything an aimed card would hit is **outlined in red**, traced round the
   art itself. With `Friendly Fire: Yes` your own people light up too.
 - **Turn order** is a strip of faces across the top; whoever acts sits far left
-  at double size.
+  at double size. Every face has its health and mind bars under it.
+- **The camera slides to whoever's turn it is**, player or enemy.
+- **Bars over heads** show only for: the selected party, whoever the mouse is
+  over (on the board or in the turn strip), and everyone while Ctrl is held.
+  Status icons go with them.
 - **The combat log** is behind the `+` at the top left. Damage numbers rise
   off the health bar.
 

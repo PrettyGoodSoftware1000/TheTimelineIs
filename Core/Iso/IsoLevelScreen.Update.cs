@@ -34,11 +34,18 @@ public partial class IsoLevelScreen
         // square has to start from the RAW window position — converting through
         // the design space first would round the answer to the wrong tile.
         _worldPointer = _camera.ToWorld(input.RawPointer).ToVector2();
+        _hoveredCast = CastUnderPointer();
+        _stripHover = TurnStripSlots().FirstOrDefault(s => s.Slot.Contains(_pointer)).Who;
         // PanDelta arrives in design-space units; back to window pixels, then to
-        // art pixels, so a drag moves the board by the same amount at any zoom
+        // art pixels, so a drag moves the board by the same amount at any zoom.
+        // While art is being anchored the arrows nudge the picture instead.
+        var pan = _anchorMenu ? input.PanDeltaNoArrows : input.PanDelta;
         _camera.Scroll(new Point(
-            (int)Math.Round(input.PanDelta.X * _ctx.Viewport.Scale / _camera.Zoom),
-            (int)Math.Round(input.PanDelta.Y * _ctx.Viewport.Scale / _camera.Zoom)));
+            (int)Math.Round(pan.X * _ctx.Viewport.Scale / _camera.Zoom),
+            (int)Math.Round(pan.Y * _ctx.Viewport.Scale / _camera.Zoom)));
+        // panning by hand takes the camera back from a turn's glide
+        if (pan != Vector2.Zero) _glideTo = null;
+        UpdateGlide(dt);
         if (_toastTimer > 0) _toastTimer -= dt;
         if (_replaySavedTimer > 0) _replaySavedTimer -= dt;
         Recoil.Update(Everyone, dt);
@@ -420,6 +427,47 @@ public partial class IsoLevelScreen
         _camera.CentreOn(
             IsoMath.ToScreen(_focus.X, _focus.Y, HeightAt(_focus), Origin).ToPoint(),
             _windowSize.X, _windowSize.Y);
+
+    /// <summary>
+    /// Slides the camera over to somebody rather than cutting to them, so a
+    /// new turn reads as the view moving across the board to whoever is up.
+    /// </summary>
+    private void GlideTo(CharacterInstance who)
+    {
+        _focus = Tile(who);
+        // the middle of the drawn body, not the feet: centring a tall sprite
+        // by its feet left its head and bar up under the HUD text
+        var solid = ArtBounds.Solid(ArtFor(who));
+        var rect = SpriteRect(who);
+        _glideTo = new Point(rect.X + solid.Center.X, rect.Y + solid.Center.Y);
+    }
+
+    /// <summary>How much of the remaining distance the glide covers per second.</summary>
+    private const float GlideRate = 8f;
+
+    /// <summary>
+    /// One frame of the glide. The corner is aimed for at the CURRENT zoom, so
+    /// zooming mid-glide still lands centred, and every step is whole pixels.
+    /// </summary>
+    private void UpdateGlide(float dt)
+    {
+        if (_glideTo is not Point world || _windowSize == Point.Zero) return;
+        var goal = new Point(
+            world.X - _windowSize.X / (2 * _camera.Zoom),
+            world.Y - _windowSize.Y / (2 * _camera.Zoom));
+        var gap = goal - _camera.Corner;
+        if (Math.Abs(gap.X) <= 1 && Math.Abs(gap.Y) <= 1)
+        {
+            _camera.ScrollTo(goal);
+            _glideTo = null;
+            return;
+        }
+        float t = Math.Min(1f, dt * GlideRate);
+        // at least a pixel a frame, so the last stretch does not crawl
+        int StepOf(int d) => d == 0 ? 0
+            : Math.Sign(d) * Math.Max(1, (int)Math.Round(Math.Abs(d) * t));
+        _camera.Scroll(new Point(StepOf(gap.X), StepOf(gap.Y)));
+    }
 
     /// <summary>
     /// Pads the party is standing on, which cannot fire again until everybody

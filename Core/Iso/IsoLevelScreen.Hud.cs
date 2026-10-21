@@ -202,26 +202,8 @@ public partial class IsoLevelScreen
     /// </summary>
     private void DrawTurnStrip(SpriteBatch batch)
     {
-        if (_order.Count == 0) return;
-
-        // rotate the running order so the current actor leads it, skipping
-        // anyone who has died and won't be taking a turn
-        var upcoming = new List<CharacterInstance>();
-        for (int step = 0; step < _order.Count; step++)
+        foreach (var (who, slot, active) in TurnStripSlots())
         {
-            var who = _order[(_turn + step + _order.Count) % _order.Count];
-            if (who.Alive) upcoming.Add(who);
-        }
-        if (upcoming.Count == 0) return;
-
-        int x = TurnStrip.X;
-        for (int i = 0; i < upcoming.Count && x < TurnStrip.Right; i++)
-        {
-            var who = upcoming[i];
-            bool active = i == 0;
-            int size = active ? TurnFaceActive : TurnFace;
-            var slot = new Rectangle(x, TurnStrip.Y + (TurnFaceActive - size) / 2, size, size);
-
             // the acting character gets a gold frame; the rest sit dimmer and smaller
             var frame = active ? Color.Gold : Color.White * 0.4f;
             Ui.FillRect(batch, _ctx.Pixel,
@@ -238,7 +220,11 @@ public partial class IsoLevelScreen
                 new Rectangle(slot.X, slot.Bottom - 10, slot.Width, 10),
                 who.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
 
-            x += size + TurnFaceGap;
+            // health and mind, always, right under the face
+            var hp = new Rectangle(slot.X - 4, slot.Bottom + 10, slot.Width + 8, StripBarH);
+            var mind = new Rectangle(hp.X, hp.Bottom + 2, hp.Width, StripMindH);
+            DrawBars(batch, who, hp, mind);
+            DrawBarNumbers(batch, who, hp, mind);
         }
 
         if (Current != null)
@@ -247,8 +233,42 @@ public partial class IsoLevelScreen
                     ? _ctx.Strings.Format("iso_pet_turn",
                         ("owner", Current.Name), ("name", pet.Name))
                     : Current.Name,
-                new Vector2(TurnStrip.X, TurnStrip.Bottom + 12), Color.Gold,
+                new Vector2(TurnStrip.X, TurnStrip.Y + TurnFaceActive + 10 + StripBarH + 2 +
+                    StripMindH + 16), Color.Gold,
                 0f, Vector2.Zero, 0.38f, SpriteEffects.None, 0f);
+    }
+
+    /// <summary>How tall the bars under each face in the turn strip are, in design pixels.</summary>
+    private const int StripBarH = 26, StripMindH = 18;
+
+    /// <summary>
+    /// Every face in the turn strip and where it sits, current actor first.
+    /// Shared by drawing and by the mouse, so hovering a face finds the face
+    /// that is actually there.
+    /// </summary>
+    private List<(CharacterInstance Who, Rectangle Slot, bool Active)> TurnStripSlots()
+    {
+        var slots = new List<(CharacterInstance, Rectangle, bool)>();
+        if (_order.Count == 0) return slots;
+
+        // rotate the running order so the current actor leads it, skipping
+        // anyone who has died and won't be taking a turn
+        var upcoming = new List<CharacterInstance>();
+        for (int step = 0; step < _order.Count; step++)
+        {
+            var who = _order[(_turn + step + _order.Count) % _order.Count];
+            if (who.Alive) upcoming.Add(who);
+        }
+
+        int x = TurnStrip.X;
+        for (int i = 0; i < upcoming.Count && x < TurnStrip.Right; i++)
+        {
+            bool active = i == 0;
+            int size = active ? TurnFaceActive : TurnFace;
+            slots.Add((upcoming[i], new Rectangle(x, TurnStrip.Y + (TurnFaceActive - size) / 2, size, size), active));
+            x += size + TurnFaceGap;
+        }
+        return slots;
     }
 
     /// <summary>

@@ -197,6 +197,8 @@ public partial class IsoLevelScreen
                 g.Watch.Forget(Key(t));
 
         var current = Current!;
+        // the camera goes to whoever is up, player or enemy
+        GlideTo(current);
         _replayTurn++;
         Record(ReplayEventKind.Turn, current, amount: current.Hp,
             note: $"{current.Hp}/{current.MaxHp} hp");
@@ -229,8 +231,8 @@ public partial class IsoLevelScreen
         // movement handed out above are spent doing nothing, which is the whole
         // cost of it. Checked after the burn so a stunned character still cooks.
         //
-        // It is SHOWN rather than skipped in silence: the camera goes to them
-        // and holds for a moment, so a turn that produces no action still reads
+        // It is SHOWN rather than skipped in silence: the camera has gone to
+        // them, and it holds for a moment, so a turn that produces no action still reads
         // as somebody's turn rather than as the game having missed one out.
         if (current.IsStunned)
         {
@@ -239,7 +241,6 @@ public partial class IsoLevelScreen
             current.ActionPoints = 0;
             Log(_ctx.Strings.Format("iso_stun_skip",
                 ("name", current.Name), ("turns", current.StunTurns.ToString())));
-            RecenterOn(current);
             _stunHold = StunHoldSeconds;
             _mode = current.IsPlayer ? Mode.PlayerTurn : Mode.EnemyTurn;
             return;
@@ -254,7 +255,6 @@ public partial class IsoLevelScreen
             current.FearTurns--;
             current.ActionPoints = 0;
             Log(_ctx.Strings.Format("iso_fear_flees", ("name", current.Name)));
-            RecenterOn(current);
             _mode = current.IsPlayer ? Mode.PlayerTurn : Mode.EnemyTurn;
             Flee(current);
             return;

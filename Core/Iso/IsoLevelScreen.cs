@@ -189,6 +189,7 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
 
     /// <summary>The square the view opens on, and returns to when recentred.</summary>
     private Point _focus;
+    private Point? _glideTo;         // world point the camera is sliding to centre on
 
 
     /// <summary>
@@ -199,7 +200,9 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     private readonly HashSet<Point> _disarmed = new();
     private Point _pointer;
     private Point? _tap;
-    private bool _ctrl;              // held: fades the board so the grid reads
+    private bool _ctrl;              // held: fades the board so the grid reads, shows every bar
+    private CharacterInstance? _hoveredCast;   // whose picture the mouse is over
+    private CharacterInstance? _stripHover;    // whose face in the turn strip the mouse is over
     private bool _shift;             // held: adds to the out-of-combat selection
     private string _toast = "";
     private float _toastTimer;

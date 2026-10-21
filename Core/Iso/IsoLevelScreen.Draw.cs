@@ -47,12 +47,14 @@ public partial class IsoLevelScreen
         var solid = ArtBounds.Solid(art);
         var foot = FootOf(c);
         // whatever the artist left round the figure, nudged by hand from the
-        // ~ menu. Sideways always; height only when the line asks for it,
-        // because the lowest solid pixel is normally exactly right.
+        // ~ menu. Both are offsets from where the art already stands, so a
+        // nudge of nothing moves nothing — ticking Vertical alone included.
+        // Height only counts when the line asks for it, because the lowest
+        // solid pixel is normally exactly right.
         var nudge = _ctx.Anchors.For(c.Name, c.Art);
         return new Rectangle(
             (int)foot.X - (solid.Left + solid.Right) / 2 + nudge.X,
-            (int)foot.Y - (nudge.Vertical ? art.Height / 2 - nudge.Y : solid.Bottom),
+            (int)foot.Y - solid.Bottom - (nudge.Vertical ? nudge.Y : 0),
             art.Width, art.Height);
     }
 
@@ -460,49 +462,9 @@ public partial class IsoLevelScreen
             Ui.FillRect(batch, _ctx.Pixel,
                 new Rectangle(rect.X, back.Y - 4, rect.Width, 2), Color.OrangeRed);
 
-        // health bar above the head. Armor extends the bar in metallic grey, so
-        // 10 health plus 5 armor makes the grey a third of its width.
-        Ui.FillRect(batch, _ctx.Pixel, back, Color.Black * 0.72f);
-
-        int span = Math.Max(1, c.MaxHp + c.Armor);
-        int hpW = (int)(back.Width * Math.Clamp(c.Hp / (float)span, 0f, 1f));
-        int armW = (int)(back.Width * Math.Clamp(c.Armor / (float)span, 0f, 1f));
-
-        // The part that has been lost but not yet caught up shows pale behind
-        // the bar, so a hit reads as a chunk sliding off rather than a number
-        // that was simply different last time you looked.
-        int ghostW = (int)(back.Width * Math.Clamp(Math.Max(c.ShownHp, c.Hp) / span, 0f, 1f));
-        if (ghostW > hpW)
-            Ui.FillRect(batch, _ctx.Pixel,
-                new Rectangle(back.X + hpW, back.Y, ghostW - hpW, back.Height),
-                new Color(235, 225, 120));
-
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, hpW, back.Height),
-            c.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
-        if (armW > 0)
-            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, armW, back.Height),
-                new Color(168, 172, 180));
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, back.Width, 1),
-            Color.Black * 0.5f);
-
-        // The mind bar under it. Purple for anything with nerve to lose; grey
-        // for a Living Stone, which has none to lose and is drawn full.
-        var mindBar = MindRect(c);
-        Ui.FillRect(batch, _ctx.Pixel, mindBar, Color.Black * 0.72f);
-        int mindW = (int)(mindBar.Width * c.MindFraction);
-        // the same pale ghost the health bar uses, so a fright reads as a
-        // chunk sliding off rather than a bar that is simply shorter now
-        if (!c.MindImmune && c.ShownMind > c.Mind)
-        {
-            int ghostMind = (int)(mindBar.Width *
-                Math.Clamp(c.ShownMind / Math.Max(1f, c.MaxMind), 0f, 1f));
-            if (ghostMind > mindW)
-                Ui.FillRect(batch, _ctx.Pixel,
-                    new Rectangle(mindBar.X + mindW, mindBar.Y, ghostMind - mindW, mindBar.Height),
-                    new Color(225, 200, 245));
-        }
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(mindBar.X, mindBar.Y, mindW, mindBar.Height),
-            c.MindImmune ? new Color(130, 130, 138) : new Color(150, 60, 200));
+        // the bars, and everything hung off them, only when asked for
+        if (!ShowsBars(c)) return;
+        DrawBars(batch, c, back, MindRect(c));
 
         // whoever is selected wears a small arrow pointing down at their bar
         if (IsSelected(c)) DrawSelectionArrow(batch, back);
@@ -535,6 +497,84 @@ public partial class IsoLevelScreen
         }
     }
 
+    /// <summary>
+    /// Whose picture the mouse is over: the drawn part of it, not the empty
+    /// canvas round it. Where two overlap, the one nearer the viewer wins,
+    /// since that is the one drawn on top.
+    /// </summary>
+    private CharacterInstance? CastUnderPointer()
+    {
+        var at = _worldPointer.ToPoint();
+        return Everyone
+            .Where(c => c.Alive && _level.Shown(Tile(c), _revealed))
+            .Where(c =>
+            {
+                var solid = ArtBounds.Solid(ArtFor(c));
+                var rect = SpriteRect(c);
+                solid.Offset(rect.X, rect.Y);
+                return solid.Contains(at);
+            })
+            .OrderByDescending(c => DepthOf(c, Tile(c)))
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Whether somebody's bars are up: the selected party, whoever the mouse
+    /// is over on the board or in the turn strip, and everybody under Ctrl.
+    /// </summary>
+    private bool ShowsBars(CharacterInstance c) =>
+        _ctrl || Picked.Contains(c) || c == _hoveredCast || c == _stripHover;
+
+    /// <summary>
+    /// Health and mind bars filled into two boxes. Used over heads on the board
+    /// and under faces in the turn strip, so the two always read the same.
+    /// </summary>
+    private void DrawBars(SpriteBatch batch, CharacterInstance c, Rectangle back, Rectangle mindBar)
+    {
+        // Armor extends the health bar in metallic grey, so 10 health plus 5
+        // armor makes the grey a third of its width.
+        Ui.FillRect(batch, _ctx.Pixel, back, Color.Black * 0.72f);
+
+        int span = Math.Max(1, c.MaxHp + c.Armor);
+        int hpW = (int)(back.Width * Math.Clamp(c.Hp / (float)span, 0f, 1f));
+        int armW = (int)(back.Width * Math.Clamp(c.Armor / (float)span, 0f, 1f));
+
+        // The part that has been lost but not yet caught up shows pale behind
+        // the bar, so a hit reads as a chunk sliding off rather than a number
+        // that was simply different last time you looked.
+        int ghostW = (int)(back.Width * Math.Clamp(Math.Max(c.ShownHp, c.Hp) / span, 0f, 1f));
+        if (ghostW > hpW)
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(back.X + hpW, back.Y, ghostW - hpW, back.Height),
+                new Color(235, 225, 120));
+
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, hpW, back.Height),
+            c.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
+        if (armW > 0)
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, armW, back.Height),
+                new Color(168, 172, 180));
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, back.Width, 1),
+            Color.Black * 0.5f);
+
+        // The mind bar under it. Purple for anything with nerve to lose; grey
+        // for a Living Stone, which has none to lose and is drawn full.
+        Ui.FillRect(batch, _ctx.Pixel, mindBar, Color.Black * 0.72f);
+        int mindW = (int)(mindBar.Width * c.MindFraction);
+        // the same pale ghost the health bar uses, so a fright reads as a
+        // chunk sliding off rather than a bar that is simply shorter now
+        if (!c.MindImmune && c.ShownMind > c.Mind)
+        {
+            int ghostMind = (int)(mindBar.Width *
+                Math.Clamp(c.ShownMind / Math.Max(1f, c.MaxMind), 0f, 1f));
+            if (ghostMind > mindW)
+                Ui.FillRect(batch, _ctx.Pixel,
+                    new Rectangle(mindBar.X + mindW, mindBar.Y, ghostMind - mindW, mindBar.Height),
+                    new Color(225, 200, 245));
+        }
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(mindBar.X, mindBar.Y, mindW, mindBar.Height),
+            c.MindImmune ? new Color(130, 130, 138) : new Color(150, 60, 200));
+    }
+
 
     /// <summary>How big a status icon is, in art pixels.</summary>
     private static int MarkPx => IsoMath.Px(8);
@@ -550,15 +590,15 @@ public partial class IsoLevelScreen
         var art = ArtFor(c);
         var solid = ArtBounds.Solid(art);
         var rect = SpriteRect(c);
-        int w = Math.Clamp(solid.Width + IsoMath.Px(8), IsoMath.Px(32), IsoMath.Px(64));
+        int w = Math.Clamp(solid.Width + IsoMath.Px(8), IsoMath.Px(32), IsoMath.Px(64)) / 2;
         return new Rectangle(
             rect.X + (solid.Left + solid.Right) / 2 - w / 2,
             rect.Y + solid.Top - (BarH + MindH + 5), w, BarH);
     }
 
     /// <summary>How tall the health and mind bars are, in art pixels.</summary>
-    private static int BarH => IsoMath.Px(7);
-    private static int MindH => IsoMath.Px(4);
+    private static int BarH => IsoMath.Px(7) / 2;
+    private static int MindH => IsoMath.Px(4) / 2;
 
     /// <summary>
     /// The mind bar: nerve, directly under the health bar and a little
@@ -596,20 +636,7 @@ public partial class IsoLevelScreen
     {
         var back = ToDesign(BarRect(c));
         if (back.Width <= 0) return;
-        // the numbers fill the bars they sit in, so they grow with the zoom
-        Ui.DrawTextCentered(batch, _ctx.Font,
-            c.Armor > 0 ? $"{c.Hp}+{c.Armor}" : c.Hp.ToString(), back, Color.White,
-            back.Height * 0.0125f);
-
-        // Nerve, in its own bar. An infinity sign for anything that cannot be
-        // frightened: a Living Stone showing "100" would look like a number
-        // somebody could get down.
-        var mindBox = ToDesign(MindRect(c));
-        if (mindBox.Width > 0)
-            Ui.DrawTextCentered(batch, _ctx.Font,
-                c.MindImmune ? "\u221e" : c.Mind.ToString(), mindBox,
-                c.MindImmune ? new Color(210, 210, 218) : Color.White,
-                mindBox.Height * 0.0125f);
+        if (ShowsBars(c)) DrawBarNumbers(batch, c, back, ToDesign(MindRect(c)));
 
         for (int i = 0; i < c.Popups.Count; i++)
         {
@@ -627,6 +654,29 @@ public partial class IsoLevelScreen
                 0f, Vector2.Zero, 0.42f, SpriteEffects.None, 0f);
         }
     }
+
+    /// <summary>
+    /// The health and nerve totals written inside their bars, in design space.
+    /// The numbers fill the bars they sit in, so they follow the bar's size.
+    /// </summary>
+    private void DrawBarNumbers(SpriteBatch batch, CharacterInstance c, Rectangle back, Rectangle mindBox)
+    {
+        Ui.DrawTextCentered(batch, _ctx.Font,
+            c.Armor > 0 ? $"{c.Hp}+{c.Armor}" : c.Hp.ToString(), back, Color.White,
+            back.Height * BarTextScale);
+
+        // Nerve, in its own bar. An infinity sign for anything that cannot be
+        // frightened: a Living Stone showing "100" would look like a number
+        // somebody could get down.
+        if (mindBox.Width > 0)
+            Ui.DrawTextCentered(batch, _ctx.Font,
+                c.MindImmune ? "\u221e" : c.Mind.ToString(), mindBox,
+                c.MindImmune ? new Color(210, 210, 218) : Color.White,
+                mindBox.Height * BarTextScale);
+    }
+
+    /// <summary>Font scale per design pixel of bar height.</summary>
+    private const float BarTextScale = 0.0125f;
 
     /// <summary>
     /// A rectangle on the board, expressed in the design space the HUD uses.

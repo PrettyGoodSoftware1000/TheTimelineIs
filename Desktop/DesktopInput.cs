@@ -70,6 +70,7 @@ public class DesktopInput : IInputSource
 
         state.PanDelta = KeyPan(arrows + letters, dt);
         state.PanDeltaNoLetters = KeyPan(arrows, dt);
+        state.PanDeltaNoArrows = KeyPan(letters, dt);
 
         // right-drag pans opposite the cursor motion, like dragging a paper map.
         // Dragging belongs to both readings of the pan.
@@ -79,6 +80,7 @@ public class DesktopInput : IInputSource
             var scrolled = viewport.ScreenToVirtual(drag);
             state.PanDelta -= scrolled;
             state.PanDeltaNoLetters -= scrolled;
+            state.PanDeltaNoArrows -= scrolled;
         }
 
         if (mouse.LeftButton == ButtonState.Pressed && _prevMouse.LeftButton == ButtonState.Released)

@@ -20,6 +20,12 @@ public struct InputState
     public Vector2 PanDeltaNoLetters;
 
     /// <summary>
+    /// The same pan with the arrows left out — WASD and dragging only. The
+    /// Anchor Art page uses this, because there the arrows nudge a picture.
+    /// </summary>
+    public Vector2 PanDeltaNoArrows;
+
+    /// <summary>
     /// One step per arrow-key PRESS, rather than per frame held. For tuning a
     /// number a pixel at a time, where a repeat rate would run away with it.
     /// </summary>
