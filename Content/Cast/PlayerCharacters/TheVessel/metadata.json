@@ -1,0 +1,36 @@
+{
+  "group_id": "305abba4-01c6-4903-aaca-ace68bf25938",
+  "states": [
+    {
+      "character": {
+        "id": "227556ac-6283-490c-a286-c1c11374905e",
+        "name": "Idle",
+        "prompt": "A mysterious robed figure in a heavy, textured brown hooded cloak, standing in a wide, stable stance. The hood is pulled low, casting the face into deep shadow, revealing six glowing, piercing eyes arranged in a symmetrical pattern. The robe features intricate layered fabric folds and a frayed, worn hem, accented by a silver pentagram necklace. Instead of feet, four writhing black tentacles emerge from the base of the robe, providing a solid anchor. Selective outlines define the drapery and tentacle forms, captured from a low top-down 3/4 perspective.",
+        "size": {
+          "width": 128,
+          "height": 128
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-09-25T19:38:50.893978+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-10-21T00:08:01.787468"
+}
