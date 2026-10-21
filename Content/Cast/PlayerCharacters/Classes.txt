@@ -33,11 +33,17 @@ Movement: 4
 Actions: 2
 Colour: 97, 92, 92
 
-Class: Cyborg
+Class: Cyber Smith
 HP: 50
 Movement: 5
 Actions: 2
 Colour: 100, 97, 93
+
+Class: The Vessel
+HP: 30
+Movement: 5
+Actions: 2
+Colour: 92, 70, 50
 
 # A shapeshifter. Cards carrying a matching "Form:" line only appear while
 # she wears that shape, so the wolf's claws and the witch's curses never share

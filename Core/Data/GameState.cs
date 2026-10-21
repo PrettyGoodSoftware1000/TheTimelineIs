@@ -30,7 +30,7 @@ public class GameState
 
     /// <summary>Old saves and dev shortcuts have no party — fall back to one of each class.</summary>
     public List<string> PartyOrDefault() =>
-        Party.Count > 0 ? Party : new List<string> { "Dirtbag", "Gun-O-Mancer", "Cyborg", "Werewitch" };
+        Party.Count > 0 ? Party : new List<string> { "Dirtbag", "Gun-O-Mancer", "Cyber Smith", "Werewitch" };
 
     /// <summary>New Game: wipe everything and set the chosen party.</summary>
     public void Reset(List<string> party)

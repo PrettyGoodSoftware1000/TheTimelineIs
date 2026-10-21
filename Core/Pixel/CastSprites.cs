@@ -19,7 +19,7 @@ namespace TheTimelineIs.Core.Pixel;
 /// is the normal state of this branch while the art is being drawn, so it is
 /// built to be legible rather than to be an error: the cube carries the
 /// character's initial in the colour their Classes.txt or Enemies.txt block
-/// gives them, which is enough to tell a Dirtbag from a Cyborg at a glance.
+/// gives them, which is enough to tell a Dirtbag from a Cyber Smith at a glance.
 /// </summary>
 public class CastSprites
 {

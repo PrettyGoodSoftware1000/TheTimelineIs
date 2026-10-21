@@ -142,7 +142,7 @@ Bottom Right: 12 Stabby
 
 []
 Card Name: Pew Pew
-Tags: Cyborg
+Tags: Cyber Smith
 Type: [ranged] Two targets, 1 hit. Multiple Projectiles
 Action Points: 1
 Friendly Fire: No
@@ -155,6 +155,23 @@ Hit Sound: [hitbasic.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys for 5 damage.
 Bottom Right: 5 Energy
+[]
+
+[]
+Card Name: Tentacle Lash
+Tags: The Vessel
+Type: [ranged] Three targets, 1 hit. Multiple Projectiles
+Action Points: 1
+Friendly Fire: No
+Stops Movement: Yes
+Projectile Art: Ball.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [hitbasic.wav]
+Effect: Three targets. 5 damage each.
+Card Text: Lash 3 guys for 5 damage.
+Bottom Right: 5 Lash
 []
 
 []
@@ -177,7 +194,7 @@ Bottom Right: 5 Stabby
 
 []
 Card Name: Reinforce
-Tags: Cyborg
+Tags: Cyber Smith
 Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
@@ -560,7 +577,7 @@ Bottom Right: 2 + Stun
 []
 
 Card Name: Rocket Pods
-Tags: Cyborg
+Tags: Cyber Smith
 Type: [ranged] AoE damage. Single Projectile
 Action Points: 2
 Friendly Fire: Yes

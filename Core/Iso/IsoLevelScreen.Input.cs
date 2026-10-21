@@ -437,7 +437,7 @@ public partial class IsoLevelScreen
     ///
     /// Sides are read from the CASTER, not from the player, so an enemy's
     /// friendly-fire blast catches the goblin next to it exactly the way one
-    /// of ours catches the Cyborg.
+    /// of ours catches the Cyber Smith.
     /// </summary>
     private IEnumerable<CharacterInstance> CatchableBy(CharacterInstance? caster, Card card)
     {
