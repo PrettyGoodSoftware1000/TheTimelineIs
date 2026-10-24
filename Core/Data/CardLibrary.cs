@@ -89,10 +89,10 @@ public class Card
     public string ProjectileArt = "Ball.png";
 
     /// <summary>
-    /// The animation folder the caster plays for THIS card, under its state's
-    /// animations/. Empty falls back to whatever the class or form casts with,
-    /// and failing that to SpellCast — so only a card that wants its own
-    /// swing has to say so.
+    /// The animation folder the caster plays for THIS card, inside one of the
+    /// caster's poses. Empty falls back to whatever the class or form casts
+    /// with, and failing that to SpellCast — so only a card that wants its
+    /// own swing has to say so.
     /// </summary>
     public string Animation = "";
 
@@ -475,8 +475,8 @@ public class CardLibrary
 
             case "animation":
                 if (CastPlaceholder.LooksLikeAPicture(value))
-                    diag.Error(card.Source, lineNo, $"'{card.Name}': Animation names a FOLDER under " +
-                        $"animations/, like 'SpellCast' — got '{value}'");
+                    diag.Error(card.Source, lineNo, $"'{card.Name}': Animation names a FOLDER inside " +
+                        $"a pose, like 'SpellCast' — got '{value}'");
                 else card.Animation = value;
                 break;
 

@@ -8,7 +8,7 @@ namespace TheTimelineIs.Core.Pixel;
 ///
 /// South-east is the front of the character looking towards the bottom-right
 /// of the screen; north is their back, looking away up the screen. The names
-/// are the file names in a character's rotations folder.
+/// are the file names in a character's pose folder.
 /// </summary>
 public enum Facing8
 {

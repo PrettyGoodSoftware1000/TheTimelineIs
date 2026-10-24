@@ -45,7 +45,7 @@ public static class ContentValidator
         void CheckState(string file, int line, string who, string folder, string state, string animation)
         {
             // A named folder that is not there is a typo. A folder that IS
-            // there with no rotations in it yet is work in progress — the
+            // there with no poses in it yet is work in progress — the
             // cube is what it is meant to draw — and does not need a note
             // every time the game starts.
             if (state.Length > 0 && index != null &&
@@ -53,15 +53,14 @@ public static class ContentValidator
                 diag.Warn(file, line, $"'{who}': there is no folder '{state}' under {folder} — " +
                     "drawing a cube. Make the folder, or fix the name.");
             if (animation.Length > 0 && index != null &&
-                Pixel.DirectionalSprite.RootOf(index, folder, state) is string root)
+                Pixel.DirectionalSprite.PosesOf(index, folder, state) is { Count: > 0 } poses)
             {
-                bool any = false;
-                foreach (var f in Pixel.Facings.All)
-                    if (index.Images($"{root}/animations/{animation}/{f.FileName()}").Count > 0)
-                        any = true;
+                bool any = Pixel.DirectionalSprite.AnimationFolders(index, poses)
+                    .TryGetValue(Pixel.DirectionalSprite.AnimationName(animation), out var dir) &&
+                    Pixel.Facings.All.Any(f => index.Images($"{dir}/{f.FileName()}").Count > 0);
                 if (!any)
-                    diag.Warn(file, line, $"'{who}': cast animation '{animation}' has no frames under " +
-                        $"{root}/animations/{animation}/<direction>/ — casting will not animate");
+                    diag.Warn(file, line, $"'{who}': cast animation '{animation}' has no frames in " +
+                        $"{string.Join(" or ", poses)} — casting will not animate");
             }
         }
 

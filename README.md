@@ -69,15 +69,17 @@ dotnet run --project Desktop -- --editor        # the level editor
 
 See `Content/Cast/README.txt`. In short:
 
-- `{Character}/{Form}/{State}/rotations/` and `.../animations/`.
-  `Classes.txt` names the form folder; the state inside it is found by looking.
-- **The state is the pose an animation starts from.** Everything drawn so far
-  starts from `Idle/`.
+- `{Character}/{Form}/IdlePose/south-east.png` and `.../IdlePose/Walk/`.
+  `Classes.txt` names the form folder; the poses inside it are found by looking.
+- **A pose is the picture an animation starts from.** Characters stand in
+  `IdlePose`. Animations from every pose play.
+- `(brackets)` in an animation folder's name are notes: `Running (Fix Edge)`
+  plays as `Running`.
 - **No art yet = a cube** with the character's initial, in that character's
   `Colour:`, and a yellow triangle on the ground for its facing.
 - An animation is a folder per direction of numbered frames.
 - **`Walk`** plays while a character crosses a square, in the direction it is
-  stepping. One cycle per square.
+  stepping. One cycle per square. No `Walk`? `Run`, then `Running`.
 - **Casting** tries three names and takes the first with frames: the card's
   `Animation:`, then the class or form's `Cast Animation:`, then `SpellCast`.
 
@@ -251,7 +253,7 @@ All of them: `Key: value`, `#` comments, case-insensitive, blank lines ignored.
 |---|---|---|
 | World map | `Content/Images/Map/Map.png` | painted; the map is not pixel art |
 | Ground | `Content/Images/Blocks/` | 128x64 surfaces, 128x112 blocks |
-| Characters | `Content/Cast/.../{Name}/{Form}/{State}/rotations/*.png` | any size, drawn 1:1 |
+| Characters | `Content/Cast/.../{Name}/{Form}/IdlePose/*.png` | any size, drawn 1:1 |
 | Effects | `Content/Images/Pixel/Effects/` | 16x16 icons, 32x32 ball |
 | Decorations | `Content/Images/Decorations/` | hung by the bottom on the square |
 

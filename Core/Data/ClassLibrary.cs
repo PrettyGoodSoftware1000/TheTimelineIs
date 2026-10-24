@@ -27,9 +27,8 @@ public class PlayerClass
     public int Actions = CharacterInstance.DefaultActionsPerTurn;
 
     /// <summary>
-    /// Which state folder under the class's folder to draw from. Empty means
-    /// the first folder that has rotations in it — the common case, since
-    /// most characters have one state.
+    /// Which folder under the class's folder to draw from. Empty means every
+    /// pose folder in it, standing in IdlePose — the common case.
     /// </summary>
     public string Art = "";
 
@@ -46,9 +45,9 @@ public class PlayerClass
     public List<ClassForm> Forms = new();
 
     /// <summary>
-    /// The animation folder played while this class casts a card, under its
-    /// state's animations/. A form carrying its own overrides it — the wolf
-    /// never plays the witch's spell.
+    /// The animation folder played while this class casts a card, inside one
+    /// of its poses. A form carrying its own overrides it — the wolf never
+    /// plays the witch's spell.
     /// </summary>
     public string CastAnimation = "";
     public int Line;
@@ -186,7 +185,7 @@ public class ClassLibrary
                 case "art":
                     if (CastPlaceholder.LooksLikeAPicture(value))
                         diag.Error(Path, lineNo, $"'{current.Name}': Art is a FOLDER now, not a picture — " +
-                            $"got '{value}'. Put rotations/ inside a folder and name the folder here.");
+                            $"got '{value}'. Name a folder, like 'IdlePose'.");
                     else current.Art = value;
                     break;
                 case "colour":
@@ -197,7 +196,7 @@ public class ClassLibrary
                     break;
                 case "sprites":
                     diag.Error(Path, lineNo, $"'{current.Name}': 'Sprites:' is gone — art is a folder of " +
-                        "rotations now. Delete the line, or use 'Art: FolderName' to pick a folder.");
+                        "poses now. Delete the line, or use 'Art: FolderName' to pick a folder.");
                     break;
                 case "form":
                     // "Form: Witch, WitchForm" — and optionally a third field,
@@ -217,8 +216,8 @@ public class ClassLibrary
                     break;
                 case "cast animation":
                     if (CastPlaceholder.LooksLikeAPicture(value))
-                        diag.Error(Path, lineNo, $"'{current.Name}': Cast Animation names a folder under " +
-                            $"animations/ now, like 'GunShot' — got '{value}'");
+                        diag.Error(Path, lineNo, $"'{current.Name}': Cast Animation names an animation " +
+                            $"folder inside a pose, like 'GunShot' — got '{value}'");
                     else current.CastAnimation = value;
                     break;
                 case "summoned by":

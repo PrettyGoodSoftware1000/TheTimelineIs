@@ -29,7 +29,7 @@ public class EnemyDef
     /// <summary>The longer side, for anything that wants one number.</summary>
     public int Size => Math.Max(SizeX, SizeY);
 
-    /// <summary>Which state folder to draw from; empty means the first with rotations.</summary>
+    /// <summary>Which folder to draw from; empty means every pose folder, standing in IdlePose.</summary>
     public string Art = "";
 
     /// <summary>
@@ -165,7 +165,7 @@ public class EnemyLibrary
                 case "art":
                     if (CastPlaceholder.LooksLikeAPicture(value))
                         diag.Error(Path, lineNo, $"'{current.Name}': Art is a FOLDER now, not a picture — " +
-                            $"got '{value}'. Put rotations/ inside a folder and name the folder here.");
+                            $"got '{value}'. Name a folder, like 'IdlePose'.");
                     else current.Art = value;
                     break;
                 case "colour":
@@ -176,15 +176,15 @@ public class EnemyLibrary
                     break;
                 case "sprites":
                     diag.Error(Path, lineNo, $"'{current.Name}': 'Sprites:' is gone — art is a folder of " +
-                        "rotations now. Delete the line, or use 'Art: FolderName' to pick a folder.");
+                        "poses now. Delete the line, or use 'Art: FolderName' to pick a folder.");
                     break;
                 case "card tags":
                     current.CardTags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
                     break;
                 case "cast animation":
                     if (CastPlaceholder.LooksLikeAPicture(value))
-                        diag.Error(Path, lineNo, $"'{current.Name}': Cast Animation names a folder under " +
-                            $"animations/ now, like 'Swing' — got '{value}'");
+                        diag.Error(Path, lineNo, $"'{current.Name}': Cast Animation names an animation " +
+                            $"folder inside a pose, like 'Swing' — got '{value}'");
                     else current.CastAnimation = value;
                     break;
                 default:

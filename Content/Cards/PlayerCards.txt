@@ -29,8 +29,8 @@
 #                  you are holding rather than doing something with it - a
 #                  shapeshift, a shell swap. Nimble adds its movement on top
 #                  either way. No line means Yes, and every card should say.)
-# Animation:      (Animation folder the caster plays for this card, under its
-#                  state's animations/ - e.g. "GunShot". Leave it out and the
+# Animation:      (Animation folder the caster plays for this card, inside
+#                  one of its poses - e.g. "GunShot". Leave it out and the
 #                  class's own Cast Animation is used, or SpellCast when it
 #                  has none.)
 # Projectile Art: (File in Content/Images/Pixel/Effects/. Art must point RIGHT;

@@ -392,9 +392,8 @@ public class CharacterInstance
         : $"Content/Cast/EnemyCharacters/{Name}";
 
     /// <summary>
-    /// Which state folder under <see cref="Folder"/> to draw from. A
-    /// shapeshifter's changes with its form. Empty means the first folder with
-    /// rotations in it.
+    /// Which folder under <see cref="Folder"/> to draw from. A shapeshifter's
+    /// changes with its form. Empty means every pose folder in it.
     /// </summary>
     public string Art => IsPlayer
         ? ClassLibrary.Current.Get(Name)?.ArtFor(Form) ?? ""

@@ -72,7 +72,7 @@ public partial class IsoLevelScreen
         if (c.CastFrames is { Count: > 0 } cast)
             return cast[Math.Clamp((int)(c.CastAnimTime * DirectionalSprite.Fps), 0, cast.Count - 1)];
         if (MovingToward(c) == null) return null;
-        if (_ctx.Sprites.Frames(c, DirectionalSprite.Walk) is not { Count: > 0 } walk) return null;
+        if (_ctx.Sprites.WalkFrames(c) is not { } walk) return null;
         return walk[Math.Clamp((int)(_walkT * walk.Count), 0, walk.Count - 1)];
     }
 

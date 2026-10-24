@@ -1,16 +1,15 @@
 # One block per playable class.
 #
-# ART is a folder, not a picture. Inside it a STATE folder holds rotations/
-# and animations/ — see the README in Content/Cast. The state folder is found
-# by looking, so nothing here names it. A class with no rotations yet is drawn
-# as a cube with its initial on top.
+# ART is a folder, not a picture. Inside it a POSE folder (IdlePose) holds the
+# pictures and the animation folders — see the README in Content/Cast. Poses
+# are found by looking, so nothing here names them. A class with no pose yet
+# is drawn as a cube with its initial on top.
 #
 #   Colour: r, g, b            what colour that cube is
 #   Mind: 100                  nerve, or 'Infinite' for something that cannot
 #                              be frightened
-#   Art: FolderName            optional; which state folder to draw from.
-#                              Without it, the first folder with rotations in
-#                              it is used.
+#   Art: FolderName            optional; which folder to draw from.
+#                              Without it, every pose folder is used.
 #   Cast Animation: GunShot    optional; an animation folder played over the
 #                              sprite while a card is cast. Without it, cards
 #                              play SpellCast. A card's own "Animation:" line
@@ -47,7 +46,7 @@ Colour: 92, 70, 50
 
 # A shapeshifter. Cards carrying a matching "Form:" line only appear while
 # she wears that shape, so the wolf's claws and the witch's curses never share
-# a hand. The wolf has no art folder yet, so she is a cube in that shape.
+# a hand.
 Class: Werewitch
 HP: 80
 Movement: 8

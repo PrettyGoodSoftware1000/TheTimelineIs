@@ -10,10 +10,10 @@ namespace TheTimelineIs.Core.Pixel;
 /// Finds the pixel art for a character, and stands in for it when there is
 /// none.
 ///
-/// Art is a folder per state inside the character's folder, with rotations/
-/// and animations/ inside it. Which folder is looked up by the character's
-/// form — a Werewitch in wolf shape asks for "WolfForm" — and the state
-/// folder inside that is found by looking; see DirectionalSprite.RootOf.
+/// Art is a folder per pose inside the character's folder, with the pose's
+/// directions and its animation folders inside it. Which folder is looked up
+/// by the character's form — a Werewitch in wolf shape asks for "WolfForm" —
+/// and the poses inside that are found by looking; see DirectionalSprite.PosesOf.
 ///
 /// Anybody with no art yet gets a placeholder cube instead of vanishing. That
 /// is the normal state of this branch while the art is being drawn, so it is
@@ -48,13 +48,9 @@ public class CastSprites
         string key = who.Folder + "|" + who.Art;
         if (_sprites.TryGetValue(key, out var known)) return known;
 
-        DirectionalSprite? found = null;
-        if (DirectionalSprite.RootOf(_index, who.Folder, who.Art) is string root)
-        {
-            var sprite = DirectionalSprite.Load(_assets, _index, root);
-            if (sprite.HasArt) found = sprite;
-        }
-        return _sprites[key] = found;
+        var sprite = DirectionalSprite.Load(_assets, _index,
+            DirectionalSprite.PosesOf(_index, who.Folder, who.Art));
+        return _sprites[key] = sprite.HasArt ? sprite : null;
     }
 
     /// <summary>
@@ -97,6 +93,17 @@ public class CastSprites
     /// </summary>
     public IReadOnlyList<Texture2D>? Frames(CharacterInstance who, string animation) =>
         animation.Length == 0 ? null : For(who)?.Animation(animation, who.Facing);
+
+    /// <summary>
+    /// The frames for crossing a square: Walk, or a Run when that is all there
+    /// is. Null when neither is drawn and the character glides.
+    /// </summary>
+    public IReadOnlyList<Texture2D>? WalkFrames(CharacterInstance who)
+    {
+        foreach (string name in DirectionalSprite.Walk)
+            if (Frames(who, name) is { Count: > 0 } frames) return frames;
+        return null;
+    }
 
     private static char InitialOf(string name) =>
         string.IsNullOrWhiteSpace(name) ? '?' : char.ToUpperInvariant(name.Trim()[0]);

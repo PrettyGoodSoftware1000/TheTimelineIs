@@ -9,22 +9,31 @@ namespace TheTimelineIs.Core.Pixel;
 
 /// <summary>
 /// A character drawn from eight rotations, and whatever animations sit beside
-/// them, laid out the way the art tool exports:
+/// them. Art is a folder per POSE — the picture an animation starts from —
+/// holding that pose's directions and one folder per animation:
 ///
-///   {Character}/{Form}/{State}/rotations/south-east.png
-///   {Character}/{Form}/{State}/animations/SpellCast/south-east/*.png
+///   {Character}/{Form}/IdlePose/south-east.png
+///   {Character}/{Form}/IdlePose/SpellCast/south-east/*.png
 ///
-/// Both are read by LOOKING, not by being told: the rotations are eight known
-/// compass names, and an animation is however many pictures are in its folder,
-/// played in name order. Dropping frames in is all it takes.
+/// Both are read by LOOKING, not by being told: a pose is any folder with a
+/// compass-named picture in it, and an animation is however many pictures are
+/// in its folder, played in name order. Dropping frames in is all it takes.
+/// Anything in brackets in an animation's folder name is a note and is
+/// ignored, so "Running (Fix Edge)" plays as Running.
 ///
 /// Everything is loaded once and cached. A direction with no file falls back to
 /// the nearest one that has art, so a half-finished character still draws.
 /// </summary>
 public class DirectionalSprite
 {
-    /// <summary>The animation played while a character walks between squares.</summary>
-    public const string Walk = "Walk";
+    /// <summary>The pose a character stands in, and the first one searched for animations.</summary>
+    public const string IdlePose = "IdlePose";
+
+    /// <summary>
+    /// The animations played while a character walks between squares, first
+    /// one drawn wins — so a wolf with only a run still runs.
+    /// </summary>
+    public static readonly string[] Walk = { "Walk", "Run", "Running" };
 
     /// <summary>
     /// The animation played when a card is cast and nothing more specific was
@@ -32,8 +41,8 @@ public class DirectionalSprite
     /// </summary>
     public const string SpellCast = "SpellCast";
 
-    /// <summary>The folder holding this character's rotations/ and animations/.</summary>
-    public string Root { get; }
+    /// <summary>The pose folders this character was read from, standing pose first.</summary>
+    public IReadOnlyList<string> Poses { get; }
 
     private readonly Dictionary<Facing8, Texture2D> _rotations = new();
     private readonly Dictionary<string, Dictionary<Facing8, List<Texture2D>>> _animations =
@@ -44,66 +53,89 @@ public class DirectionalSprite
     /// <summary>The names of every animation found, for reporting.</summary>
     public IEnumerable<string> AnimationNames => _animations.Keys;
 
-    private DirectionalSprite(string root) => Root = root;
+    private DirectionalSprite(IReadOnlyList<string> poses) => Poses = poses;
 
     /// <summary>
-    /// The folder that actually holds rotations/ and animations/, starting
-    /// from a character's folder and whatever its Art or Form line named.
+    /// The pose folders for a character, starting from its folder and whatever
+    /// its Art or Form line named. Empty when there is no art yet.
     ///
-    /// The art tool nests a STATE inside that — "Idle" is the pose an
-    /// animation starts from — so the named folder is usually one level above
-    /// the pictures. Rather than make every content file spell the state out,
-    /// this walks down: the named folder if it has rotations in it, otherwise
-    /// the first folder inside it that does.
+    /// The named folder is a pose itself if it has rotations in it. Otherwise
+    /// every folder inside it that does is a pose — IdlePose first, since
+    /// that is the one it stands in, then the rest by name. A Living Stone
+    /// with an IdlePose and a Mid-walk stands idle and walks with the walk
+    /// drawn from mid-stride.
     /// </summary>
-    public static string? RootOf(IContentIndex index, string folder, string art)
+    public static IReadOnlyList<string> PosesOf(IContentIndex index, string folder, string art)
     {
         string start = art.Length > 0 ? $"{folder}/{art}" : folder;
-        if (HasRotations(start)) return start;
-        foreach (string state in index.Folders(start))
-            if (HasRotations($"{start}/{state}")) return $"{start}/{state}";
-        return null;
+        if (IsPose(start)) return new[] { start };
+        return index.Folders(start)
+            .OrderBy(name => name.Equals(IdlePose, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .Select(name => $"{start}/{name}")
+            .Where(IsPose)
+            .ToList();
     }
 
-    private static bool HasRotations(string root) =>
-        Facings.All.Any(f => AssetLoader.Exists($"{root}/rotations/{f.FileName()}.png"));
+    private static bool IsPose(string folder) =>
+        Facings.All.Any(f => AssetLoader.Exists($"{folder}/{f.FileName()}.png"));
 
-    public static DirectionalSprite Load(AssetLoader assets, IContentIndex index, string root)
+    /// <summary>
+    /// An animation's name from its folder's: "Running (Fix Edge)" is
+    /// Running. Brackets are notes for whoever is drawing.
+    /// </summary>
+    public static string AnimationName(string folderName)
     {
-        var sprite = new DirectionalSprite(root);
+        int open;
+        while ((open = folderName.IndexOf('(')) >= 0)
+        {
+            int close = folderName.IndexOf(')', open);
+            folderName = close < 0 ? folderName[..open] : folderName[..open] + folderName[(close + 1)..];
+        }
+        return folderName.Trim();
+    }
+
+    /// <summary>
+    /// Every animation across the poses, by name, with the folder it lives
+    /// in. Two poses with the same animation: the earlier pose wins.
+    /// </summary>
+    public static Dictionary<string, string> AnimationFolders(IContentIndex index, IReadOnlyList<string> poses)
+    {
+        var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string pose in poses)
+            foreach (string folder in index.Folders(pose))
+            {
+                string name = AnimationName(folder);
+                if (name.Length > 0) found.TryAdd(name, $"{pose}/{folder}");
+            }
+        return found;
+    }
+
+    public static DirectionalSprite Load(AssetLoader assets, IContentIndex index, IReadOnlyList<string> poses)
+    {
+        var sprite = new DirectionalSprite(poses);
+        if (poses.Count == 0) return sprite;
 
         foreach (var facing in Facings.All)
         {
-            string path = $"{root}/rotations/{facing.FileName()}.png";
+            string path = $"{poses[0]}/{facing.FileName()}.png";
             if (!AssetLoader.Exists(path)) continue;
             sprite._rotations[facing] = assets.LoadTexture(path);
         }
 
-        // An animation is a folder per direction under animations/{Name}/.
+        // An animation is a folder per direction under {Pose}/{Name}/.
         // Listing them means the exporter can name frames whatever it likes.
-        string animRoot = $"{root}/animations";
-        foreach (var facing in Facings.All)
-        {
-            foreach (string name in AnimationFolders(index, animRoot))
+        foreach (var (name, animDir) in AnimationFolders(index, poses))
+            foreach (var facing in Facings.All)
             {
-                string dir = $"{animRoot}/{name}/{facing.FileName()}";
+                string dir = $"{animDir}/{facing.FileName()}";
                 var frames = index.Images(dir);
                 if (frames.Count == 0) continue;
                 if (!sprite._animations.TryGetValue(name, out var byFacing))
                     sprite._animations[name] = byFacing = new Dictionary<Facing8, List<Texture2D>>();
                 byFacing[facing] = frames.Select(f => assets.LoadTexture($"{dir}/{f}")).ToList();
             }
-        }
         return sprite;
     }
-
-    /// <summary>
-    /// The animation names under a state. There is no directory listing for
-    /// folders, only for files, so this reads the names off the one level of
-    /// paths the index can see.
-    /// </summary>
-    private static IEnumerable<string> AnimationFolders(IContentIndex index, string animRoot) =>
-        index.Folders(animRoot);
 
     /// <summary>
     /// The picture for a direction. A missing one falls back to the nearest
@@ -139,7 +171,7 @@ public class DirectionalSprite
     /// </summary>
     public IReadOnlyList<Texture2D>? Animation(string name, Facing8 facing)
     {
-        if (!_animations.TryGetValue(name, out var byFacing)) return null;
+        if (!_animations.TryGetValue(AnimationName(name), out var byFacing)) return null;
         if (byFacing.TryGetValue(facing, out var exact)) return exact;
         for (int step = 1; step <= 4; step++)
             foreach (int side in new[] { step, -step })
@@ -151,5 +183,5 @@ public class DirectionalSprite
     }
 
     /// <summary>Whether this animation exists in any direction at all.</summary>
-    public bool HasAnimation(string name) => _animations.ContainsKey(name);
+    public bool HasAnimation(string name) => _animations.ContainsKey(AnimationName(name));
 }
