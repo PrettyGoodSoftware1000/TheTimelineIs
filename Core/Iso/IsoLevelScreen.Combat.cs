@@ -277,6 +277,7 @@ public partial class IsoLevelScreen
         else
         {
             _mode = Mode.EnemyTurn;
+            _enemyHold = EnemyHoldSeconds;
         }
     }
 

@@ -131,10 +131,12 @@ public partial class IsoLevelScreen
                 break;
 
             case Act.Casting when _actingCard is { Delivery: Delivery.Ranged } ranged:
+                _shots.Clear();
                 // a shot out of the sky needs no target on the ground and no
                 // caster to leave from - it falls onto the square that was aimed at
                 if (ranged.SkyAngle != 0f)
                 {
+                    _salvoAims.Clear();
                     _projTo = IsoMath.ToScreen(_skyTarget.X, _skyTarget.Y,
                         HeightAt(_skyTarget), Origin);
                     // walk back up the incoming line until the shot is off screen
@@ -144,6 +146,21 @@ public partial class IsoLevelScreen
                     _projRotation = rad;
                     _projWander = 0f;
                     EnterAct(Act.Projectile, SkyRunUp / Math.Max(1f, ranged.Speed * IsoMath.TileW));
+                    break;
+                }
+
+                // a salvo fires one shot at every square picked, all at once,
+                // whether or not anybody is standing there
+                if (_salvoAims.Count > 0)
+                {
+                    _projFrom = FootOf(_actor!) - new Vector2(0, MuzzleHeight);
+                    _projWander = RocketWander;
+                    foreach (var at in _salvoAims)
+                        _shots.Add((IsoMath.ToScreen(at.X, at.Y, HeightAt(at), Origin),
+                            (float)(Rng.NextDouble() * Math.PI * 2)));
+                    float far = _salvoAims.Max(at => IsoMath.GridDistance(Tile(_actor!), at));
+                    _salvoAims.Clear();
+                    EnterAct(Act.Projectile, far / Math.Max(1f, ranged.Speed));
                     break;
                 }
 

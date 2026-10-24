@@ -416,10 +416,13 @@ public partial class IsoLevelScreen
                     _overlaps[t] = _overlaps.TryGetValue(t, out int n) ? n + 1 : 1;
                 }
             var centre = _groundAims[0];
+            _salvoAims.Clear();
+            _salvoAims.AddRange(_groundAims);
             _groundAims.Clear();
             PlayArea(salvo, centre);
             return;
         }
+        _salvoAims.Clear();
         PlayArea(AreaOf(card, Tile(me), tile), tile);
     }
 

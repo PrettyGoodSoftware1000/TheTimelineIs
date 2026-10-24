@@ -108,11 +108,10 @@
 Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
-Action Points: 1
+Action Points: 2
 Friendly Fire: Yes
 Stops Movement: Yes
 Explosion Range: 3
-Projectile Art: Circle.png
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.2
 Speed: 18
@@ -582,20 +581,19 @@ Type: [ranged] AoE damage. Single Projectile
 Action Points: 2
 Friendly Fire: Yes
 Stops Movement: Yes
-Aims: 4
+Aims: 3
 Range: 8
-Explosion Range: 2
-Projectile Art: Circle.png
+Explosion Range: 1
 Casting Sound: [Blank]
 Casting Time: 0.2
-Speed: 22
+Speed: 10
 Hit Sound: [DefaultPop.wav]
 Effect: AoE 3 damage to enemies
 Effects: FireTiles 2
 Fire Chance: 15
-Card Text: Four rockets, picked one at a time. Where two blasts overlap, so
+Card Text: Three rockets, picked one at a time. Where two blasts overlap, so
 Card Text: does the damage. Some of what they touch catches.
-Bottom Right: 4 x 3
+Bottom Right: 3 x 3
 []
 
 Card Name: Swipe

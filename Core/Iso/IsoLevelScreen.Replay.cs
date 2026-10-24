@@ -121,6 +121,8 @@ public partial class IsoLevelScreen
     {
         _actingCard = null;
         _projFrom = _projTo = Vector2.Zero;
+        _shots.Clear();
+        _salvoAims.Clear();
         _act = Act.Hits;
         _actT = _actDur;
         foreach (var c in Everyone) { c.CastFrames = null; c.CastAnimTime = 0f; }

@@ -29,11 +29,11 @@ public class DirectionalSprite
     /// <summary>The pose a character stands in, and the first one searched for animations.</summary>
     public const string IdlePose = "IdlePose";
 
-    /// <summary>
-    /// The animations played while a character walks between squares, first
-    /// one drawn wins — so a wolf with only a run still runs.
-    /// </summary>
-    public static readonly string[] Walk = { "Walk", "Run", "Running" };
+    /// <summary>Moving out of a fight.</summary>
+    public const string Walk = "Walk";
+
+    /// <summary>Moving in a fight. "Running" is the same thing, spelled the other way.</summary>
+    public static readonly string[] Run = { "Run", "Running" };
 
     /// <summary>
     /// The animation played when a card is cast and nothing more specific was

@@ -29,9 +29,9 @@
 
 ## Animation folders
 
-    Walk/        one step. Plays while the character crosses a square, in the
-                 direction it is stepping — one cycle per square, whatever
-                 the walking speed. No Walk? Run, then Running, is used.
+    Walk/        moving out of a fight, in the direction of the step.
+    Run/         moving in a fight. "Running" works too. Missing one? The
+                 other plays. Both loop at the frame rate below.
     SpellCast/   the default when a card is played.
     anything/    played when a card, class or enemy names it.
 

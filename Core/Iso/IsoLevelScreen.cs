@@ -268,6 +268,15 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     /// <summary>Where in the weave this shot starts, so a salvo does not fly in step.</summary>
     private float _projSeed;
 
+    /// <summary>
+    /// The squares a salvo was aimed at, kept from the last pick until the
+    /// shots leave. Empty for anything that fires once.
+    /// </summary>
+    private readonly List<Point> _salvoAims = new();
+
+    /// <summary>A salvo's shots in flight: one per aimed square, each weaving to its own.</summary>
+    private readonly List<(Vector2 To, float Seed)> _shots = new();
+
     // dialogue playback
     private List<DialogueLine>? _lines;
     private int _lineIndex;

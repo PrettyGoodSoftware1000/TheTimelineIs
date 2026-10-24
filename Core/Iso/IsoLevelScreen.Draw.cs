@@ -63,17 +63,16 @@ public partial class IsoLevelScreen
     /// or null when it is simply standing there.
     ///
     /// A cast beats a walk, so a card played at the end of a move shows the
-    /// swing rather than the last step. The walk runs off the step's own
-    /// progress instead of a clock of its own: one cycle of the frames covers
-    /// exactly one square, however fast the walk is set to go.
+    /// swing rather than the last step. A walk loops at the same frame rate as
+    /// everything else, so the ~ menu speeds it up and slows it down too.
     /// </summary>
     private Texture2D? AnimationFrame(CharacterInstance c)
     {
         if (c.CastFrames is { Count: > 0 } cast)
             return cast[Math.Clamp((int)(c.CastAnimTime * DirectionalSprite.Fps), 0, cast.Count - 1)];
         if (MovingToward(c) == null) return null;
-        if (_ctx.Sprites.WalkFrames(c) is not { } walk) return null;
-        return walk[Math.Clamp((int)(_walkT * walk.Count), 0, walk.Count - 1)];
+        if (_ctx.Sprites.MoveFrames(c, _mode != Mode.Explore) is not { } walk) return null;
+        return walk[(int)(_clock * DirectionalSprite.Fps) % walk.Count];
     }
 
     /// <summary>
@@ -807,21 +806,32 @@ public partial class IsoLevelScreen
         if (_mode != Mode.Acting || _act != Act.Projectile || _actingCard == null) return;
         float t = _actDur <= 0f ? 1f : MathHelper.Clamp(_actT / _actDur, 0f, 1f);
         var tex = ProjectileArt(_actingCard.ProjectileArt);
-        var pos = Vector2.Lerp(_projFrom, _projTo, t);
-        float angle = _projRotation;
+        if (_shots.Count == 0)
+            DrawShot(batch, tex, _projTo, _projRotation, _projSeed, t);
+        foreach (var (to, seed) in _shots)
+            DrawShot(batch, tex, to,
+                (float)Math.Atan2(to.Y - _projFrom.Y, to.X - _projFrom.X), seed, t);
+    }
 
-        // A rocket does not fly straight. It weaves across its own line and
-        // settles onto the target as it arrives — the wander is widest in the
-        // middle of the flight and nothing at either end, so it always leaves
-        // the caster and lands on the square it was aimed at.
+    /// <summary>
+    /// One shot, t of the way from the caster to where it lands.
+    ///
+    /// A rocket does not fly straight. It weaves across its own line and
+    /// settles onto the target as it arrives — the wander is widest in the
+    /// middle of the flight and nothing at either end, so it always leaves
+    /// the caster and lands on the square it was aimed at.
+    /// </summary>
+    private void DrawShot(SpriteBatch batch, Texture2D tex, Vector2 to, float angle, float seed, float t)
+    {
+        var pos = Vector2.Lerp(_projFrom, to, t);
         if (_projWander != 0f)
         {
-            var line = _projTo - _projFrom;
+            var line = to - _projFrom;
             if (line != Vector2.Zero)
             {
                 var across = Vector2.Normalize(new Vector2(-line.Y, line.X));
                 float taper = (float)Math.Sin(t * Math.PI);
-                float sway = (float)Math.Sin(t * Math.PI * 3.0 + _projSeed) * _projWander * taper;
+                float sway = (float)Math.Sin(t * Math.PI * 3.0 + seed) * _projWander * taper;
                 pos += across * sway;
                 // point where it is actually going, not where it was aimed
                 angle += sway * 0.02f;

@@ -134,7 +134,12 @@ public partial class IsoLevelScreen
         {
             case Mode.StealPick: UpdateStealPick(input); break;
             case Mode.Acting: UpdateAction(dt); break;
-            case Mode.EnemyTurn: EnemyAct(); break;
+            case Mode.EnemyTurn:
+                // the camera glides over first and the player gets a beat to
+                // see who is up; panning away in the meantime cancels the glide
+                if (_enemyHold > 0f) _enemyHold -= dt;
+                else EnemyAct();
+                break;
             case Mode.Explore:
             case Mode.PlayerTurn:
             case Mode.PlayerTarget:
@@ -553,4 +558,8 @@ public partial class IsoLevelScreen
 
     /// <summary>Time left on that hold, or 0.</summary>
     private float _stunHold;
+
+    /// <summary>How long an enemy waits, once its turn comes up, before it does anything.</summary>
+    private const float EnemyHoldSeconds = 1f;
+    private float _enemyHold;
 }

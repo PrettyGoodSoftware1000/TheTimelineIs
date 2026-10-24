@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework.Graphics;
 using TheTimelineIs.Core.Data;
 using TheTimelineIs.Core.Platform;
@@ -95,12 +96,16 @@ public class CastSprites
         animation.Length == 0 ? null : For(who)?.Animation(animation, who.Facing);
 
     /// <summary>
-    /// The frames for crossing a square: Walk, or a Run when that is all there
-    /// is. Null when neither is drawn and the character glides.
+    /// The frames for crossing a square: Walk out of a fight, Run in one.
+    /// Whichever is missing borrows the other. Null when neither is drawn
+    /// and the character glides.
     /// </summary>
-    public IReadOnlyList<Texture2D>? WalkFrames(CharacterInstance who)
+    public IReadOnlyList<Texture2D>? MoveFrames(CharacterInstance who, bool inCombat)
     {
-        foreach (string name in DirectionalSprite.Walk)
+        var names = inCombat
+            ? DirectionalSprite.Run.Append(DirectionalSprite.Walk)
+            : DirectionalSprite.Run.Prepend(DirectionalSprite.Walk);
+        foreach (string name in names)
             if (Frames(who, name) is { Count: > 0 } frames) return frames;
         return null;
     }

@@ -78,8 +78,8 @@ See `Content/Cast/README.txt`. In short:
 - **No art yet = a cube** with the character's initial, in that character's
   `Colour:`, and a yellow triangle on the ground for its facing.
 - An animation is a folder per direction of numbered frames.
-- **`Walk`** plays while a character crosses a square, in the direction it is
-  stepping. One cycle per square. No `Walk`? `Run`, then `Running`.
+- **`Walk`** plays when moving out of a fight, **`Run`** (or `Running`) in one.
+  Missing one? The other plays. Loops at the ~ menu's frame rate.
 - **Casting** tries three names and takes the first with frames: the card's
   `Animation:`, then the class or form's `Cast Animation:`, then `SpellCast`.
 

@@ -297,21 +297,26 @@ public partial class IsoLevelScreen
         for (int i = 0; i < _hand.Count; i++)
             if (rects[i].Contains(_pointer)) hovered = i;
 
-        for (int i = 0; i < _hand.Count; i++)
-            if (i != hovered)
-                DrawCard(batch, _hand[i], rects[i], false);
+        // a hovered card grows up out of the row; everything else stays put
+        var drawn = rects.ToList();
         if (hovered >= 0)
         {
             int w = (int)(CardW * HoverScale), h = (int)(CardH * HoverScale);
-            DrawCard(batch, _hand[hovered], new Rectangle(
-                rects[hovered].Center.X - w / 2, VirtualViewport.Height - h - 30, w, h), true);
+            drawn[hovered] = new Rectangle(
+                rects[hovered].Center.X - w / 2, VirtualViewport.Height - h - 30, w, h);
         }
+        for (int i = 0; i < _hand.Count; i++)
+            if (i != hovered)
+                DrawCard(batch, _hand[i], drawn[i], false);
+        if (hovered >= 0)
+            DrawCard(batch, _hand[hovered], drawn[hovered], true);
 
-        // The key that plays each card, over its top edge. Drawn after the
-        // cards so a raised hovered card cannot cover its own number.
+        // The key that plays each card, over its top edge — the grown card's
+        // edge when hovered, so the number rides above it instead of sitting
+        // in the middle of it. Drawn last so no card covers a number.
         for (int i = 0; i < _hand.Count && i < HandKeys.Length; i++)
             Ui.DrawTextCentered(batch, _ctx.Font, HandKeys[i].ToString(),
-                new Rectangle(rects[i].X, rects[i].Y - 62, rects[i].Width, 56),
+                new Rectangle(drawn[i].X, drawn[i].Y - 62, drawn[i].Width, 56),
                 Acting is CharacterInstance who && who.ActionPoints >= _hand[i].ActionCost
                     ? Color.White : Color.White * 0.35f,
                 0.42f);
