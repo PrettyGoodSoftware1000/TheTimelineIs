@@ -31,7 +31,6 @@ Actions: 2
 Size: 2
 Colour: 106, 105, 109
 Mind: Infinite
-Cast Animation: Punch
 
 Enemy: Imp
 HP: 10

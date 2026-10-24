@@ -62,7 +62,7 @@ public class DirectionalSprite
     /// The named folder is a pose itself if it has rotations in it. Otherwise
     /// every folder inside it that does is a pose — IdlePose first, since
     /// that is the one it stands in, then the rest by name. A Living Stone
-    /// with an IdlePose and a Mid-walk stands idle and walks with the walk
+    /// with an IdlePose and a Mid-walkPose stands idle and walks with the walk
     /// drawn from mid-stride.
     /// </summary>
     public static IReadOnlyList<string> PosesOf(IContentIndex index, string folder, string art)

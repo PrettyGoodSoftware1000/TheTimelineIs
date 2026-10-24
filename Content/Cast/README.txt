@@ -12,7 +12,7 @@
 - Classes.txt names the form folder. Poses are found by looking: any folder
   with a direction picture in it.
 - A character stands in IdlePose. Animations from every pose play, so a walk
-  drawn from Mid-walk/ still walks. Same name in two poses: IdlePose wins.
+  drawn from Mid-walkPose/ still walks. Same name in two poses: IdlePose wins.
 - (Brackets) in an animation folder's name are notes and are ignored:
   "Running (Fix Edge)" plays as Running.
 - POSE pictures only need the four diagonals: south-east, south-west,

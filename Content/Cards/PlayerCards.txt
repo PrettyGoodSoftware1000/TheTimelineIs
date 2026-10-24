@@ -134,7 +134,7 @@ Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 9
 Melee Time: 0.5
-Hit Sound: [hitbasic.wav], Delay 0.3, [hitbasic.wav], Delay 0.3, [hitbasic.wav]
+Hit Sound: [DefaultPop.wav], Delay 0.3, [DefaultPop.wav], Delay 0.3, [DefaultPop.wav]
 Effect: Single target. 3 times x 4 damage.
 Card Text: Stab something for 4 Stabby damage 3 times, then slip away 4 spaces.
 Bottom Right: 12 Stabby
@@ -151,7 +151,7 @@ Projectile Art: Circle.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys for 5 damage.
 Bottom Right: 5 Energy
@@ -168,7 +168,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Three targets. 5 damage each.
 Card Text: Lash 3 guys for 5 damage.
 Bottom Right: 5 Lash
@@ -205,7 +205,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Bolt a plate onto a friend. Adds 5 Armor.
 Bottom Right: 8 Armor
@@ -223,7 +223,7 @@ Projectile Art: Circle.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 5 damage.
 Card Text: Throw a knife for 5 Stabby damage.
 Bottom Right: 5 Stabby
@@ -242,7 +242,7 @@ Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 12
 Melee Time: 0.3
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 8 damage.
 Card Text: Leap 5 further, over anything in the way, and rake for 8.
 Bottom Right: 8 Stabby
@@ -262,7 +262,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Stand up on two legs. The claws go away; the curses come out.
 Bottom Right: 0 Change
@@ -282,7 +282,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Return to your real form. Move fast.
 Bottom Right: 0 Change
@@ -302,7 +302,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 1
 Speed: 10
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Curse some guy to take +3 melee damage per hit.
 Bottom Right: 0 Cursed
@@ -321,7 +321,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Lift a card off anyone - friend or foe. They lose it, you hold it. Play it now, or on either of your next 2 turns.
 Bottom Right: 0 Stolen
@@ -362,7 +362,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.5
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Invoke the fury of the swamp to call forth 'Gator.
 Bottom Right: 0 Gator
@@ -385,7 +385,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 3 times x 2 damage.
 Card Text: Shoot anything that gets close, just like Jesus did.
 Bottom Right: 2 Gunfire
@@ -406,7 +406,7 @@ Effects: Nimble 2
 Melee Time: 0.4
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 8 damage.
 Card Text: Snap. Not much of a plan, but it works.
 Bottom Right: 8 Chomp
@@ -428,7 +428,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.3
 Speed: 24
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: You know what that one's about to do. Everybody hit it there.
 Bottom Right: 0 Marked
@@ -485,7 +485,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Break the fire rounds and load the ones that bite.
 Bottom Right: 0 Shells
@@ -506,7 +506,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Back to the ones that set things on fire.
 Bottom Right: 0 Shells
@@ -554,7 +554,7 @@ Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 2
 Speed: 20
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
 Card Text: Black out and fuck shit up.
 Bottom Right: 0 ????
@@ -569,7 +569,7 @@ Stops Movement: Yes
 Mind Damage: 20
 Casting Sound: [Blank]
 Casting Time: 0.1
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: 2 damage
 Effects: Stun 1, Nimble 2
 Card Text: Two damage, one lost turn, and you are already leaving.
@@ -589,7 +589,7 @@ Projectile Art: Circle.png
 Casting Sound: [Blank]
 Casting Time: 0.2
 Speed: 22
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Effect: AoE 3 damage to enemies
 Effects: FireTiles 2
 Fire Chance: 15
@@ -608,7 +608,7 @@ Stops Movement: Yes
 Effect: AoE 7 damage to enemies
 Casting Sound: [Blank]
 Casting Time: 0.15
-Hit Sound: [hitbasic.wav]
+Hit Sound: [DefaultPop.wav]
 Card Text: Three squares at once, in whichever quarter you point at.
 Bottom Right: 7 Claw
 []

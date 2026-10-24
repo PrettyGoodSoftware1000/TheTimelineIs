@@ -100,7 +100,7 @@ public partial class IsoLevelScreen
         {
             case MowerStep.Through:
             case MowerStep.Bounced:
-                _ctx.Sounds.Play("hitbasic.wav");
+                _ctx.Sounds.Play("DefaultPop.wav");
                 break;
             case MowerStep.Exploded:
                 BlowUpMower(beat.Tile);

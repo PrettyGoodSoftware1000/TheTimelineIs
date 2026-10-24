@@ -535,7 +535,7 @@ public partial class IsoLevelScreen
                 ApplyHit(walker, guard.Watch.Damage, "Gunfire", report);
             _actor = was;
 
-            _ctx.Sounds.Play("hitbasic.wav");
+            _ctx.Sounds.Play("DefaultPop.wav");
             Log(report.ToString().TrimEnd());
             // the volley reads as a pause in the walk rather than a stop: hold
             // the walker still long enough to see it land, then let them finish

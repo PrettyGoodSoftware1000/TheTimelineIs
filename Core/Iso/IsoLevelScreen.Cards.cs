@@ -37,8 +37,11 @@ public partial class IsoLevelScreen
         // Turn to face what is being aimed at. Unlike a walk this CAN point at
         // a screen cardinal — nothing stops you shooting straight up the screen
         // — and the drawing rounds that to the nearest pose there is art for.
-        if (_actor != null && blastCenter != Tile(_actor))
-            _actor.FaceTowards(Tile(_actor), blastCenter);
+        // A big body faces from its square nearest the aim, so a Living Stone
+        // punching off its far side turns that way, not along its corner.
+        if (_actor != null && !_actor.Footprint.Contains(blastCenter))
+            _actor.FaceTowards(_actor.Footprint
+                .OrderBy(t => IsoMath.GridDistance(t, blastCenter)).First(), blastCenter);
         _selectedCard = null;
         _targets.Clear();
         _blastSet.Clear();
