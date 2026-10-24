@@ -59,6 +59,7 @@ Bottom Right: 3 Stabby
 []
 Card Name: Stone Slap
 Tags: Living Stone
+Animation: MeleePunch
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
