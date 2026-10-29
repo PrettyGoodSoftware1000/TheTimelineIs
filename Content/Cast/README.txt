@@ -13,8 +13,8 @@
   with a direction picture in it.
 - A character stands in IdlePose. Animations from every pose play, so a walk
   drawn from Mid-walkPose/ still walks. Same name in two poses: IdlePose wins.
-- (Brackets) in an animation folder's name are notes and are ignored:
-  "Running (Fix Edge)" plays as Running.
+- (Brackets) in a pose or animation folder's name are notes and are ignored:
+  "Running (Fix Edge)" plays as Running, "IdlePose (Placeholder)" is IdlePose.
 - POSE pictures only need the four diagonals: south-east, south-west,
   north-east, north-west. A character standing still is always drawn from one
   of those.

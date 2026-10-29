@@ -63,14 +63,15 @@ public class DirectionalSprite
     /// every folder inside it that does is a pose — IdlePose first, since
     /// that is the one it stands in, then the rest by name. A Living Stone
     /// with an IdlePose and a Mid-walkPose stands idle and walks with the walk
-    /// drawn from mid-stride.
+    /// drawn from mid-stride. Brackets are notes here too, so
+    /// "IdlePose (Placeholder)" is still the one it stands in.
     /// </summary>
     public static IReadOnlyList<string> PosesOf(IContentIndex index, string folder, string art)
     {
         string start = art.Length > 0 ? $"{folder}/{art}" : folder;
         if (IsPose(start)) return new[] { start };
         return index.Folders(start)
-            .OrderBy(name => name.Equals(IdlePose, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .OrderBy(name => AnimationName(name).Equals(IdlePose, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .Select(name => $"{start}/{name}")
             .Where(IsPose)
             .ToList();
@@ -80,8 +81,8 @@ public class DirectionalSprite
         Facings.All.Any(f => AssetLoader.Exists($"{folder}/{f.FileName()}.png"));
 
     /// <summary>
-    /// An animation's name from its folder's: "Running (Fix Edge)" is
-    /// Running. Brackets are notes for whoever is drawing.
+    /// An animation's or pose's name from its folder's: "Running (Fix Edge)"
+    /// is Running. Brackets are notes for whoever is drawing.
     /// </summary>
     public static string AnimationName(string folderName)
     {

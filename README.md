@@ -73,8 +73,8 @@ See `Content/Cast/README.txt`. In short:
   `Classes.txt` names the form folder; the poses inside it are found by looking.
 - **A pose is the picture an animation starts from.** Characters stand in
   `IdlePose`. Animations from every pose play.
-- `(brackets)` in an animation folder's name are notes: `Running (Fix Edge)`
-  plays as `Running`.
+- `(brackets)` in a pose or animation folder's name are notes: `Running (Fix Edge)`
+  plays as `Running`, `IdlePose (Placeholder)` is `IdlePose`.
 - **No art yet = a cube** with the character's initial, in that character's
   `Colour:`, and a yellow triangle on the ground for its facing.
 - An animation is a folder per direction of numbered frames.
