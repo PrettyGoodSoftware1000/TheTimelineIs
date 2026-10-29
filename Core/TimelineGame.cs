@@ -71,6 +71,7 @@ public class TimelineGame : Game
             Anchors = ArtAnchors.Load(),
             Sprites = new Pixel.CastSprites(new AssetLoader(GraphicsDevice), _platform.ContentIndex, GraphicsDevice),
             DevWriter = _platform.DevWriter,
+            SourceWriter = _platform.CreateDevWriter(),
         };
 
         ContentValidator.Run(_ctx.Cards, _ctx.EnemyCards, _ctx.Classes, _ctx.Enemies, _ctx.Strings,

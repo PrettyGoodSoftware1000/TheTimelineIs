@@ -42,6 +42,12 @@ public class GameContext
     public required ArtAnchors Anchors;
     public IDevDestinationWriter? DevWriter;
 
+    /// <summary>
+    /// Writes tuned content back into the repo whether dev mode is on or not,
+    /// so Anchor Art saves without Ctrl+D. Null off desktop.
+    /// </summary>
+    public IDevDestinationWriter? SourceWriter;
+
     public IScreen Screen = null!;
 
     public void SwitchTo(IScreen screen) => Screen = screen;

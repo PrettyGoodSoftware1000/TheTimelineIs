@@ -102,8 +102,8 @@ public partial class IsoLevelScreen
 
     private void SaveAnchors()
     {
-        if (_ctx.DevWriter is null) { Toast(_ctx.Strings.Get("dev_anchor_unsaved")); return; }
-        string? where = _ctx.DevWriter.Write(ArtAnchors.Path, _ctx.Anchors.Serialize());
+        if (_ctx.SourceWriter is null) { Toast(_ctx.Strings.Get("dev_anchor_unsaved")); return; }
+        string? where = _ctx.SourceWriter.Write(ArtAnchors.Path, _ctx.Anchors.Serialize());
         Toast(_ctx.Strings.Get(where == null ? "dev_anchor_unsaved" : "dev_anchor_saved"));
     }
 
