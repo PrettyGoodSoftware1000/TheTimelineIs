@@ -26,6 +26,9 @@ public class TimelineGame : Game
         {
             PreferredBackBufferWidth = 1920,
             PreferredBackBufferHeight = 1080,
+            // HiDef allows pictures up to 4096 wide; the map is 2752. Desktop
+            // never enforced the smaller limit, but the web build does.
+            GraphicsProfile = GraphicsProfile.HiDef,
         };
         Content.RootDirectory = "Content";
         IsMouseVisible = true;

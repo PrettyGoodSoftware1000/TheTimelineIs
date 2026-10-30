@@ -84,7 +84,9 @@ public partial class IsoLevelScreen
             DirectionalSprite.Fps = FrameRates[(at + 1) % FrameRates.Length];
         }
 
-        if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, DevButton(3), _ctx.Strings.Get("dev_anchor"), _tap))
+        // only where the anchors can be saved: not in a browser
+        if (_ctx.SourceWriter != null &&
+            Ui.Button(batch, _ctx.Pixel, _ctx.Font, DevButton(3), _ctx.Strings.Get("dev_anchor"), _tap))
             OpenAnchorMenu();
 
         Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("dev_close"),
