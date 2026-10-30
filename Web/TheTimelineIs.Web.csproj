@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <!-- The browser build. Same game as Desktop, compiled against KNI (a MonoGame
+       fork that can target WebGL) instead of MonoGame, so it reuses Core's
+       source files rather than referencing Core's project. No editor, no
+       saves, no dev tools. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TheTimelineIs.Web</RootNamespace>
+    <AssemblyName>TheTimelineIs</AssemblyName>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);BLAZORGL</DefineConstants>
+    <KniPlatform>BlazorGL</KniPlatform>
+    <BlazorEnableTimeZoneSupport>false</BlazorEnableTimeZoneSupport>
+    <!-- No .br/.gz copies: itch.io takes at most 1000 files and would not
+         serve them compressed anyway. -->
+    <CompressionEnabled>false</CompressionEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="*.cs;Pages\*.cs" />
+    <Compile Include="..\Core\**\*.cs" Exclude="..\Core\bin\**;..\Core\obj\**" LinkBase="Core" />
+    <Compile Include="..\Desktop\DesktopInput.cs" Link="DesktopInput.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="nkast.Xna.Framework" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Content" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Graphics" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Audio" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Media" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Input" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Game" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Devices" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Storage" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.XR" Version="4.3.9001" />
+    <PackageReference Include="nkast.Kni.Platform.Blazor.GL" Version="4.3.9001" />
+    <PackageReference Include="nkast.Xna.Framework.Content.Pipeline.Builder" Version="4.3.9001" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.10" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- The font. KNI builds it into wwwroot/Content. -->
+  <ItemGroup>
+    <KniContentReference Include="..\Content\Content.mgcb" />
+  </ItemGroup>
+
+  <!-- Raw game data, served as-is from Content/ so TitleContainer finds it at
+       the same "Content/..." paths it uses on desktop. -->
+  <ItemGroup>
+    <Content Include="..\Content\**\*.*"
+             Exclude="..\Content\bin\**;..\Content\obj\**;..\Content\Fonts\**;..\Content\Content.mgcb"
+             Link="wwwroot\Content\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- A browser cannot list a folder, so the build writes down every content
+       file and WebContentIndex answers from that list. -->
+  <Target Name="WriteContentIndex" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <_ContentIndexLine Include="@(Content->'%(Link)')" Condition="'%(Content.Link)' != ''" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(BaseIntermediateOutputPath)ContentIndex.txt" Lines="@(_ContentIndexLine)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(BaseIntermediateOutputPath)ContentIndex.txt" LogicalName="ContentIndex.txt" />
+    </ItemGroup>
+  </Target>
+</Project>

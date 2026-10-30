@@ -16,6 +16,23 @@ dotnet run --project Desktop -- --level PixelRooms   # straight into a level
 dotnet run --project Desktop -- --editor        # the level editor
 ```
 
+## Web version
+
+Plays in a browser. No editor, no saves, no dev tools.
+
+- **Get a build:** push to `WorldWideMac`, or press "Run workflow" on
+  *Web build* in GitHub Actions. Download `web-game` from the run.
+- **Put it online:** upload that zip to itch.io as an HTML game.
+- **Try it locally:**
+  ```
+  dotnet publish Web -c Release -o out
+  cd out/wwwroot && python3 -m http.server     # then open localhost:8000
+  ```
+- On Linux the font build needs `libfreetype6.so`:
+  `sudo ln -s /usr/lib/x86_64-linux-gnu/libfreetype.so.6 /usr/lib/x86_64-linux-gnu/libfreetype6.so`
+- A browser can't look in folders, so the build writes a list of every
+  content file. New art shows up after the next build.
+
 ## Controls
 
 | Action | Input |
@@ -40,6 +57,7 @@ dotnet run --project Desktop -- --editor        # the level editor
   `TitleContainer`. This is what makes a tablet port a new folder, not a rewrite.
 - `Core/Pixel/` — the pixel rules: the camera, facings, rotations, cubes.
 - `Desktop/` — the DesktopGL head: input, save location, dev writers, editor.
+- `Web/` — the browser head, built with KNI. Compiles `Core/`'s files directly.
 - `Content/` — every asset and script, loaded raw. Only the font is baked at build time.
 
 ---

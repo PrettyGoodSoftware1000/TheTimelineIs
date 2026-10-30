@@ -1,0 +1,36 @@
+name: Web build
+
+# Builds the browser version and keeps it as a download named "web-game".
+# That download is a zip with index.html at the top: upload it to itch.io
+# as an HTML game and tick "This file will be played in the browser".
+#
+#   - push to WorldWideMac   -> a fresh build
+#   - or press "Run workflow"
+
+on:
+  push:
+    branches: [WorldWideMac]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # KNI's font builder looks for FreeType as libfreetype6.so; Ubuntu
+      # calls it libfreetype.so.6.
+      - name: Point the font builder at FreeType
+        run: sudo ln -sf /usr/lib/x86_64-linux-gnu/libfreetype.so.6 /usr/lib/x86_64-linux-gnu/libfreetype6.so
+
+      - name: Build
+        run: dotnet publish Web -c Release -o out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-game
+          path: out/wwwroot
