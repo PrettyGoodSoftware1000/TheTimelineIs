@@ -8,8 +8,16 @@
     <base href="./" />
     <style>
         html, body { margin: 0; background: #000; overflow: hidden; }
-        #loading { display: flex; width: 100vw; height: 100vh; align-items: center; justify-content: center;
-                   color: #ccc; font: 1.5em 'Courier New', monospace; }
+        /* one look for both waits: the engine (Blazor fills in
+           --blazor-load-percentage) and then the art (Pages/Index.razor) */
+        .loading { position: fixed; inset: 0; z-index: 10; background: #0c0c18; color: #ccc;
+                   display: flex; flex-direction: column; align-items: center; justify-content: center;
+                   gap: 1.2em; font: 1.2em 'Courier New', monospace; }
+        .loading-title { color: #fff; font-size: 2em; }
+        .loading-bar { width: min(80vw, 600px); height: 14px; border: 1px solid #888; }
+        .loading-bar > div { height: 100%; background: #d33; }
+        #loading .loading-bar > div { width: var(--blazor-load-percentage, 0%); }
+        #loading .loading-note::after { content: var(--blazor-load-percentage-text, ""); }
         #blazor-error-ui { display: none; position: fixed; bottom: 0; width: 100%; padding: 0.6rem 1.25rem;
                            background: lightyellow; z-index: 1000; }
         #blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: 0.75rem; }
@@ -19,7 +27,11 @@
 <body>
 
     <div id="app">
-        <div id="loading">The Timeline Is &mdash; loading&hellip;</div>
+        <div id="loading" class="loading">
+            <div class="loading-title">The Timeline Is</div>
+            <div class="loading-bar"><div></div></div>
+            <div class="loading-note">Loading the game engine&hellip; </div>
+        </div>
     </div>
 
     <div id="blazor-error-ui">

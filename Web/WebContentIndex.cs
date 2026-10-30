@@ -18,16 +18,29 @@ public class WebContentIndex : IContentIndex
     private readonly Dictionary<string, List<string>> _files = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SortedSet<string>> _folders = new(StringComparer.OrdinalIgnoreCase);
 
-    public WebContentIndex()
+    /// <summary>Every content file, as "Content/Cast/Gator/south-east.png".</summary>
+    public static IReadOnlyList<string> AllPaths { get; } = ReadList();
+
+    private static List<string> ReadList()
     {
+        var paths = new List<string>();
         using var stream = typeof(WebContentIndex).Assembly.GetManifestResourceStream("ContentIndex.txt");
-        if (stream == null) return;
+        if (stream == null) return paths;
         using var reader = new StreamReader(stream);
         while (reader.ReadLine() is string line)
         {
             // "wwwroot\Content\Cast\Gator\south-east.png" -> "Content/Cast/Gator/south-east.png"
             string path = line.Trim().Replace('\\', '/');
             if (path.StartsWith("wwwroot/", StringComparison.OrdinalIgnoreCase)) path = path["wwwroot/".Length..];
+            if (path.Length > 0) paths.Add(path);
+        }
+        return paths;
+    }
+
+    public WebContentIndex()
+    {
+        foreach (string path in AllPaths)
+        {
             int cut = path.LastIndexOf('/');
             if (cut < 0) continue;
             Add(_files, path[..cut], path[(cut + 1)..]);

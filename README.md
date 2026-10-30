@@ -32,6 +32,8 @@ Plays in a browser. No editor, no saves, no dev tools.
   `sudo ln -s /usr/lib/x86_64-linux-gnu/libfreetype.so.6 /usr/lib/x86_64-linux-gnu/libfreetype6.so`
 - A browser can't look in folders, so the build writes a list of every
   content file. New art shows up after the next build.
+- All content downloads behind a progress bar before the title screen, so
+  nothing loads mid-game. `Web/ContentPreload.cs`.
 
 ## Controls
 
