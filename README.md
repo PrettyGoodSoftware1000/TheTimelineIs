@@ -20,7 +20,7 @@ dotnet run --project Desktop -- --editor        # the level editor
 
 Plays in a browser. No editor, no saves, no dev tools.
 
-- **Get a build:** push to `WorldWideMac`, or press "Run workflow" on
+- **Get a build:** push to `TheBrowserOne`, or press "Run workflow" on
   *Web build* in GitHub Actions. Download `web-game` from the run.
 - **Put it online:** upload that zip to itch.io as an HTML game.
 - **Try it locally:**

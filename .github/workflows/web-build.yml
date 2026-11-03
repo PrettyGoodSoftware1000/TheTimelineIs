@@ -4,12 +4,12 @@ name: Web build
 # That download is a zip with index.html at the top: upload it to itch.io
 # as an HTML game and tick "This file will be played in the browser".
 #
-#   - push to WorldWideMac   -> a fresh build
+#   - push to TheBrowserOne   -> a fresh build
 #   - or press "Run workflow"
 
 on:
   push:
-    branches: [WorldWideMac]
+    branches: [TheBrowserOne]
   workflow_dispatch:
 
 jobs:
