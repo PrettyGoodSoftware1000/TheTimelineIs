@@ -19,6 +19,20 @@ public class DesktopContentIndex : IContentIndex
     private readonly Dictionary<string, IReadOnlyList<string>> _cache =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// A content path from where the GAME is, not from where it was started.
+    ///
+    /// TitleContainer already resolves against the executable's folder, and
+    /// these listings have to agree with it. Run from a terminal sitting in
+    /// the game's own folder the two are the same thing and the difference
+    /// never showed. Double-clicked from the Finder the working directory is
+    /// "/", and every rotations/ and animations/ folder came back empty while
+    /// the text files still loaded — a whole cast of cubes, and nothing
+    /// saying why.
+    /// </summary>
+    private static string Resolve(string folder) =>
+        Path.IsPathRooted(folder) ? folder : Path.Combine(AppContext.BaseDirectory, folder);
+
     public IReadOnlyList<string> Folders(string folder)
     {
         string key = folder + "|<dirs>";
@@ -27,6 +41,7 @@ public class DesktopContentIndex : IContentIndex
         var names = new List<string>();
         try
         {
+            folder = Resolve(folder);
             if (Directory.Exists(folder))
                 names = Directory.GetDirectories(folder)
                     .Select(Path.GetFileName)
@@ -51,8 +66,7 @@ public class DesktopContentIndex : IContentIndex
         var names = new List<string>();
         try
         {
-            // relative to the working directory, the same place TitleContainer
-            // resolves content from
+            folder = Resolve(folder);
             if (Directory.Exists(folder))
                 names = Directory.GetFiles(folder)
                     .Select(Path.GetFileName)
