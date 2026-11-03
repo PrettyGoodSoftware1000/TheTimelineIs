@@ -21,7 +21,7 @@ public static class IsoMath
     /// a fraction of it, so moving to bigger art means changing this and
     /// redrawing the art, not hunting through the drawing code.
     /// </summary>
-    public const int TileW = 128;
+    public const int TileW = 96;
 
     /// <summary>Half as tall as it is wide — the 2:1 diamond every iso game uses.</summary>
     public const int TileH = TileW / 2;

@@ -172,6 +172,11 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         _ctx = ctx;
         _level = LevelData.Load(_levelName);
         _levelsDir = FindLevelsDir();
+        RebuildCorners();
+        // Ground art is terrain sets now, so the terrain brush is the one that
+        // works out of the box. Blocks.txt is for one-off pieces and is empty
+        // until somebody puts one there.
+        _terrain = TerrainCatalog.Terrains.FirstOrDefault() ?? "";
     }
 
     /// <summary>The repo's Content/Levels, so a save lands in the source tree.</summary>
@@ -294,8 +299,10 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         }
 
         Add($"Level: {_levelName}", "level", false, menu: true);
-        Add($"Ground: {FamilyName}", "family", _tool == Tool.Block, menu: true);
+        Add($"Terrain: {TerrainLabel}", "terrain", _tool == Tool.Block && TerrainBrush, menu: true);
+        Add($"Ground: {FamilyName}", "family", _tool == Tool.Block && !TerrainBrush, menu: true);
         Add($"Piece: {PieceLabel}", "piece", _tool == Tool.Block, menu: true);
+        Add("Import", "import", false);
         Add("Reload", "reload", false);
         Add("Controls", "controls", _showControls);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
@@ -322,6 +329,10 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// <summary>The entries a dropdown shows, and what picking one does.</summary>
     private List<string> MenuItems(string id) => id switch
     {
+        // "Off" heads the list so the old piece brush is one click away
+        "terrain" => new List<string> { TerrainOff }
+            .Concat(TerrainCatalog.Terrains).ToList(),
+        "import" => PixelLabExports(),
         "family" => BlockCatalog.Families.ToList(),
         // Random heads the list so it is one click away whatever the family holds
         "piece" => new List<string> { "Random" }
@@ -369,8 +380,15 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         switch (id)
         {
             case "level": OpenLevel(MenuItems("level")[index]); break;
-            case "family": _familyIndex = index; _pieceIndex = 0; _tool = Tool.Block; break;
-            case "piece": _pieceIndex = index - 1; _tool = Tool.Block; break;
+            case "terrain":
+                _terrain = index == 0 ? "" : MenuItems("terrain")[index];
+                _tool = Tool.Block;
+                break;
+            case "import": ImportExport(MenuItems("import")[index]); break;
+            case "family":
+                _familyIndex = index; _pieceIndex = 0; _terrain = ""; _tool = Tool.Block;
+                break;
+            case "piece": _pieceIndex = index - 1; _terrain = ""; _tool = Tool.Block; break;
             case "deco": _decoIndex = index; _tool = Tool.Decoration; break;
             case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
             case "door":
@@ -786,6 +804,9 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     {
         switch (_tool)
         {
+            case Tool.Block when TerrainBrush:
+                PaintTerrain(tile);
+                break;
             case Tool.Block:
                 string type = BrushPiece(tile);
                 _level.Blocks[tile] = new LevelBlock
@@ -851,7 +872,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         if (_level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.PlayerStarts.Remove(tile)) return;
-        _level.Blocks.Remove(tile);
+        if (_level.Blocks.Remove(tile)) ForgetTerrain(tile);
     }
 
     /// <summary>Everything on a square at once — what the box delete does.</summary>
@@ -864,7 +885,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         n += _level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         n += _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         if (_level.PlayerStarts.Remove(tile)) n++;
-        if (_level.Blocks.Remove(tile)) n++;
+        if (_level.Blocks.Remove(tile)) { ForgetTerrain(tile); n++; }
         return n;
     }
 
@@ -883,6 +904,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         // a latched overlay belongs to the level it was turned on over
         _heights.Clear();
         _rooms.Clear();
+        RebuildCorners();
         RecountProblems();
         Status($"opened {name}.txt ({_level.Blocks.Count} blocks)");
     }
@@ -979,10 +1001,15 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         // family across the box instead of stamping one piece over all of it
         for (int x = x0; x <= x1; x++)
             for (int y = y0; y <= y1; y++)
-                _level.Blocks[new Point(x, y)] = new LevelBlock
-                    { X = x, Y = y, Height = _height, Type = BrushPiece(new Point(x, y)), Room = _room };
+            {
+                var at = new Point(x, y);
+                if (TerrainBrush) PaintTerrain(at);
+                else _level.Blocks[at] = new LevelBlock
+                    { X = x, Y = y, Height = _height, Type = BrushPiece(at), Room = _room };
+            }
         Status($"filled {(x1 - x0 + 1) * (y1 - y0 + 1)} squares with " +
-               $"{(RandomBrush ? $"random {FamilyName}" : PieceLabel)} at {_height} ft");
+               $"{(TerrainBrush ? _terrain : RandomBrush ? $"random {FamilyName}" : PieceLabel)} " +
+               $"at {_height} ft");
     }
 
     /// <summary>+/- with a selection: shift every block inside it up or down.</summary>
@@ -1424,6 +1451,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         "ALT   block heights   SPACE  room colours",
         "  tap either to leave it up; hold it for a glance",
         "",
+        "Terrain  pick a terrain; painting blends it into its neighbours",
+        "Import   a PixelLab .zip from Content/Imports: tiles, and its map",
         "1..9  ground family     B  next piece, then Random",
         "D deco   O door   E enemy   P start   G trigger",
         "area transition: last entry in the Door menu",

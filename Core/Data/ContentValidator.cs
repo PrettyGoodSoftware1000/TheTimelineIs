@@ -354,10 +354,19 @@ public static class ContentValidator
                     $"{PartySelectScreen.PartySize} will stack the rest nearby");
 
             foreach (var block in level.Blocks.Values)
-                if (!BlockCatalog.IsPiece(block.Type))
-                    diag.Error(path, 0,
-                        $"block at {block.X},{block.Y} uses '{block.Type}', which is not a piece in " +
-                        $"{BlockCatalog.BlocksIndex} — that square will draw nothing");
+            {
+                if (BlockCatalog.IsPiece(block.Type)) continue;
+                // A square naming a terrain set gets a sharper answer than
+                // "not a piece", because it is fixed somewhere else. Missing
+                // PICTURES are not reported here: Terrain.txt is checked once
+                // when it loads, rather than once per square that uses it.
+                diag.Error(path, 0,
+                    TerrainCatalog.TrySplit(block.Type, out string setName, out _)
+                        ? $"block at {block.X},{block.Y} uses terrain set '{setName}', which is not " +
+                          $"in {TerrainCatalog.Index} — import it, or fix the name"
+                        : $"block at {block.X},{block.Y} uses '{block.Type}', which is neither a piece " +
+                          $"in {BlockCatalog.BlocksIndex} nor a terrain set — it will draw nothing");
+            }
             foreach (var deco in level.Decorations)
                 if (!BlockCatalog.Decorations.Contains(deco.File, StringComparer.OrdinalIgnoreCase))
                     diag.Error(path, 0, $"decoration at {deco.X},{deco.Y} uses unknown file '{deco.File}'");

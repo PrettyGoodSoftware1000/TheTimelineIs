@@ -46,7 +46,9 @@ dotnet run --project Desktop -- --editor        # the level editor
 
 ## The pixel grid
 
-- A square is a 128x64 diamond. One foot of height lifts it 16 pixels.
+- A square is a 96x48 diamond. One foot of height lifts it 12 pixels.
+- Ground comes from **terrain sets** made in PixelLab: sixteen tiles that
+  blend two terrains. See `Content/Images/Terrain/README.txt`.
 - The board draws through `PixelCamera`: a whole-number zoom and a
   whole-number scroll, PointClamp. One art pixel is exactly `Zoom` screen
   pixels, everywhere, at every zoom.
@@ -237,7 +239,8 @@ All of them: `Key: value`, `#` comments, case-insensitive, blank lines ignored.
 | `Content/Cards/PlayerCards.txt`, `EnemyCards.txt` | Cards. Same format; the tag decides who holds one |
 | `Content/Text/Strings.txt` | Every player-facing string, as `key = text` |
 | `Content/Config.txt` | Overlay opacity |
-| `Content/Images/Blocks/Blocks.txt` | Ground families: 128x64 pixel pieces, anchor `64, 32` |
+| `Content/Images/Terrain/Terrain.txt` | Terrain sets: sixteen tiles blending two terrains |
+| `Content/Images/Blocks/Blocks.txt` | One-off ground pieces, anchor `48, 24`. Empty for now |
 
 - A card's `Tags:` are **labels, not class names**. A class holds its own name
   unless `Card Tags:` says otherwise, so several classes can share a pool.
@@ -252,7 +255,7 @@ All of them: `Key: value`, `#` comments, case-insensitive, blank lines ignored.
 | Asset | Path | Notes |
 |---|---|---|
 | World map | `Content/Images/Map/Map.png` | painted; the map is not pixel art |
-| Ground | `Content/Images/Blocks/` | 128x64 surfaces, 128x112 blocks |
+| Ground | `Content/Images/Terrain/<Set>/` | `mask-00.png`..`mask-15.png`, 96x96 |
 | Characters | `Content/Cast/.../{Name}/{Form}/IdlePose/*.png` | any size, drawn 1:1 |
 | Effects | `Content/Images/Pixel/Effects/` | 16x16 icons, 32x32 ball |
 | Decorations | `Content/Images/Decorations/` | hung by the bottom on the square |
