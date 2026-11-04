@@ -109,11 +109,14 @@ public partial class IsoLevelScreen
                     NextTurn();
                 if (_mode == Mode.PlayerTarget)
                 {
-                    int wanted = _selectedCard == null ? 1 : TargetsWanted(_selectedCard);
+                    // how many more it is really waiting for, which is not
+                    // the card's number when nobody else is in reach
+                    int more = _selectedCard == null || Acting == null
+                        ? 1 : StillWanted(Acting, _selectedCard);
                     string prompt = _targets.Count == 0
                         ? _ctx.Strings.Get("iso_pick_target")
                         : _ctx.Strings.Format("iso_pick_more",
-                            ("count", Math.Max(1, wanted - _targets.Count).ToString()));
+                            ("count", Math.Max(1, more).ToString()));
                     Ui.DrawTextCentered(batch, _ctx.Font, prompt,
                         new Rectangle(0, 1330, VirtualViewport.Width, 100), Color.OrangeRed, 0.44f);
                 }

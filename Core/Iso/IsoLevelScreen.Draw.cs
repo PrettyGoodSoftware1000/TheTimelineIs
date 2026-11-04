@@ -804,12 +804,29 @@ public partial class IsoLevelScreen
         if (EffectArt.Turned(_actingCard.ProjectileArt, Facings.Towards(last, here)) is string turned)
         {
             var art = _ctx.Assets.LoadTexture(turned);
-            batch.Draw(art, pos, null, Color.White, 0f, Middle(art), 1f, SpriteEffects.None, 0f);
+            batch.Draw(art, pos - Standing(art), null, Color.White, 0f,
+                Vector2.Zero, 1f, SpriteEffects.None, 0f);
             return;
         }
 
         var tex = ProjectileArt(_actingCard.ProjectileArt);
         batch.Draw(tex, pos, null, Color.White, _clock * 14f, Middle(tex), 1f, SpriteEffects.None, 0f);
+    }
+
+    /// <summary>
+    /// How far to shift a picture so it STANDS on a square rather than being
+    /// skewered by it.
+    ///
+    /// The mower drives along the ground, so the middle of its wheels wants to
+    /// be on the middle of the square. Hung by its middle like a fireball it
+    /// sank half a sprite into the floor and read as being fired through the
+    /// tiles. Measured off the solid pixels, so the empty margin a sprite was
+    /// exported with never shows up as a hover.
+    /// </summary>
+    private static Vector2 Standing(Texture2D art)
+    {
+        var solid = ArtBounds.Solid(art);
+        return new Vector2((solid.Left + solid.Right) / 2f, solid.Bottom);
     }
 
     /// <summary>The middle of a picture, which is what every effect hangs by.</summary>

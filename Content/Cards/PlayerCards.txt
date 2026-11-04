@@ -117,7 +117,7 @@ Explosion Range: 3
 Projectile Art: Fireball
 Casting Sound: [FireballCast.wav]
 Casting Time: 0.2
-Speed: 18
+Speed: 9
 Hit Sound: [FireballBoom.wav]
 Effect: AoE 5 fire damage to enemies
 Card Text: Goes boom. Does 5 fire damage to everything
@@ -437,13 +437,13 @@ Bottom Right: 0 Marked
 []
 
 # 'Mower 15' sends the machine off down a straight line - never a diagonal -
-# for up to fifteen squares. It runs over whatever it touches for the 1 to 20
-# on the Effect line, drives straight through anything it kills, and glances
-# off in some random direction from anything it doesn't. Past the fourth
-# square it starts to wander: a 5% chance per square of drifting one across
-# before carrying on. Every contact is a 2-in-5 chance of the whole thing
-# going up early; if it never does, it goes up at the end of the run either
-# way, for the 'Blast:' range over 'Explosion Range' squares.
+# for up to fifteen squares. It holds that lane, which is the purple one the
+# player was shown, until something gets in the way. It runs over whatever it
+# touches for the 1 to 20 on the Effect line, drives straight through anything
+# it kills, and glances off in some random direction from anything it doesn't.
+# Every contact is a 2-in-5 chance of the whole thing going up early; if it
+# never does, it goes up at the end of the run either way, for the 'Blast:'
+# range over 'Explosion Range' squares.
 #
 # Friendly Fire is Yes and means it: this thing does not know whose side it
 # is on, and it does not steer.
@@ -461,7 +461,7 @@ Blast: 1 to 15
 Projectile Art: Mower
 Casting Sound: [Blank.wav]
 Casting Time: 1.5
-Speed: 5
+Speed: 2.5
 Hit Sound: [FireballBoom.wav]
 Effect: Single target. 1 times x 1 to 20 damage.
 Card Text: A horrifying feat of redneck engineering.

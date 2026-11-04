@@ -1198,14 +1198,63 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         return bits.Count == 0 ? "no problems" : string.Join("; ", bits);
     }
 
-    /// <summary>Middle click: adopt the type, height and room of the square under it.</summary>
+    /// <summary>
+    /// Middle click: picks up whatever is topmost on a square and sets the
+    /// brush to it, so the next click puts the same thing down again.
+    ///
+    /// TOPMOST, in the same order Delete works in: a body standing on a
+    /// square is what you get, then a decoration, then the ground. Picking up
+    /// a goblin does NOT also pick up the ground it is standing on - that
+    /// would quietly change the ground brush under you, and the next click
+    /// somewhere else would drop a block nobody asked for.
+    /// </summary>
     private void Eyedropper(Point tile)
     {
+        if (EnemyCovering(tile) is LevelEnemy standing)
+        {
+            int which = _ctx.Enemies.EnemyNames
+                .ToList().FindIndex(n => n.Equals(standing.Name, StringComparison.OrdinalIgnoreCase));
+            if (which >= 0)
+            {
+                _enemyIndex = which;
+                _tool = Tool.Enemy;
+                Status($"picked up {standing.Name} - the ground under it is untouched");
+                return;
+            }
+        }
+
+        if (_level.DecorationAt(tile) is LevelDecoration deco)
+        {
+            int which = BlockCatalog.Decorations
+                .ToList().FindIndex(d => d.Equals(deco.File, StringComparison.OrdinalIgnoreCase));
+            if (which >= 0)
+            {
+                _decoIndex = which;
+                _tool = Tool.Decoration;
+                Status($"picked up {Strip(deco.File)} - the ground under it is untouched");
+                return;
+            }
+        }
+
         if (_level.BlockAt(tile) is not LevelBlock b) { Status("nothing to sample there"); return; }
         _height = b.Height;
         _room = b.Room;
+
+        // Terrain first, because BlockCatalog.Find resolves a terrain token to
+        // a piece as well - and a square painted with terrain is one somebody
+        // means to carry on painting with terrain, not with the piece its
+        // picture happens to be.
+        if (TerrainCatalog.Resolve(b.Type) is ValueTuple<TerrainSet, int> found)
+        {
+            var (set, mask) = found;
+            // the terrain holding most of the square's corners is the one
+            // somebody pointing at it means
+            _terrain = Corners.All.GroupBy(c => set.TerrainAt(mask, c))
+                .OrderByDescending(g => g.Count()).First().Key;
+            _tool = Tool.Block;
+        }
         // adopt the sampled square's family AND its exact piece, not Random
-        if (BlockCatalog.Find(b.Type) is GroundPiece sampled)
+        else if (BlockCatalog.Find(b.Type) is GroundPiece sampled)
         {
             int fam = BlockCatalog.Families
                 .ToList().FindIndex(f => f.Equals(sampled.Family, StringComparison.OrdinalIgnoreCase));
@@ -1214,10 +1263,27 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 _familyIndex = fam;
                 _pieceIndex = Math.Max(0, BlockCatalog.PiecesIn(sampled.Family)
                     .ToList().FindIndex(gp => gp.File.Equals(sampled.File, StringComparison.OrdinalIgnoreCase)));
+                _terrain = "";
                 _tool = Tool.Block;
             }
         }
-        Status($"picked up {b.Type} at height {Tall(b.Height)} in room {b.Room}");
+
+        int deep = _level.Blocks.Column(tile).Count;
+        Status($"picked up {b.Type} at height {Tall(b.Height)} in room {b.Room}" +
+               (deep > 1 ? $", {deep} cubes deep" : ""));
+    }
+
+    /// <summary>The enemy whose body covers this square, if one does.</summary>
+    private LevelEnemy? EnemyCovering(Point tile)
+    {
+        foreach (var e in _level.Enemies)
+        {
+            var def = _ctx.Enemies.Get(e.Name);
+            int w = def?.SizeX ?? 1, h = def?.SizeY ?? 1;
+            if (tile.X >= e.X && tile.X < e.X + w && tile.Y >= e.Y && tile.Y < e.Y + h)
+                return e;
+        }
+        return null;
     }
 
     private static (int X0, int Y0, int X1, int Y1) Span(Point a, Point b) =>
@@ -1816,7 +1882,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         new("Ctrl+V",          "paste it onto the square under the cursor"),
         new("Del",             "empty the selection"),
         new("Esc",             "drop the selection"),
-        new("middle click",    "eyedropper: that square's piece, height and room"),
+        new("middle click",    "eyedropper: the topmost thing on that square"),
         new("right-click",     "on a trigger, opens that level's dialogue file"),
         new("Ctrl+Z",          "undo the last stroke"),
         new("Ctrl+S",          "save"),
@@ -1844,6 +1910,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         new("Terrain",         "pick a terrain; painting blends it into its neighbours"),
         new("Terrain menu",    "terrains that can blend sit side by side in it"),
         new("Doorway",         "paint two pads, then right-click one and its far end"),
+        new("the arrow",       "points from pad A to pad B; the trip works both ways"),
         new("Room",            "pick a room to paint with, or name a new one"),
         new("Paint room",      "drag over squares to put them in that room"),
         new("Check for Errors", "look again for what this map gets wrong"),
@@ -1998,17 +2065,52 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
 
         foreach (var group in pads.Where(p => p.Pair != 0).GroupBy(p => p.Pair))
         {
-            var ends = group.ToList();
+            // A and B by the pad's own Key, which is its lowest square and
+            // does not move about as the map is edited - so the arrow points
+            // the same way every time the level is opened.
+            var ends = group.OrderBy(p => p.Key.Y).ThenBy(p => p.Key.X).ToList();
             // a pair with anything other than two ends is broken; the validator
             // says so, and drawing every leg makes it visible here too
+            var ink = ends.Count == 2 ? teal : Color.Red;
+
             for (int i = 0; i < ends.Count; i++)
+            {
+                Label(Middle(ends[i], origin) + new Vector2(0, -34),
+                    $"{ends[i].Pair}{(char)('A' + Math.Min(i, 25))}", ink, 0.34f);
                 for (int j = i + 1; j < ends.Count; j++)
-                    Line(batch, Middle(ends[i], origin), Middle(ends[j], origin),
-                        ends.Count == 2 ? teal : Color.Red, 2f);
+                    Arrow(batch, Middle(ends[i], origin), Middle(ends[j], origin), ink);
+            }
         }
 
         if (_linkFrom is Point from && pads.FirstOrDefault(p => p.Covers(from)) is TransitionPad armed)
-            Line(batch, Middle(armed, origin), _worldPointer, teal * 0.55f, 1f);
+            Arrow(batch, Middle(armed, origin), _worldPointer, teal * 0.6f);
+    }
+
+    /// <summary>
+    /// A line from one pad to the other with a head on the far end, so which
+    /// way round a pair is linked can be read at a glance instead of guessed
+    /// at. The head is deliberately chunky: at the zoom somebody builds a map
+    /// at, a neat little one is three pixels and says nothing.
+    /// </summary>
+    private void Arrow(SpriteBatch batch, Vector2 a, Vector2 b, Color color)
+    {
+        const float HeadLength = 26f, HeadHalfWidth = 13f;
+        var span = b - a;
+        if (span.LengthSquared() < 1f) return;
+        var dir = Vector2.Normalize(span);
+
+        // the shaft stops where the head starts, so the two do not pile up
+        Line(batch, a, b - dir * (HeadLength * 0.9f), color, 3f);
+
+        // filled by laying strokes across it, close enough together that
+        // rounding each one to whole pixels cannot leave gaps between them
+        var across = new Vector2(-dir.Y, dir.X);
+        for (float d = 0; d <= HeadLength; d += 0.34f)
+        {
+            float half = HeadHalfWidth * (d / HeadLength);
+            var centre = b - dir * d;
+            Line(batch, centre - across * half, centre + across * half, color, 2f);
+        }
     }
 
     /// <summary>The screen point at the middle of a pad's top faces.</summary>

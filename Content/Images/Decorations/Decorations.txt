@@ -9,3 +9,7 @@ tree 01.png
 Rock.png
 Chest.png
 Door.png
+trash can 01.png
+trash can 02.png
+trash can 03.png
+old tires 03.png

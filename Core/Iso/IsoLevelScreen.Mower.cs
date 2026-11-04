@@ -22,7 +22,7 @@ public partial class IsoLevelScreen
     private float _mowerTimer;
 
     /// <summary>Seconds the machine spends on each square it crosses.</summary>
-    private const float MowerTileTime = 0.11f;
+    private const float MowerTileTime = 0.22f;
 
     /// <summary>
     /// Works out the whole run up front, then hands it to the update loop to

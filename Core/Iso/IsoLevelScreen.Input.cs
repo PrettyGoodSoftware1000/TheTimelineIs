@@ -321,7 +321,6 @@ public partial class IsoLevelScreen
     {
         var card = _selectedCard!;
         var me = Acting!;
-        int wanted = TargetsWanted(card);
         if (_targets.Contains(enemy)) return;   // already picked; ignore the repeat
 
         _targets.Add(enemy);
@@ -331,9 +330,12 @@ public partial class IsoLevelScreen
             Toast(_ctx.Strings.Get("iso_out_of_range"));
             return;
         }
-        if (_targets.Count < wanted)
+        // Everything in reach is picked, or the card has all it wants:
+        // either way there is nothing left to ask for, so it fires.
+        int more = StillWanted(me, card);
+        if (more > 0)
         {
-            Toast(_ctx.Strings.Format("iso_pick_more", ("count", (wanted - _targets.Count).ToString())));
+            Toast(_ctx.Strings.Format("iso_pick_more", ("count", more.ToString())));
             _overlayKey = null;
             return;
         }
@@ -453,10 +455,28 @@ public partial class IsoLevelScreen
                 ("count", lit.ToString()), ("turns", turns.ToString())));
     }
 
-    /// <summary>How many bodies this card needs clicked before it can fire.</summary>
-    private int TargetsWanted(Card card) => card.Kind == CardKind.MultiTarget
-        ? Math.Max(1, Math.Min(card.Targets, CatchableBy(Acting, card).Count()))
-        : 1;
+    /// <summary>How many bodies this card would like clicked before it fires.</summary>
+    private int TargetsWanted(Card card) =>
+        card.Kind == CardKind.MultiTarget ? Math.Max(1, card.Targets) : 1;
+
+    /// <summary>
+    /// Whether another body could still be added to the ones already picked.
+    ///
+    /// This used to be guessed at by counting everybody on the board, which
+    /// meant a two-target card with three enemies on it and only one of them
+    /// reachable wanted two clicks it could never be given: the card simply
+    /// stopped working. What matters is not how many are standing about but
+    /// how many can actually be hit from somewhere the caster can get to —
+    /// and that shrinks as targets are picked, because they all have to be in
+    /// reach of the SAME square.
+    /// </summary>
+    private bool MoreToPick(CharacterInstance me, Card card) =>
+        CatchableBy(me, card).Any(c => !_targets.Contains(c)
+            && BestApproach(me, _targets.Append(c).ToList(), card) != null);
+
+    /// <summary>How many more clicks this card is still waiting for, if any.</summary>
+    private int StillWanted(CharacterInstance me, Card card) =>
+        !MoreToPick(me, card) ? 0 : Math.Max(0, TargetsWanted(card) - _targets.Count);
 
     private void Commit(CharacterInstance me, Card card)
     {

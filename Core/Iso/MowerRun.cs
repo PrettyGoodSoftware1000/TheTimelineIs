@@ -11,9 +11,6 @@ public enum MowerStep
     /// <summary>Rolled over open ground, hitting nothing.</summary>
     Rolled,
 
-    /// <summary>Wandered a square sideways before carrying on the same heading.</summary>
-    Drifted,
-
     /// <summary>Hit somebody and killed them, and went straight through.</summary>
     Through,
 
@@ -37,12 +34,6 @@ public record MowerBeat(Point Tile, MowerStep What, string? Hit = null, int Dama
 /// </summary>
 public class MowerRun
 {
-    /// <summary>Squares travelled before the machine starts wandering.</summary>
-    public const int StraightTiles = 4;
-
-    /// <summary>Chance per square, once past StraightTiles, of drifting one square sideways.</summary>
-    public const float DriftChance = 0.05f;
-
     /// <summary>Chance that any given contact sets the whole thing off.</summary>
     public const float ExplodeChance = 0.40f;
 
@@ -99,20 +90,11 @@ public class MowerRun
 
         for (int travelled = 0; travelled < maxTiles; travelled++)
         {
-            // Drift first, so the sideways step and the forward one land the
-            // machine on the diagonal neighbour — it wanders across a lane and
-            // keeps going, rather than stopping to turn.
-            if (travelled >= StraightTiles && rng.NextDouble() < DriftChance)
-            {
-                var sideways = Perpendicular(dir, rng);
-                var beside = new Point(at.X + sideways.X, at.Y + sideways.Y);
-                if (ground(beside))
-                {
-                    at = beside;
-                    run.Beats.Add(new MowerBeat(at, MowerStep.Drifted));
-                }
-            }
-
+            // It goes STRAIGHT. The machine used to wander a square sideways
+            // every so often, which meant the lane the player was shown and
+            // the lane it drove down were two different things. It leaves its
+            // lane for one reason now: something stood in it and did not go
+            // down.
             var next = new Point(at.X + dir.X, at.Y + dir.Y);
             // off the edge of the world: it stops there and goes up
             if (!ground(next)) break;
@@ -140,14 +122,6 @@ public class MowerRun
 
         run.Finish(at);
         return run;
-    }
-
-    /// <summary>A step at right angles to the heading, one way or the other.</summary>
-    private static Point Perpendicular(Point dir, Random rng)
-    {
-        int side = rng.Next(2) == 0 ? 1 : -1;
-        // turning a heading 90 degrees: (x, y) -> (-y, x), then pick a side
-        return new Point(-dir.Y * side, dir.X * side);
     }
 
     private void Finish(Point at)
