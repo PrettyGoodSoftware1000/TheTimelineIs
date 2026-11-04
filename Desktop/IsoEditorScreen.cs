@@ -33,8 +33,15 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger, Room, Transition }
 
     /// <summary>Tools you drag across the ground; the rest are one click each.</summary>
+    /// <summary>
+    /// Tools you drag across the ground; the rest are one click each.
+    ///
+    /// Decorations and enemies are deliberately NOT draggable. A stroke is one
+    /// undo step, and taking back a dragged line of trees with one Ctrl+Z was
+    /// never what anybody meant by it — a tree at a time is.
+    /// </summary>
     private static bool Paints(Tool t) =>
-        t is Tool.Block or Tool.Decoration or Tool.Trigger or Tool.Room or Tool.Transition;
+        t is Tool.Block or Tool.Trigger or Tool.Room or Tool.Transition;
 
     private readonly GameContext _ctx;
     private LevelData _level;
@@ -254,6 +261,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     {
         _undo.Add(_level.Clone());
         if (_undo.Count > UndoDepth) _undo.RemoveAt(0);
+        Dirty = true;
     }
 
     private void Undo()
@@ -261,6 +269,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         if (_undo.Count == 0) { Status("nothing to undo"); return; }
         _level.CopyFrom(_undo[^1]);
         _undo.RemoveAt(_undo.Count - 1);
+        Dirty = true;                       // undone back to saved is still a change on screen
+        RebuildCorners();
         Status($"undo ({_undo.Count} left)");
     }
 
@@ -341,31 +351,122 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             x += w + BarGap;
         }
 
-        Add("File", "file", false, menu: true);
-        Add($"Current Level: {_levelName}", "level", false, menu: true);
+        // Next row, deliberately: the two rows mean different things. The top
+        // one is the BRUSH — what a click on the ground would put there. The
+        // bottom one is the MAP: which file, which room, and is it alright.
+        void Break() { row++; x = BarX0; }
+
         Add($"Terrain: {TerrainLabel}", "terrain", _tool == Tool.Block && TerrainBrush, menu: true);
-        Add($"Ground: {FamilyName}", "family", _tool == Tool.Block && !TerrainBrush, menu: true);
-        Add($"Piece: {PieceLabel}", "piece", _tool == Tool.Block, menu: true);
-        Add("Controls", "controls", _showControls);
-        Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
-        Add($"Door: {(_tool == Tool.Transition ? TransitionEntry : "Doorway")}", "door",
-            _tool is Tool.Door or Tool.Transition, menu: true);
+        Add($"Ground art: {FamilyName}", "family", _tool == Tool.Block && !TerrainBrush, menu: true);
+        Add($"Ground piece: {PieceLabel}", "piece", _tool == Tool.Block, menu: true);
+        Add($"Decoration: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
+        Add($"Doorway: {DoorLabel}", "door", _tool is Tool.Door or Tool.Transition, menu: true);
         Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
-        Add("Start", "start", _tool == Tool.PlayerStart);
-        Add($"Trigger: {_trigger}", "trigger", _tool == Tool.Trigger);
-        Add($"Room: {_room}", "room", false);
-        Add("Place Room", "placeroom", _tool == Tool.Room);
-        Add("Dialogue", "dialogue", false);
-        // the content check: "OK" when the level has nothing wrong with it,
-        // a red count of problems when it has. Clicking it re-checks and
-        // names the first one.
-        Add(_problems == 0 ? "OK" : $"! {_problems}", "problems", false, pad: 34);
+        Add("Player start", "start", _tool == Tool.PlayerStart);
+        Add($"Dialogue: {_trigger}", "trigger", _tool == Tool.Trigger, menu: true);
+        Add("Paint room", "placeroom", _tool == Tool.Room);
+
+        Break();
+        Add("File", "file", false, menu: true);
+        Add($"Current Level: {_levelName}{(Dirty ? "  (Not Saved)" : "")}", "level", false, menu: true);
+        Add($"Room: {_room}", "room", false, menu: true);
+        Add("Controls", "controls", _showControls);
+        // the content check: no problems, or a red count of them. Clicking it
+        // looks again and names the first one.
+        Add(_problems == 0 ? "Check for Errors" : $"! {_problems}", "problems", false, pad: 34);
         _barRows = row + 1;
         return list;
     }
 
     private static string Strip(string file) =>
         file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? file[..^4] : file;
+
+    /// <summary>What the Doorway button is set to paint.</summary>
+    private string DoorLabel => _tool == Tool.Door ? "closed door" : TransitionEntry;
+
+    /// <summary>What a click on the ground would do right now, in two words.</summary>
+    private string ToolLabel => _tool switch
+    {
+        Tool.Block => TerrainBrush ? _terrain : PieceLabel,
+        Tool.Decoration => Strip(DecoName),
+        Tool.Door => "closed door",
+        Tool.Enemy => EnemyName,
+        Tool.PlayerStart => "player start",
+        Tool.Trigger => $"dialogue {_trigger}",
+        Tool.Room => $"room {_room}",
+        _ => TransitionEntry,
+    };
+
+    /// <summary>
+    /// One line about the button under the cursor. The Controls panel teaches
+    /// the editor; this is for the button you have forgotten.
+    /// </summary>
+    private string? HoverHint()
+    {
+        if (!ToolbarBand.Contains(_pointer)) return null;
+        foreach (var b in Buttons())
+            if (b.Rect.Contains(_pointer))
+                return Hints.TryGetValue(b.Id, out var hint) ? hint : null;
+        return null;
+    }
+
+    private static readonly Dictionary<string, string> Hints = new()
+    {
+        ["file"] = "import, reload, save, save as, rename this map, playtest it",
+        ["level"] = "open another map, or start a new one",
+        ["terrain"] = "paint ground that blends into its neighbours",
+        ["family"] = "pick a set of one-off ground art, for squares terrain cannot do",
+        ["piece"] = "which piece of that set, or Random to scatter them",
+        ["deco"] = "a tree, a rock: something standing on a square, blocking it",
+        ["door"] = "paint two pads, then right-click one and its far end to join them",
+        ["enemy"] = "drop one enemy per click on a square that has ground",
+        ["start"] = "where the party stands when the level opens, up to four",
+        ["trigger"] = "a square that plays a dialogue when somebody steps on it",
+        ["room"] = "which room the Paint room tool writes onto squares",
+        ["placeroom"] = "drag over squares to put them in the room named beside this",
+        ["controls"] = "every key and button, in the middle of the screen",
+        ["problems"] = "look again for things this map gets wrong, and name the first",
+    };
+
+    /// <summary>
+    /// Whether the level has been changed since the last save.
+    ///
+    /// Set wherever an edit begins, which is the same place the undo stack is
+    /// pushed, so nothing can change the level without saying so. The toolbar
+    /// says "(Not Saved)" while this is true, and opening another map asks
+    /// first.
+    /// </summary>
+    private bool Dirty { get; set; }
+
+    /// <summary>The first entry of the Room menu: a name that is not in use yet.</summary>
+    private const string NewRoomEntry = "Create a New Room";
+
+    /// <summary>The first entry of the Dialogue menu.</summary>
+    private const string NewDialogueEntry = "Create New Dialogue Tile";
+
+    /// <summary>
+    /// Every dialogue block this level has, read from its OWN file in the
+    /// source tree rather than through the built copy — the editor writes
+    /// that file, so it is the one that is up to date.
+    /// </summary>
+    private List<string> DialogueNames()
+    {
+        var names = new List<string>();
+        try
+        {
+            if (!File.Exists(DialoguePath)) return names;
+            foreach (string raw in File.ReadAllLines(DialoguePath))
+            {
+                string line = raw.Trim();
+                if (!line.StartsWith("Dialogue:", StringComparison.OrdinalIgnoreCase)) continue;
+                string name = line[9..].Trim();
+                if (name.Length > 0 && !names.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    names.Add(name);
+            }
+        }
+        catch (Exception ex) { Console.WriteLine($"[editor] dialogue list: {ex.Message}"); }
+        return names;
+    }
 
     /// <summary>Opening, saving and leaving — everything that is about the FILE.</summary>
     private static readonly string[] FileMenu =
@@ -392,8 +493,12 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         "piece" => new List<string> { "Random" }
             .Concat(FamilyPieces.Select(gp => Strip(gp.File))).ToList(),
         "deco" => BlockCatalog.Decorations.Select(Strip).ToList(),
+        "room" => new List<string> { NewRoomEntry }
+            .Concat(RoomOrder()).ToList(),
+        "trigger" => new List<string> { NewDialogueEntry }
+            .Concat(DialogueNames()).ToList(),
         "enemy" => _ctx.Enemies.EnemyNames.ToList(),
-        "door" => new List<string> { "Doorway", TransitionEntry },
+        "door" => new List<string> { TransitionEntry },
         "level" => LevelNames(),
         _ => new List<string>(),
     };
@@ -447,7 +552,9 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             case "file": DoFileMenu(index); break;
             case "level":
                 string picked = MenuItems("level")[index];
-                if (picked == NewMapEntry) { _typingNewMap = true; _roomBuffer = ""; }
+                if (picked == NewMapEntry)
+                    Confirm($"{_levelName} has changes that are not saved. Start a new map anyway?",
+                        () => { _typingNewMap = true; _roomBuffer = ""; });
                 else OpenLevel(picked);
                 break;
             case "terrain":
@@ -459,6 +566,15 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 break;
             case "piece": _pieceIndex = index - 1; _terrain = ""; _tool = Tool.Block; break;
             case "deco": _decoIndex = index; _tool = Tool.Decoration; break;
+            case "room":
+                if (index == 0) { _typingRoom = true; _roomBuffer = ""; }
+                else { _room = MenuItems("room")[index]; _tool = Tool.Room; }
+                break;
+            case "trigger":
+                if (index == 0) { _typingTrigger = true; _roomBuffer = ""; }
+                else { _trigger = MenuItems("trigger")[index]; }
+                _tool = Tool.Trigger;
+                break;
             case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
             case "door":
                 _tool = index == 0 ? Tool.Door : Tool.Transition;
@@ -483,20 +599,19 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             case "file":
                 _openMenu = _openMenu == id ? null : id;
                 return true;
-            case "family" or "piece" or "deco" or "enemy" or "door":
+            case "family" or "piece" or "deco" or "enemy" or "door" or "room" or "trigger":
                 // the button both selects its tool and opens its palette
                 _tool = id is "family" or "piece" ? Tool.Block
                     : id == "deco" ? Tool.Decoration
-                    : id == "door" ? (_tool == Tool.Transition ? Tool.Transition : Tool.Door)
+                    : id == "door" ? Tool.Transition
+                    : id == "room" ? Tool.Room
+                    : id == "trigger" ? Tool.Trigger
                     : Tool.Enemy;
                 _openMenu = _openMenu == id ? null : id;
                 return true;
             case "start": _tool = Tool.PlayerStart; return true;
-            case "trigger": _tool = Tool.Trigger; return true;
             case "controls": _showControls = !_showControls; return true;
-            case "room": _typingRoom = true; _roomBuffer = _room; return true;
             case "placeroom": _tool = Tool.Room; return true;
-            case "dialogue": _typingTrigger = true; _roomBuffer = _trigger; return true;
             case "problems": RecountProblems(); Status(ProblemText()); return true;
         }
         return false;
@@ -522,12 +637,13 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     {
         _pointer = input.PointerPos;
         _worldPointer = _camera.ToWorld(input.RawPointer).ToVector2();
-        // WASD are tool keys here, so only the arrows pan. Design-space units
-        // back to window pixels, then to art pixels, so a drag moves the board
-        // the same amount at any zoom.
+        // WASD pan exactly as the arrows do, so a hand on the keys never has
+        // to go looking for them. Nothing in the editor spends W, A, S or D on
+        // anything else. Design-space units back to window pixels, then to art
+        // pixels, so a drag moves the board the same amount at any zoom.
         _camera.Scroll(new Point(
-            (int)Math.Round(input.PanDeltaNoLetters.X * _ctx.Viewport.Scale / _camera.Zoom),
-            (int)Math.Round(input.PanDeltaNoLetters.Y * _ctx.Viewport.Scale / _camera.Zoom)));
+            (int)Math.Round(input.PanDelta.X * _ctx.Viewport.Scale / _camera.Zoom),
+            (int)Math.Round(input.PanDelta.Y * _ctx.Viewport.Scale / _camera.Zoom)));
         Buttons();                            // refreshes the row count the band uses
         if (_statusTimer > 0) _statusTimer -= dt;
 
@@ -540,7 +656,11 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
 
         if (input.ToggleControls) _showControls = !_showControls;
 
+        // A question about losing work owns the whole editor until it is
+        // answered, the same way typing a name does.
+        if (_confirmDo != null) { UpdateConfirm(input); return; }
         if (Typing) { UpdateTyping(input); return; }
+        if (input.Save) Save();
 
         // after the typing guard: Space belongs to the room name being typed,
         // not to the overlay, while a name is being entered
@@ -616,6 +736,25 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// a key nothing told you to press. A click anywhere now ends it too,
     /// taking what was typed if there is any and abandoning it otherwise.
     /// </summary>
+    /// <summary>
+    /// Yes or no, and nothing else until one of them. Enter or Y goes ahead,
+    /// Esc or N or a click backs out — a click is a no here, not a yes, since
+    /// the question is always about throwing work away.
+    /// </summary>
+    private void UpdateConfirm(InputState input)
+    {
+        bool yes = input.Submit || input.TypedChars.ToLowerInvariant().Contains('y');
+        bool no = input.Cancel || input.Tap.HasValue || input.AltTap.HasValue
+                  || input.TypedChars.ToLowerInvariant().Contains('n');
+        if (!yes && !no) return;
+
+        var go = _confirmDo;
+        _confirmDo = null;
+        _confirmAsk = "";
+        if (yes) go?.Invoke();
+        else Status("left as it was");
+    }
+
     private void UpdateTyping(InputState input)
     {
         _roomBuffer += input.TypedChars;
@@ -683,11 +822,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                     if (FamilyPieces.Count > 0)
                         _pieceIndex = _pieceIndex + 1 >= FamilyPieces.Count ? -1 : _pieceIndex + 1;
                     break;
-                case 'd':
-                    _tool = Tool.Decoration;
-                    if (BlockCatalog.Decorations.Count > 0)
-                        _decoIndex = (_decoIndex + 1) % BlockCatalog.Decorations.Count;
-                    break;
                 case 'o': _tool = Tool.Door; break;
                 case 'e':
                     _tool = Tool.Enemy;
@@ -707,7 +841,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                     if (_selA != null) RaiseSelection(-1);
                     else _height = Math.Max(_height - 1, 0);
                     break;
-                case 's': Save(); break;
                 case 'v': _typingSaveAs = true; _roomBuffer = _levelName; break;
                 case 't': PlayTest(); break;
             }
@@ -983,10 +1116,35 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
 
     // ---------------- files ----------------
 
+    /// <summary>
+    /// What to do if the person says yes, and the question to ask them.
+    ///
+    /// One question at a time, and only ever about throwing work away.
+    /// Anything that would lose unsaved edits goes through Confirm() rather
+    /// than doing it and leaving a note on the status line that has already
+    /// scrolled away by the time it is read.
+    /// </summary>
+    private Action? _confirmDo;
+    private string _confirmAsk = "";
+
+    /// <summary>Runs an action now if nothing is at stake, or asks first if there is.</summary>
+    private void Confirm(string ask, Action then)
+    {
+        if (!Dirty) { then(); return; }
+        _confirmAsk = ask;
+        _confirmDo = then;
+    }
+
     /// <summary>Opens another level for editing, dropping undo and the clipboard.</summary>
     private void OpenLevel(string name)
     {
         if (name.Equals(_levelName, StringComparison.OrdinalIgnoreCase)) return;
+        Confirm($"{_levelName} has changes that are not saved. Open {name} anyway?",
+            () => OpenLevelNow(name));
+    }
+
+    private void OpenLevelNow(string name)
+    {
         _level = LevelData.Load(name);
         _levelName = name;
         _level.Name = name;
@@ -998,6 +1156,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         _rooms.Clear();
         RebuildCorners();
         RecountProblems();
+        Dirty = false;
+        CentreOnLevel();
         Status($"opened {name}.txt ({_level.Blocks.Count} blocks)");
     }
 
@@ -1089,6 +1249,27 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     {
         BeginEdit();
         var (x0, y0, x1, y1) = Span(a, b);
+        int squares = (x1 - x0 + 1) * (y1 - y0 + 1);
+
+        // A box fills with whatever the BRUSH is, which is not always ground.
+        // Painting a room used to drop blocks at the placement height over the
+        // whole box, which is the one thing somebody marking out a room is
+        // certainly not asking for.
+        if (_tool == Tool.Room)
+        {
+            int painted = 0;
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                    if (_level.BlockAt(new Point(x, y)) is LevelBlock rb) { rb.Room = _room; painted++; }
+            Status($"put {painted} square(s) in room {_room}");
+            return;
+        }
+        if (_tool != Tool.Block)
+        {
+            Status($"a box only fills with ground - the brush is {ToolLabel}");
+            return;
+        }
+
         // BrushPiece is called per square, so a Random brush scatters the
         // family across the box instead of stamping one piece over all of it
         for (int x = x0; x <= x1; x++)
@@ -1099,7 +1280,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 else _level.Blocks[at] = new LevelBlock
                     { X = x, Y = y, Height = _height, Type = BrushPiece(at), Room = _room };
             }
-        Status($"filled {(x1 - x0 + 1) * (y1 - y0 + 1)} squares with " +
+        Status($"filled {squares} squares with " +
                $"{(TerrainBrush ? _terrain : RandomBrush ? $"random {FamilyName}" : PieceLabel)} " +
                $"at height {Tall(_height)}");
     }
@@ -1108,6 +1289,12 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private void RaiseSelection(int by)
     {
         if (_selA is not Point a || _selB is not Point b) return;
+        // moving ground up and down is the ground brush's job, nobody else's
+        if (_tool != Tool.Block)
+        {
+            Status($"heights only move with the ground brush - this one paints {ToolLabel}");
+            return;
+        }
         BeginEdit();
         var (x0, y0, x1, y1) = Span(a, b);
         int n = 0;
@@ -1155,6 +1342,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         File.WriteAllText(SavePath, _level.Serialize());
         // so playtesting, and opening it again, read what was just written
         MirrorLevel(_levelName + ".txt", _levelName + ".txt");
+        Dirty = false;
         Status($"saved -> {SavePath}");
     }
 
@@ -1248,6 +1436,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
 
         _level = new LevelData { Name = name };
         _levelName = name;
+        Dirty = false;
         _undo.Clear();
         _selA = _selB = _selStart = _selEnd = null;
         _boxMode = false;
@@ -1411,6 +1600,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
 
         DrawTransitionLinks(batch, origin);
         DrawCursor(batch, origin);
+        DrawHoveredEnemy(batch, origin);
         DrawRoomLabels(origin);
         batch.End();
 
@@ -1544,11 +1734,13 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         // that height written in the middle so it can be read against the blocks
         var (cursor, cursorHeight) = Target(_worldPointer, origin);
 
-        // The blue line stays on the GROUND whatever the yellow square is
-        // lifted to, so a block being placed three high still says which
-        // square of the map it is going over. Raised, the two come apart and
-        // the gap between them is the height.
-        DrawTopOutline(batch, cursor.X, cursor.Y, 0, origin, new Color(80, 170, 255));
+        // The blue line sits on what is UNDER the cursor — the top of the
+        // ground already there, or the flat grid where there is none — while
+        // the yellow square lifts to the placement height. Working inside a
+        // room built two high, it lands on that room's floor rather than
+        // sinking to zero and saying nothing about where the block will go.
+        DrawTopOutline(batch, cursor.X, cursor.Y, GroundUnder(cursor), origin,
+            new Color(80, 170, 255));
         DrawTop(batch, cursor.X, cursor.Y, cursorHeight, origin, Color.Yellow * 0.3f);
         Label(IsoMath.ToScreen(cursor.X, cursor.Y, cursorHeight, origin),
             Tall(cursorHeight), Color.Yellow, 0.36f);
@@ -1625,10 +1817,10 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     {
         new("hold left",       "paint"),
         new("hold Del",        "rub out"),
-        new("Shift+drag",      "fill a box at the placement height"),
+        new("Shift+drag",      "fill a box with the ground brush, at the placement height"),
         new("Ctrl+Del, drag",  "empty a box"),
         new("Ctrl+drag",       "select a box"),
-        new("+ / -",           "raise and lower the selection"),
+        new("+ / -",           "raise and lower the selection (ground brush only)"),
         new("Ctrl+C",          "copy the selection"),
         new("Ctrl+V",          "paste it onto the square under the cursor"),
         new("Del",             "empty the selection"),
@@ -1636,33 +1828,35 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         new("middle click",    "eyedropper: that square's piece, height and room"),
         new("right-click",     "on a trigger, opens that level's dialogue file"),
         new("Ctrl+Z",          "undo the last stroke"),
+        new("Ctrl+S",          "save"),
         new("scroll wheel",    "placement height, in blocks: one cube tall is 1"),
         new("Ctrl+wheel",      "zoom, in whole pixels"),
-        new("ARROWS",          "pan the view (WASD are tool keys)"),
+        new("WASD, ARROWS",    "pan the view"),
         new("ALT",             "block heights: hold for a glance, tap to leave it up"),
         new("SPACE",           "room colours: hold for a glance, tap to leave it up"),
         new("", ""),
         new("1 2 3",           "ground family"),
         new("B",               "next piece of that family, then Random"),
-        new("D",               "next decoration"),
-        new("O",               "door"),
+        new("O",               "doorway"),
         new("E",               "next enemy"),
         new("P",               "player start"),
-        new("G",               "trigger"),
-        new("R",               "room name"),
-        new("N",               "dialogue name"),
-        new("S",               "save"),
+        new("G",               "dialogue square"),
+        new("R",               "name a new room"),
+        new("N",               "name a new dialogue"),
         new("V",               "save as"),
         new("T",               "playtest the level"),
         new("", ""),
+        new("top row",         "the BRUSH: what a click on the ground would leave there"),
+        new("bottom row",      "the MAP: which file, which room, is it alright"),
         new("File",            "import, reload, save, save as, rename, playtest"),
         new("Current Level",   "open another map, or make a new one"),
         new("Terrain",         "pick a terrain; painting blends it into its neighbours"),
         new("Terrain menu",    "terrains that can blend sit side by side in it"),
-        new("Door menu",       "Area transition is its second entry"),
-        new("Area transition", "paint two pads, then right-click one and its far end"),
-        new("Place Room",      "paints the room name onto blocks"),
-        new("OK",              "the content check: click it to look again"),
+        new("Doorway",         "paint two pads, then right-click one and its far end"),
+        new("Room",            "pick a room to paint with, or name a new one"),
+        new("Paint room",      "drag over squares to put them in that room"),
+        new("Check for Errors", "look again for what this map gets wrong"),
+        new("hover a button",  "says what it does, above the status line"),
         new("", ""),
         new("Insert",          "or the Controls button hides this again"),
     };
@@ -1712,6 +1906,12 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     }
 
     /// <summary>
+    /// The top of whatever is already on a square, or the flat grid at zero
+    /// when nothing is. What a block placed there would be standing on.
+    /// </summary>
+    private int GroundUnder(Point square) => _level.BlockAt(square)?.Height ?? 0;
+
+    /// <summary>
     /// The outline of a square's top — one pixel of art, traced round the
     /// diamond rather than drawn as a box, so it follows the shape the tiles
     /// actually are.
@@ -1741,9 +1941,49 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         var foot = IsoMath.ToScreen(tile.X, tile.Y, height, origin);
         foot.X += (def.SizeX - def.SizeY) * (IsoMath.TileW / 2f) / 2f;
         foot.Y += (def.SizeX + def.SizeY - 2) * (IsoMath.TileH / 2f) / 2f;
-        batch.Draw(art, new Rectangle(
+        var rect = new Rectangle(
             (int)foot.X - (solid.Left + solid.Right) / 2,
-            (int)foot.Y - solid.Bottom, art.Width, art.Height), tint);
+            (int)foot.Y - solid.Bottom, art.Width, art.Height);
+        batch.Draw(art, rect, tint);
+    }
+
+    /// <summary>
+    /// A red line round the ART of whichever enemy the cursor is over.
+    ///
+    /// Delete takes the topmost thing on a square, and on a square with an
+    /// enemy standing on it that is the enemy, not the ground. Drawn last, on
+    /// top of the cursor square, because the cursor washes everything under it
+    /// yellow and a warning you have to squint at is not a warning.
+    /// </summary>
+    private void DrawHoveredEnemy(SpriteBatch batch, Vector2 origin)
+    {
+        if (ToolbarBand.Contains(_pointer) || _confirmDo != null || Typing) return;
+        var over = PickTile(_worldPointer, origin) ?? IsoMath.ToGrid(_worldPointer, origin);
+
+        foreach (var e in _level.Enemies)
+        {
+            if (_ctx.Enemies.Get(e.Name) is not EnemyDef def) continue;
+            if (over.X < e.X || over.X >= e.X + def.SizeX ||
+                over.Y < e.Y || over.Y >= e.Y + def.SizeY) continue;
+
+            var who = new CharacterInstance
+            {
+                Name = def.Name, IsPlayer = false, SizeX = def.SizeX, SizeY = def.SizeY,
+            };
+            var art = _ctx.Sprites.Standing(who);
+            var solid = ArtBounds.Solid(art);
+            var far = new Point(e.X + def.SizeX - 1, e.Y + def.SizeY - 1);
+            int height = _level.BlockAt(new Point(e.X, e.Y))?.Height
+                         ?? _level.BlockAt(far)?.Height ?? 0;
+            var foot = IsoMath.ToScreen(e.X, e.Y, height, origin);
+            foot.X += (def.SizeX - def.SizeY) * (IsoMath.TileW / 2f) / 2f;
+            foot.Y += (def.SizeX + def.SizeY - 2) * (IsoMath.TileH / 2f) / 2f;
+            batch.Draw(_ctx.Assets.Outline(art, IsoMath.Px(2)), new Rectangle(
+                    (int)foot.X - (solid.Left + solid.Right) / 2,
+                    (int)foot.Y - solid.Bottom, art.Width, art.Height),
+                new Color(255, 45, 45));
+            return;
+        }
     }
 
     private void Billboard(SpriteBatch batch, string path, Point tile, int height, Vector2 origin, Color tint)
@@ -1857,14 +2097,36 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         // height lives here now that the -/0 ft/+ buttons are gone; the wheel
         // still sets it, so it needs somewhere to be read
         batch.DrawString(_ctx.Font,
-            $"{_levelName}.txt   room: {_room}   blocks: {_level.Blocks.Count}   " +
+            $"{_levelName}.txt{(Dirty ? " (Not Saved)" : "")}   room: {_room}   " +
+            $"blocks: {_level.Blocks.Count}   painting: {ToolLabel}   " +
             $"height: {Tall(_height)}{mode}",
             new Vector2(BarX0, y), _boxMode ? Color.Red : Color.Yellow,
             0f, Vector2.Zero, 0.30f, SpriteEffects.None, 0f);
 
+        // What the button under the cursor would do, said once, where the
+        // status already is. The Controls panel is for learning the editor;
+        // this is for the moment you have forgotten one button.
+        if (HoverHint() is string hint)
+            batch.DrawString(_ctx.Font, hint, new Vector2(BarX0, y - 52), Color.SkyBlue,
+                0f, Vector2.Zero, 0.30f, SpriteEffects.None, 0f);
+
+        // A question about losing work, in the same place and the same shape
+        // as text entry, because it stops the editor the same way.
+        if (_confirmDo != null)
+        {
+            var ask = new Rectangle(VirtualViewport.Width / 2 - 1000, 300, 2000, 200);
+            Ui.FillRect(batch, _ctx.Pixel, ask, new Color(16, 10, 10, 245));
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(ask.X, ask.Y, ask.Width, 4), Color.Orange);
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(ask.X, ask.Bottom - 4, ask.Width, 4), Color.Orange);
+            Ui.DrawTextCentered(batch, _ctx.Font, _confirmAsk,
+                new Rectangle(ask.X, ask.Y + 40, ask.Width, 70), Color.Orange, 0.34f);
+            Ui.DrawTextCentered(batch, _ctx.Font,
+                "Y or Enter goes ahead and loses them  ·  N, Esc or a click keeps them",
+                new Rectangle(ask.X, ask.Y + 120, ask.Width, 50), Color.White * 0.7f, 0.26f);
+        }
         // Text entry stops the rest of the editor responding, so it says so
         // where it cannot be missed rather than as one more line of HUD.
-        if (Typing)
+        else if (Typing)
         {
             var box = new Rectangle(VirtualViewport.Width / 2 - 900, 300, 1800, 200);
             Ui.FillRect(batch, _ctx.Pixel, box, new Color(10, 10, 16, 245));
@@ -1882,7 +2144,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 "Enter accepts  ·  Esc or a click anywhere abandons it",
                 new Rectangle(box.X, box.Y + 120, box.Width, 50), Color.White * 0.7f, 0.26f);
         }
-        else if (_statusTimer > 0)
+        else if (_statusTimer > 0 && HoverHint() == null)
             batch.DrawString(_ctx.Font, _status, new Vector2(BarX0, y - 52), Color.LightGreen,
                 0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
     }

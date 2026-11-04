@@ -43,6 +43,12 @@ public struct InputState
     /// <summary>Back out / quit (Escape, or later the Android back button).</summary>
     public bool Cancel;
 
+    /// <summary>
+    /// Ctrl+S. Its own flag because the editor spends the bare S key on
+    /// panning now, like the other three around it.
+    /// </summary>
+    public bool Save;
+
     private string? _typedChars;
 
     /// <summary>
