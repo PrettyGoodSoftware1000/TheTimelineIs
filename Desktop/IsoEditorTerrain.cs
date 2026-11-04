@@ -30,8 +30,17 @@ namespace TheTimelineIs.Desktop;
 /// </summary>
 public partial class IsoEditorScreen
 {
-    /// <summary>What each corner of the grid is made of, while the editor is open.</summary>
-    private readonly Dictionary<Point, string> _corners = new();
+    /// <summary>
+    /// What each corner of the grid is made of, while the editor is open.
+    ///
+    /// Keyed by HEIGHT as well as position. Squares only blend with
+    /// neighbours standing at the same elevation: a step up is a cliff with
+    /// its own wall, and there is no art for grass easing over the edge of
+    /// one. So raising a square leaves its old neighbours exactly as they
+    /// were — they are reading a different height's corners, which this
+    /// paint never touched.
+    /// </summary>
+    private readonly Dictionary<(Point At, int Height), string> _corners = new();
 
     /// <summary>The terrain the brush paints, or "" to use the old piece brush.</summary>
     private string _terrain = "";
@@ -59,11 +68,11 @@ public partial class IsoEditorScreen
             var square = new Point(block.X, block.Y);
             foreach (var c in Corners.All)
             {
-                var at = Corners.Of(square, c);
+                var key = (Corners.Of(square, c), block.Height);
                 string was = set.TerrainAt(mask, c);
-                if (_corners.TryGetValue(at, out var had) &&
+                if (_corners.TryGetValue(key, out var had) &&
                     !had.Equals(was, StringComparison.OrdinalIgnoreCase)) clashes++;
-                _corners[at] = was;
+                _corners[key] = was;
             }
         }
         if (clashes > 0)
@@ -77,7 +86,13 @@ public partial class IsoEditorScreen
     /// </summary>
     private void PaintTerrain(Point square)
     {
-        foreach (var c in Corners.All) _corners[Corners.Of(square, c)] = _terrain;
+        // Moving a square to a new height takes it out of the old height's
+        // blending, or it would go on influencing neighbours it no longer
+        // stands level with.
+        if (_level.Blocks.TryGetValue(square, out var had) && had.Height != _height)
+            Release(square, had.Height);
+
+        foreach (var c in Corners.All) _corners[(Corners.Of(square, c), _height)] = _terrain;
 
         // the square itself must exist; the neighbours are only restyled if
         // they are already there, so painting never grows the map sideways
@@ -87,9 +102,28 @@ public partial class IsoEditorScreen
         else
             _level.Blocks[square].Height = _height;
 
+        // Every neighbour is asked to redraw, but each reads the corners at
+        // ITS OWN height. One standing higher or lower finds nothing this
+        // paint wrote and keeps the blending it already had.
         for (int dx = -1; dx <= 1; dx++)
             for (int dy = -1; dy <= 1; dy++)
                 Restyle(new Point(square.X + dx, square.Y + dy));
+    }
+
+    /// <summary>
+    /// Drops a square's corners at one height, keeping any still held by
+    /// another square standing at that same height.
+    /// </summary>
+    private void Release(Point square, int height)
+    {
+        foreach (var c in Corners.All)
+        {
+            var at = Corners.Of(square, c);
+            bool stillUsed = Corners.Touching(at).Any(t =>
+                t.Square != square &&
+                _level.Blocks.TryGetValue(t.Square, out var b) && b.Height == height);
+            if (!stillUsed) _corners.Remove((at, height));
+        }
     }
 
     /// <summary>
@@ -103,7 +137,7 @@ public partial class IsoEditorScreen
     {
         if (!_level.Blocks.TryGetValue(square, out var block)) return;
         string Corner(Corner c) =>
-            _corners.TryGetValue(Corners.Of(square, c), out var t) ? t : "";
+            _corners.TryGetValue((Corners.Of(square, c), block.Height), out var t) ? t : "";
         if (TerrainCatalog.TokenForCorners(Corner) is string token) block.Type = token;
     }
 
@@ -111,16 +145,9 @@ public partial class IsoEditorScreen
     /// Rubs a square out of the corner grid as well as the level, so the
     /// neighbours stop blending into ground that is no longer there.
     /// </summary>
-    private void ForgetTerrain(Point square)
+    private void ForgetTerrain(Point square, int height)
     {
-        foreach (var c in Corners.All)
-        {
-            var at = Corners.Of(square, c);
-            // a corner stays while any remaining square still uses it
-            if (!Corners.Touching(at).Any(t =>
-                    t.Square != square && _level.Blocks.ContainsKey(t.Square)))
-                _corners.Remove(at);
-        }
+        Release(square, height);
         for (int dx = -1; dx <= 1; dx++)
             for (int dy = -1; dy <= 1; dy++)
                 Restyle(new Point(square.X + dx, square.Y + dy));
@@ -128,58 +155,122 @@ public partial class IsoEditorScreen
 
     // ---------------- importing from PixelLab ----------------
 
-    /// <summary>The first entry of the Import menu, when there is nothing to import.</summary>
-    private const string NothingToImport = "(put a PixelLab .zip in Content/Imports)";
-
     /// <summary>Turning the terrain brush off and going back to the piece brush.</summary>
     private const string TerrainOff = "Off (use Ground/Piece)";
 
-    /// <summary>Where exports are dropped to be found: the repo's Content/Imports.</summary>
+    /// <summary>
+    /// The terrain menu, a row at a time.
+    ///
+    /// One row per SET, holding its two terrains side by side, so the menu
+    /// shows at a glance which terrains know how to run into each other —
+    /// stone sits next to grass because there is art for that join. A terrain
+    /// with nobody to blend with takes the full width of a row on its own,
+    /// which is the same thing said the other way.
+    ///
+    /// A terrain in two sets appears in both rows. That is the point: grass
+    /// beside stone and grass beside dirt are two different relationships,
+    /// and either row paints the same grass.
+    /// </summary>
+    private List<string[]> TerrainMenuRows()
+    {
+        var rows = new List<string[]> { new[] { TerrainOff } };
+        foreach (var set in TerrainCatalog.Sets)
+            rows.Add(set.A.Equals(set.B, StringComparison.OrdinalIgnoreCase)
+                ? new[] { set.A }
+                : new[] { set.A, set.B });
+
+        // anything no set mentions — nothing today, but a one-off tile later
+        var paired = rows.SelectMany(r => r).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var lone in TerrainCatalog.Terrains.Where(t => !paired.Contains(t)))
+            rows.Add(new[] { lone });
+        return rows;
+    }
+
+    /// <summary>
+    /// Where each terrain entry sits. Walks the same rows the menu is built
+    /// from, so what is drawn, what is clicked and what is picked can never
+    /// disagree about which entry is which.
+    /// </summary>
+    private List<Rectangle> TerrainMenuRects(Rectangle button)
+    {
+        int width = Math.Max(button.Width, 460);
+        int step = BarH - 12, high = BarH - 14;
+        var rects = new List<Rectangle>();
+        int y = button.Bottom + 6;
+        foreach (var row in TerrainMenuRows())
+        {
+            int each = row.Length == 1 ? width : (width - 6) / 2;
+            for (int i = 0; i < row.Length; i++)
+                rects.Add(new Rectangle(button.X + i * (each + 6), y, each, high));
+            y += step;
+        }
+        return rects;
+    }
+
+    /// <summary>Where exports are kept when one is imported from elsewhere.</summary>
     private string ImportsDir =>
         System.IO.Path.Combine(System.IO.Directory.GetParent(_levelsDir)!.FullName, "Imports");
 
+    private string RepoRoot =>
+        System.IO.Directory.GetParent(_levelsDir)!.Parent!.FullName;
+
     /// <summary>
-    /// Every PixelLab export waiting to be imported. A folder you drop zips
-    /// into, rather than a file picker: the editor has no windowing toolkit
-    /// and a folder works the same on every machine.
+    /// Asks for a PixelLab export anywhere on the machine and imports it.
+    ///
+    /// A real file dialog, borrowed from the desktop — see FilePicker. On a
+    /// machine with no dialog to borrow it falls back to the first export
+    /// sitting in Content/Imports, so the button still does something.
     /// </summary>
-    private List<string> PixelLabExports()
+    private void ImportWithPicker()
+    {
+        string? chosen = FilePicker.Available
+            ? FilePicker.PickFile("Open a PixelLab export", "zip", ImportsDir)
+            : null;
+
+        if (chosen == null && !FilePicker.Available)
+        {
+            chosen = FirstWaitingExport();
+            if (chosen == null)
+            {
+                System.IO.Directory.CreateDirectory(ImportsDir);
+                Status($"no file dialog on this machine — put a .zip in {ImportsDir}");
+                return;
+            }
+            Status($"no file dialog on this machine — opening {System.IO.Path.GetFileName(chosen)}");
+        }
+        if (chosen == null) return;       // cancelled, which is not a failure
+
+        ImportExport(chosen);
+    }
+
+    /// <summary>The fallback when there is no dialog: whatever is in Content/Imports.</summary>
+    private string? FirstWaitingExport()
     {
         try
         {
-            if (System.IO.Directory.Exists(ImportsDir))
-            {
-                var found = System.IO.Directory.GetFiles(ImportsDir, "*.zip")
-                    .Concat(System.IO.Directory.GetDirectories(ImportsDir))
-                    .Select(p => System.IO.Path.GetFileName(p)!)
-                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                if (found.Count > 0) return found;
-            }
+            if (!System.IO.Directory.Exists(ImportsDir)) return null;
+            return System.IO.Directory.GetFiles(ImportsDir, "*.zip")
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
         }
-        catch (Exception ex) { Status($"could not read {ImportsDir}: {ex.Message}"); }
-        return new List<string> { NothingToImport };
+        catch { return null; }
     }
 
     /// <summary>
     /// Imports one export: its sixteen tiles become a terrain set you can
     /// paint with straight away, and its ground is laid into the level open
     /// right now, on top of whatever is there.
+    ///
+    /// The zip is copied into Content/Imports on the way through, so a set
+    /// brought in from the desktop can be re-imported later without going
+    /// back to wherever it came from.
     /// </summary>
-    private void ImportExport(string entry)
+    private void ImportExport(string zipPath)
     {
-        if (entry == NothingToImport)
-        {
-            System.IO.Directory.CreateDirectory(ImportsDir);
-            Status($"drop a PixelLab .zip into {ImportsDir}");
-            return;
-        }
-
-        string repoRoot = System.IO.Directory.GetParent(_levelsDir)!.Parent!.FullName;
-        var result = PixelLabImport.Import(
-            System.IO.Path.Combine(ImportsDir, entry), repoRoot);
+        var result = PixelLabImport.Import(zipPath, RepoRoot, _ctx.Game.GraphicsDevice);
         if (!result.Ok) { Status(result.Message); return; }
 
+        Keep(zipPath);
         TerrainCatalog.Reset();
         BeginEdit();
         foreach (var b in result.Blocks!) _level.Blocks[new Point(b.X, b.Y)] = b;
@@ -189,5 +280,20 @@ public partial class IsoEditorScreen
         // ready to paint with what just arrived
         if (TerrainCatalog.Get(result.SetName) is TerrainSet set) _terrain = set.A;
         Status(result.Message.Replace(Environment.NewLine, "  "));
+    }
+
+    /// <summary>Files the export in Content/Imports, unless it already lives there.</summary>
+    private void Keep(string zipPath)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(ImportsDir);
+            string landing = System.IO.Path.Combine(
+                ImportsDir, System.IO.Path.GetFileName(zipPath));
+            if (!System.IO.Path.GetFullPath(landing).Equals(
+                    System.IO.Path.GetFullPath(zipPath), StringComparison.OrdinalIgnoreCase))
+                System.IO.File.Copy(zipPath, landing, overwrite: true);
+        }
+        catch (Exception ex) { Console.WriteLine($"[import] could not keep a copy: {ex.Message}"); }
     }
 }

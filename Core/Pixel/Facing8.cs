@@ -88,6 +88,16 @@ public static class Facings
         // the same projection the tiles use, without the height
         float dx = (to.X - from.X) - (to.Y - from.Y);
         float dy = ((to.X - from.X) + (to.Y - from.Y)) * 0.5f;
+        return OnScreen(dx, dy);
+    }
+
+    /// <summary>
+    /// Which way a vector already in SCREEN pixels points, named for the
+    /// compass the player sees. A projectile knows where it is flying on
+    /// screen and nothing about the grid, so this is the way in for it.
+    /// </summary>
+    public static Facing8 OnScreen(float dx, float dy)
+    {
         if (dx == 0 && dy == 0) return Default;
 
         // screen y grows downwards, so a positive dy is southward

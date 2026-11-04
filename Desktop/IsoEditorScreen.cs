@@ -195,6 +195,39 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private string SavePath => Path.Combine(_levelsDir, _levelName + ".txt");
     private string DialoguePath => Path.Combine(_levelsDir, _levelName + "Dialogue.txt");
 
+    /// <summary>
+    /// Every square the window can currently see, with a square of margin so
+    /// nothing pops in at the edges.
+    ///
+    /// The four corners of the window are turned into grid squares and the box
+    /// around them is swept. A diamond grid is turned 45 degrees to the window,
+    /// so that box is about twice the squares you can actually see — cheap
+    /// enough, and it means the grid never has a visible edge. Zoomed all the
+    /// way out it is capped, because at 1x the box would run to tens of
+    /// thousands of squares and none of them would be worth drawing.
+    /// </summary>
+    private IEnumerable<Point> VisibleGrid(Vector2 origin)
+    {
+        var corners = new[]
+        {
+            _camera.ToWorld(Point.Zero),
+            _camera.ToWorld(new Point(_windowSize.X, 0)),
+            _camera.ToWorld(new Point(0, _windowSize.Y)),
+            _camera.ToWorld(new Point(_windowSize.X, _windowSize.Y)),
+        }.Select(w => IsoMath.ToGrid(w.ToVector2(), origin)).ToList();
+
+        int x0 = corners.Min(c => c.X) - 1, x1 = corners.Max(c => c.X) + 1;
+        int y0 = corners.Min(c => c.Y) - 1, y1 = corners.Max(c => c.Y) + 1;
+
+        const int Most = 120;        // per side, so at most 14400 squares
+        if (x1 - x0 > Most) x1 = x0 + Most;
+        if (y1 - y0 > Most) y1 = y0 + Most;
+
+        for (int x = x0; x <= x1; x++)
+            for (int y = y0; y <= y1; y++)
+                yield return new Point(x, y);
+    }
+
     private void Status(string text) { _status = text; _statusTimer = 4f; }
 
     /// <summary>Rescans for problems a few times a second rather than every frame.</summary>
@@ -330,9 +363,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private List<string> MenuItems(string id) => id switch
     {
         // "Off" heads the list so the old piece brush is one click away
-        "terrain" => new List<string> { TerrainOff }
-            .Concat(TerrainCatalog.Terrains).ToList(),
-        "import" => PixelLabExports(),
+        "terrain" => TerrainMenuRows().SelectMany(r => r).ToList(),
         "family" => BlockCatalog.Families.ToList(),
         // Random heads the list so it is one click away whatever the family holds
         "piece" => new List<string> { "Random" }
@@ -367,6 +398,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private List<Rectangle> MenuRects(string id)
     {
         var btn = Buttons().FirstOrDefault(b => b.Id == id);
+        // the terrain menu pairs its entries two to a row; everything else is a column
+        if (id == "terrain") return TerrainMenuRects(btn.Rect);
         var items = MenuItems(id);
         var rects = new List<Rectangle>();
         for (int i = 0; i < items.Count; i++)
@@ -384,7 +417,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 _terrain = index == 0 ? "" : MenuItems("terrain")[index];
                 _tool = Tool.Block;
                 break;
-            case "import": ImportExport(MenuItems("import")[index]); break;
             case "family":
                 _familyIndex = index; _pieceIndex = 0; _terrain = ""; _tool = Tool.Block;
                 break;
@@ -411,10 +443,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 _tool = Tool.Block;
                 _openMenu = _openMenu == id ? null : id;
                 return true;
-            case "import":
-                // no tool of its own: it lists what is waiting in Content/Imports
-                _openMenu = _openMenu == id ? null : id;
-                return true;
+            case "import": ImportWithPicker(); return true;
             case "family" or "piece" or "deco" or "enemy" or "door":
                 // the button both selects its tool and opens its palette
                 _tool = id is "family" or "piece" ? Tool.Block
@@ -881,7 +910,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         if (_level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.PlayerStarts.Remove(tile)) return;
-        if (_level.Blocks.Remove(tile)) ForgetTerrain(tile);
+        if (_level.Blocks.TryGetValue(tile, out var gone) && _level.Blocks.Remove(tile))
+            ForgetTerrain(tile, gone.Height);
     }
 
     /// <summary>Everything on a square at once — what the box delete does.</summary>
@@ -894,7 +924,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         n += _level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         n += _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         if (_level.PlayerStarts.Remove(tile)) n++;
-        if (_level.Blocks.Remove(tile)) { ForgetTerrain(tile); n++; }
+        if (_level.Blocks.TryGetValue(tile, out var gone) && _level.Blocks.Remove(tile))
+            { ForgetTerrain(tile, gone.Height); n++; }
         return n;
     }
 
@@ -1162,12 +1193,14 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         _labels.Clear();
         var origin = Vector2.Zero;
 
-        // faint base grid so there's something to aim at over the void
-        var hover = IsoMath.ToGrid(_worldPointer, origin);
-        for (int gx = hover.X - 14; gx <= hover.X + 14; gx++)
-            for (int gy = hover.Y - 14; gy <= hover.Y + 14; gy++)
-                if (!_level.Blocks.ContainsKey(new Point(gx, gy)))
-                    DrawTop(batch, gx, gy, 0, origin, Color.White * 0.06f);
+        // Faint base grid so there's something to aim at over the void. It
+        // covers WHAT YOU CAN SEE, worked out from the window's four corners —
+        // not a patch around the pointer, which slid about as the mouse moved
+        // and ran off the screen entirely if you moved far enough, leaving
+        // black.
+        foreach (var tile in VisibleGrid(origin))
+            if (!_level.Blocks.ContainsKey(tile))
+                DrawTop(batch, tile.X, tile.Y, 0, origin, Color.White * 0.06f);
 
         foreach (var b in _level.Blocks.Values.OrderBy(b => b.X + b.Y).ThenBy(b => b.X))
         {
@@ -1442,36 +1475,44 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// lines of small text under the toolbar, which cost that space on every
     /// frame to say things you need once.
     /// </summary>
-    private static readonly string[] ControlLines =
+    /// <summary>
+    /// One row of the Controls panel: the key you press, and what it does.
+    /// Split in two so the keys can run down their own column in blue and be
+    /// picked out at a glance. An empty Key is a line that is only prose.
+    /// </summary>
+    private readonly record struct ControlRow(string Key, string What);
+
+    private static readonly ControlRow[] ControlLines =
     {
-        "hold left            paint",
-        "hold Del             rub out",
-        "Shift+drag           fill a box at the placement height",
-        "Ctrl+Del, then drag  empty a box",
-        "Ctrl+drag            select a box: +/- raise and lower, Ctrl+C copy,",
-        "                     Ctrl+V paste at the cursor, Del empty, Esc drop",
-        "middle click         eyedropper: adopt that square's piece/height/room",
-        "hold Alt             write every block's height on top of it",
-        "Ctrl+Z               undo the last stroke",
-        "right-click trigger  open that level's dialogue file",
-        "scroll wheel         placement height in feet",
-        "Ctrl+wheel           zoom, in whole pixels",
-        "ARROWS               pan (WASD are tool keys)",
-        "ALT   block heights   SPACE  room colours",
-        "  tap either to leave it up; hold it for a glance",
-        "",
-        "Terrain  pick a terrain; painting blends it into its neighbours",
-        "Import   a PixelLab .zip from Content/Imports: tiles, and its map",
-        "1..9  ground family     B  next piece, then Random",
-        "D deco   O door   E enemy   P start   G trigger",
-        "area transition: last entry in the Door menu",
-        "  paint the pads, then right-click one and its far end",
-        "the Door button picks small, medium (2) or large (4)",
-        "R room name    Place Room paints it onto blocks",
-        "N dialogue name    V save as",
-        "S save    T test",
-        "",
-        "Insert or the Controls button hides this again",
+        new("hold left",           "paint"),
+        new("hold Del",            "rub out"),
+        new("Shift+drag",          "fill a box at the placement height"),
+        new("Ctrl+Del, drag",      "empty a box"),
+        new("Ctrl+drag",           "select a box: +/- raise and lower,"),
+        new("",                    "Ctrl+C copy, Ctrl+V paste, Del empty, Esc drop"),
+        new("middle click",        "eyedropper: that square's piece, height and room"),
+        new("hold Alt",            "write every block's height on top of it"),
+        new("Ctrl+Z",              "undo the last stroke"),
+        new("right-click",         "on a trigger, opens that level's dialogue file"),
+        new("scroll wheel",        "placement height in feet"),
+        new("Ctrl+wheel",          "zoom, in whole pixels"),
+        new("ARROWS",              "pan (WASD are tool keys)"),
+        new("ALT",                 "block heights. SPACE room colours."),
+        new("",                    "Tap either to leave it up, hold it for a glance."),
+        new("", ""),
+        new("Terrain",             "pick a terrain; painting blends it into its neighbours"),
+        new("",                    "Terrains that can blend sit side by side in the menu."),
+        new("Import",              "open a PixelLab .zip from anywhere: its tiles and its map"),
+        new("1..9",                "ground family.  B  next piece, then Random"),
+        new("D",                   "deco.  O door.  E enemy.  P start.  G trigger."),
+        new("",                    "Area transition is the last entry in the Door menu:"),
+        new("",                    "paint the pads, then right-click one and its far end."),
+        new("",                    "The Door button picks small, medium (2) or large (4)."),
+        new("R",                   "room name.  Place Room paints it onto blocks"),
+        new("N",                   "dialogue name.  V save as"),
+        new("S",                   "save.  T test"),
+        new("", ""),
+        new("Insert",              "or the Controls button hides this again"),
     };
 
     private void DrawControlsPanel(SpriteBatch batch)
@@ -1490,11 +1531,22 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, 4, box.Height), Color.Yellow);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.Right - 4, box.Y, 4, box.Height), Color.Yellow);
 
+        // Keys down the left in blue, what they do in a column of their own.
+        // The column is as wide as the longest key actually needs, measured
+        // rather than guessed, so it stays right if a key is renamed.
+        var rows = ControlLines;
+        float keyColumn = rows.Max(r => _ctx.Font.MeasureString(r.Key).X) * scale + 40;
+        var keyInk = new Color(120, 180, 255);
+
         int y = box.Y + 46;
-        foreach (var line in ControlLines)
+        foreach (var row in rows)
         {
-            batch.DrawString(_ctx.Font, line, new Vector2(box.X + 60, y),
-                Color.White * 0.85f, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+            if (row.Key.Length > 0)
+                batch.DrawString(_ctx.Font, row.Key, new Vector2(box.X + 60, y),
+                    keyInk, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+            if (row.What.Length > 0)
+                batch.DrawString(_ctx.Font, row.What, new Vector2(box.X + 60 + keyColumn, y),
+                    Color.White * 0.85f, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
             y += lineH;
         }
     }

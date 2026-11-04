@@ -1,5 +1,5 @@
 # Decorations placeable in the editor; each blocks its square.
 # Pixel art, drawn at its own size, hung by its bottom on the square's centre.
-Tree.png
+tree 01.png
 Rock.png
 Chest.png

@@ -796,20 +796,29 @@ public partial class IsoLevelScreen
         var b = IsoMath.ToScreen(here.X, here.Y, HeightAt(here), Origin);
         var pos = Vector2.Lerp(a, b, t);
 
+        // art drawn per direction is already turned; one picture spins instead
+        if (EffectArt.Turned(_actingCard.ProjectileArt, Facings.Towards(last, here)) is string turned)
+        {
+            var art = _ctx.Assets.LoadTexture(turned);
+            batch.Draw(art, pos, null, Color.White, 0f, Middle(art), 1f, SpriteEffects.None, 0f);
+            return;
+        }
+
         var tex = ProjectileArt(_actingCard.ProjectileArt);
-        batch.Draw(tex, pos, null, Color.White, _clock * 14f,
-            new Vector2(tex.Width / 2f, tex.Height / 2f), 1f, SpriteEffects.None, 0f);
+        batch.Draw(tex, pos, null, Color.White, _clock * 14f, Middle(tex), 1f, SpriteEffects.None, 0f);
     }
+
+    /// <summary>The middle of a picture, which is what every effect hangs by.</summary>
+    private static Vector2 Middle(Texture2D tex) => new(tex.Width / 2f, tex.Height / 2f);
 
     private void DrawProjectile(SpriteBatch batch)
     {
         if (_mode != Mode.Acting || _act != Act.Projectile || _actingCard == null) return;
         float t = _actDur <= 0f ? 1f : MathHelper.Clamp(_actT / _actDur, 0f, 1f);
-        var tex = ProjectileArt(_actingCard.ProjectileArt);
         if (_shots.Count == 0)
-            DrawShot(batch, tex, _projTo, _projRotation, _projSeed, t);
+            DrawShot(batch, _projTo, _projRotation, _projSeed, t);
         foreach (var (to, seed) in _shots)
-            DrawShot(batch, tex, to,
+            DrawShot(batch, to,
                 (float)Math.Atan2(to.Y - _projFrom.Y, to.X - _projFrom.X), seed, t);
     }
 
@@ -821,7 +830,7 @@ public partial class IsoLevelScreen
     /// middle of the flight and nothing at either end, so it always leaves
     /// the caster and lands on the square it was aimed at.
     /// </summary>
-    private void DrawShot(SpriteBatch batch, Texture2D tex, Vector2 to, float angle, float seed, float t)
+    private void DrawShot(SpriteBatch batch, Vector2 to, float angle, float seed, float t)
     {
         var pos = Vector2.Lerp(_projFrom, to, t);
         if (_projWander != 0f)
@@ -837,20 +846,27 @@ public partial class IsoLevelScreen
                 angle += sway * 0.02f;
             }
         }
-        batch.Draw(tex, pos, null, Color.White, angle,
-            new Vector2(tex.Width / 2f, tex.Height / 2f), 1f, SpriteEffects.None, 0f);
+        // art drawn per direction is already turned; one picture gets spun to
+        // point along the flight
+        var flight = to - _projFrom;
+        if (EffectArt.Turned(_actingCard!.ProjectileArt, Facings.OnScreen(flight.X, flight.Y))
+            is string turned)
+        {
+            var art = _ctx.Assets.LoadTexture(turned);
+            batch.Draw(art, pos, null, Color.White, 0f, Middle(art), 1f, SpriteEffects.None, 0f);
+            return;
+        }
+
+        var tex = ProjectileArt(_actingCard.ProjectileArt);
+        batch.Draw(tex, pos, null, Color.White, angle, Middle(tex), 1f, SpriteEffects.None, 0f);
     }
 
     /// <summary>
     /// What a card throws. A card with pixel art of its own gets it; everything
     /// else gets the ball, which is the placeholder every projectile starts as.
     /// </summary>
-    private Texture2D ProjectileArt(string file)
-    {
-        string mine = $"Content/Images/Pixel/Effects/{file}";
-        return _ctx.Assets.LoadTexture(
-            AssetLoader.Exists(mine) ? mine : "Content/Images/Pixel/Effects/Ball.png");
-    }
+    private Texture2D ProjectileArt(string file) =>
+        _ctx.Assets.LoadTexture(EffectArt.Single(file));
 
     private List<Rectangle> HandRects()
     {

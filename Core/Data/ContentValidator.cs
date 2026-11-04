@@ -123,11 +123,12 @@ public static class ContentValidator
 
             if (card.Delivery == Delivery.Ranged && card.ProjectileArt.Length > 0)
             {
-                string art = $"Content/Images/Pixel/Effects/{card.ProjectileArt}";
-                if (!AssetLoader.Exists(art))
+                // either one picture, or a folder of compass rotations
+                string art = $"{EffectArt.Folder}/{card.ProjectileArt}";
+                if (!AssetLoader.Exists(art) && !EffectArt.IsTurned(card.ProjectileArt))
                     diag.Warn(card.Source, card.Line,
-                        $"'{card.Name}': Projectile Art '{card.ProjectileArt}' not found at {art} — " +
-                        "the ball will be thrown instead");
+                        $"'{card.Name}': Projectile Art '{card.ProjectileArt}' not found at {art}, " +
+                        $"and no rotations at {art}/south-east.png — the ball will be thrown instead");
             }
 
             CheckSound(card, card.CastingSound, "Casting Sound", diag);

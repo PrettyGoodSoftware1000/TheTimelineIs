@@ -10,8 +10,8 @@
 # The mask is the file name, so a missing one is a missing number.
 
 Set: StoneToGrass
-A: stone
-B: grass
+A: stone 01
+B: grass 01
 Tile: 96 x 48
 Wall: 48
 
