@@ -101,42 +101,6 @@ public partial class IsoLevelScreen
         HandleTileClick(tile);
     }
 
-    /// <summary>
-    /// Opens any door this character is now standing next to.
-    ///
-    /// Walking up to a door is the whole interaction. It used to want a click,
-    /// from within two squares, which meant knowing there was a door there
-    /// before you could see the room it opened onto.
-    /// </summary>
-    private void OpenDoorsBeside(CharacterInstance who)
-    {
-        foreach (var square in who.Footprint.SelectMany(LevelData.Beside).Distinct().ToList())
-            if (_level.DoorAt(square) is { Open: false } door &&
-                _level.RoomsBeside(square).Count >= 2)
-                OpenDoor(door);
-    }
-
-    /// <summary>
-    /// Opens a doorway and reveals the rooms on both sides of it. The rooms are
-    /// read off the squares beside the door rather than stored on it, and the
-    /// whole run of touching doorway squares opens together — a two-square gap
-    /// is one door, not two.
-    /// </summary>
-    private void OpenDoor(LevelDoor door)
-    {
-        var group = _level.DoorGroup(door);
-        foreach (var d in group)
-        {
-            d.Open = true;
-            foreach (string room in _level.RoomsBeside(d.Tile))
-                _revealed.Add(room);
-        }
-        _overlayKey = null;
-        Log(_ctx.Strings.Get("iso_door_open"));
-        var nearest = LivingParty.OrderBy(p => group.Min(d => p.DistanceTo(d.Tile))).First();
-        CheckAggro(nearest);
-    }
-
     private void HandleTileClick(Point tile)
     {
         var mover = ActiveMover;

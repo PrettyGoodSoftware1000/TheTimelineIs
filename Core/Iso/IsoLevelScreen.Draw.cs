@@ -238,12 +238,16 @@ public partial class IsoLevelScreen
                 Edge(batch, tile, block.Height, Color.Yellow);
             }
 
-            if (_level.DoorAt(tile) is LevelDoor door)
-                Billboard(batch, "Content/Images/Decorations/Door.png", tile, block.Height,
-                    (door.Open ? Color.White * 0.35f : Color.White) * alpha);
+            // A decoration on an opened area transition - a door, in
+            // practice - shows its open picture. With no open picture it is
+            // faded instead, so it never looks shut after it has been opened.
             if (_level.DecorationAt(tile) is LevelDecoration deco)
-                Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, block.Height,
-                    Color.White * alpha);
+            {
+                bool open = OpenedWayAt(tile);
+                Billboard(batch, BlockCatalog.DecorationPath(deco.File, open), tile, block.Height,
+                    (open && !BlockCatalog.HasOpenArt(deco.File)
+                        ? Color.White * 0.35f : Color.White) * alpha);
+            }
             if (_fires.ContainsKey(tile)) DrawFire(batch, tile, block.Height, alpha);
         }
         DrawBandCast(batch, byDepth, band, alpha);

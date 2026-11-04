@@ -148,6 +148,28 @@ public static class BlockCatalog
 
     public static string DecorationPath(string file) => $"Content/Images/Decorations/{file}";
 
+    /// <summary>
+    /// The picture for a decoration that has two states, open and closed.
+    ///
+    /// A door is the one that matters: it sits on an area transition and shows
+    /// its open state once that way has been opened. The open picture is the
+    /// closed one's name with " Open" on the end — Door.png and Door Open.png —
+    /// and nothing has to be declared for it. Where there is no open picture
+    /// the closed one is used, which the caller is expected to fade, because a
+    /// door that looks shut after it has been opened is worse than a faded one.
+    /// </summary>
+    public static string DecorationPath(string file, bool open)
+    {
+        if (!open) return DecorationPath(file);
+        string stem = file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? file[..^4] : file;
+        string swung = DecorationPath($"{stem} Open.png");
+        return AssetLoader.Exists(swung) ? swung : DecorationPath(file);
+    }
+
+    /// <summary>Whether a decoration has a separate picture for being open.</summary>
+    public static bool HasOpenArt(string file) =>
+        DecorationPath(file, open: true) != DecorationPath(file);
+
     /// <summary>Tests and the editor re-load content between runs.</summary>
     public static void Reset() { _pieces = null; _decorations = null; }
 

@@ -198,6 +198,23 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     /// party would bounce straight back where they came from.
     /// </summary>
     private readonly HashSet<Point> _disarmed = new();
+
+    /// <summary>
+    /// Pair numbers whose two ends have been opened to each other — the
+    /// doors of this level that are standing open. A way opens once and stays
+    /// open; a trip can be taken again and again.
+    /// </summary>
+    private readonly HashSet<int> _openWays = new();
+
+    /// <summary>Whether the way joining these two pads has been opened.</summary>
+    public bool WayOpen(int pair) => _openWays.Contains(pair);
+
+    /// <summary>
+    /// Whether this square is on an area transition whose way stands open.
+    /// What a door decoration reads to know which picture to show.
+    /// </summary>
+    private bool OpenedWayAt(Point tile) =>
+        _level.TransitionAt(tile) is LevelTransition t && t.Pair != 0 && _openWays.Contains(t.Pair);
     private Point _pointer;
     private Point? _tap;
     private bool _ctrl;              // held: fades the board so the grid reads, shows every bar

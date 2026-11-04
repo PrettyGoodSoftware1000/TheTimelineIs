@@ -28,23 +28,6 @@ public class LevelDecoration
 /// and running along either the X or the Y axis. The whole run is one door —
 /// one click opens all of it, and it blocks all of it while shut.
 /// </summary>
-/// <summary>
-/// A doorway: one square of ground belonging to no room, with rooms either side.
-///
-/// - Which rooms it joins is NOT stored. It is read off the neighbours, so a
-///   door can never name a room it does not actually touch.
-/// - Doorway squares touching each other are one wide doorway; no width field.
-/// - Opens when anybody stands beside it, and reveals both rooms.
-/// </summary>
-public class LevelDoor
-{
-    public int X, Y;
-    public bool Open;           // runtime only; never saved
-
-    public Point Tile => new(X, Y);
-    public bool Covers(Point p) => p.X == X && p.Y == Y;
-}
-
 public class LevelEnemy
 {
     public int X, Y;
@@ -83,7 +66,6 @@ public class LevelTransition
 ///
 ///   Block: x, y, height, type, room      (room '-' means a doorway square)
 ///   Decoration: x, y, file
-///   Door: x, y
 ///   Enemy: x, y, name
 ///   PlayerStart: x, y
 ///   Trigger: x, y, dialogueName
@@ -103,7 +85,6 @@ public class LevelData
     /// </summary>
     public BlockGrid Blocks { get; } = new();
     public List<LevelDecoration> Decorations { get; } = new();
-    public List<LevelDoor> Doors { get; } = new();
     public List<LevelEnemy> Enemies { get; } = new();
     public List<LevelTrigger> Triggers { get; } = new();
     public List<LevelTransition> Transitions { get; } = new();
@@ -112,7 +93,6 @@ public class LevelData
     public static string PathFor(string name) => $"Content/Levels/{name}.txt";
 
     public LevelBlock? BlockAt(Point p) => Blocks.TryGetValue(p, out var b) ? b : null;
-    public LevelDoor? DoorAt(Point p) => Doors.FirstOrDefault(d => d.Covers(p));
     public LevelDecoration? DecorationAt(Point p) =>
         Decorations.FirstOrDefault(d => d.X == p.X && d.Y == p.Y);
     public LevelTrigger? TriggerAt(Point p) =>
@@ -170,27 +150,6 @@ public class LevelData
             : RoomsBeside(p).Any(revealedRooms.Contains);
     }
 
-    /// <summary>
-    /// Every doorway square joined to this one, itself included. Doors touching
-    /// each other are one doorway, so a two-square gap opens as a unit without
-    /// anybody declaring a width.
-    /// </summary>
-    public List<LevelDoor> DoorGroup(LevelDoor door)
-    {
-        var group = new List<LevelDoor> { door };
-        var seen = new HashSet<Point> { door.Tile };
-        var queue = new Queue<Point>();
-        queue.Enqueue(door.Tile);
-        while (queue.Count > 0)
-            foreach (var n in Beside(queue.Dequeue()))
-            {
-                if (!seen.Add(n)) continue;
-                if (DoorAt(n) is not LevelDoor next) continue;
-                group.Add(next);
-                queue.Enqueue(n);
-            }
-        return group;
-    }
 
     public static LevelData Load(string name) =>
         Read(name, PathFor(name), AssetLoader.ReadNumbered(PathFor(name), PathFor(name)));
@@ -249,11 +208,14 @@ public class LevelData
                 case "decoration" when Num(0, out int dx) && Num(1, out int dy) && parts.Length >= 3:
                     level.Decorations.Add(new LevelDecoration { X = dx, Y = dy, File = parts[2] });
                     break;
-                // Just a position. Which rooms it joins is worked out from the
-                // squares beside it, so there is nothing here to get wrong and
-                // nothing that can disagree with the map.
-                case "door" when Num(0, out int ox) && Num(1, out int oy):
-                    level.Doors.Add(new LevelDoor { X = ox, Y = oy });
+                // Doors are gone: an area transition is the only doorway
+                // there is now. Said out loud rather than skipped, because a
+                // level quietly losing its only way between two rooms is a
+                // level nobody can finish.
+                case "door":
+                    diag.Error(path, lineNo,
+                        "'Door:' is no longer a thing - paint an area transition on each " +
+                        "side instead, link them, and put a door decoration on the square");
                     break;
                 case "enemy" when Num(0, out int ex) && Num(1, out int ey) && parts.Length >= 3:
                     level.Enemies.Add(new LevelEnemy { X = ex, Y = ey, Name = parts[2] });
@@ -299,8 +261,6 @@ public class LevelData
                 { X = b.X, Y = b.Y, Height = b.Height, Type = b.Type, Room = b.Room });
         copy.Decorations.AddRange(Decorations.Select(d =>
             new LevelDecoration { X = d.X, Y = d.Y, File = d.File }));
-        copy.Doors.AddRange(Doors.Select(d =>
-            new LevelDoor { X = d.X, Y = d.Y, Open = d.Open }));
         copy.Triggers.AddRange(Triggers.Select(t =>
             new LevelTrigger { X = t.X, Y = t.Y, Dialogue = t.Dialogue, Fired = t.Fired }));
         // Enemies and transitions were missing here, so the editor's undo
@@ -320,7 +280,6 @@ public class LevelData
         Blocks.Clear();
         foreach (var b in other.Blocks.Values) Blocks.Place(new Point(b.X, b.Y), b);
         Decorations.Clear(); Decorations.AddRange(other.Decorations);
-        Doors.Clear(); Doors.AddRange(other.Doors);
         Enemies.Clear(); Enemies.AddRange(other.Enemies);
         Triggers.Clear(); Triggers.AddRange(other.Triggers);
         Transitions.Clear(); Transitions.AddRange(other.Transitions);
@@ -338,8 +297,6 @@ public class LevelData
                 (b.Room.Length > 0 ? b.Room : NoRoomToken));
         foreach (var d in Decorations.OrderBy(d => d.Y).ThenBy(d => d.X))
             sb.AppendLine($"Decoration: {d.X}, {d.Y}, {d.File}");
-        foreach (var d in Doors.OrderBy(d => d.Y).ThenBy(d => d.X))
-            sb.AppendLine($"Door: {d.X}, {d.Y}");
         foreach (var e in Enemies)
             sb.AppendLine($"Enemy: {e.X}, {e.Y}, {e.Name}");
         foreach (var t in Triggers.OrderBy(t => t.Y).ThenBy(t => t.X))

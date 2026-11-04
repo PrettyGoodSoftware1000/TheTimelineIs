@@ -30,7 +30,7 @@ namespace TheTimelineIs.Desktop;
 /// </summary>
 public partial class IsoEditorScreen : IScreen, IDrawsItself
 {
-    private enum Tool { Block, Decoration, Door, Enemy, PlayerStart, Trigger, Room, Transition }
+    private enum Tool { Block, Decoration, Enemy, PlayerStart, Trigger, Room, Transition }
 
     /// <summary>Tools you drag across the ground; the rest are one click each.</summary>
     /// <summary>
@@ -360,7 +360,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         Add($"Ground art: {FamilyName}", "family", _tool == Tool.Block && !TerrainBrush, menu: true);
         Add($"Ground piece: {PieceLabel}", "piece", _tool == Tool.Block, menu: true);
         Add($"Decoration: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
-        Add($"Doorway: {DoorLabel}", "door", _tool is Tool.Door or Tool.Transition, menu: true);
+        Add($"Doorway: {DoorLabel}", "door", _tool == Tool.Transition, menu: true);
         Add($"Enemy: {EnemyName}", "enemy", _tool == Tool.Enemy, menu: true);
         Add("Player start", "start", _tool == Tool.PlayerStart);
         Add($"Dialogue: {_trigger}", "trigger", _tool == Tool.Trigger, menu: true);
@@ -382,14 +382,13 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? file[..^4] : file;
 
     /// <summary>What the Doorway button is set to paint.</summary>
-    private string DoorLabel => _tool == Tool.Door ? "closed door" : TransitionEntry;
+    private string DoorLabel => TransitionEntry;
 
     /// <summary>What a click on the ground would do right now, in two words.</summary>
     private string ToolLabel => _tool switch
     {
         Tool.Block => TerrainBrush ? _terrain : PieceLabel,
         Tool.Decoration => Strip(DecoName),
-        Tool.Door => "closed door",
         Tool.Enemy => EnemyName,
         Tool.PlayerStart => "player start",
         Tool.Trigger => $"dialogue {_trigger}",
@@ -576,9 +575,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 _tool = Tool.Trigger;
                 break;
             case "enemy": _enemyIndex = index; _tool = Tool.Enemy; break;
-            case "door":
-                _tool = index == 0 ? Tool.Door : Tool.Transition;
-                break;
+            case "door": _tool = Tool.Transition; break;
         }
         _openMenu = null;
     }
@@ -822,7 +819,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                     if (FamilyPieces.Count > 0)
                         _pieceIndex = _pieceIndex + 1 >= FamilyPieces.Count ? -1 : _pieceIndex + 1;
                     break;
-                case 'o': _tool = Tool.Door; break;
+                case 'o': _tool = Tool.Transition; break;
                 case 'e':
                     _tool = Tool.Enemy;
                     if (_ctx.Enemies.EnemyNames.Count > 0)
@@ -1042,24 +1039,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 _level.Decorations.Add(new LevelDecoration
                     { X = tile.X, Y = tile.Y, File = BlockCatalog.Decorations[_decoIndex] });
                 break;
-            case Tool.Door when _level.BlockAt(tile) is LevelBlock db:
-            {
-                // A doorway is a square belonging to no room, with rooms either
-                // side. Painting one is the whole job: which rooms it joins is
-                // read off its neighbours, so there is no room to name, no
-                // width to pick and no axis to get backwards.
-                db.Room = LevelData.NoRoom;
-                _level.Doors.RemoveAll(d => d.Covers(tile));
-                _level.Doors.Add(new LevelDoor { X = tile.X, Y = tile.Y });
-
-                var joins = _level.RoomsBeside(tile);
-                Status(joins.Count >= 2
-                    ? $"door: {string.Join(" <-> ", joins)}"
-                    : joins.Count == 1
-                        ? $"door touches only '{joins[0]}' — it needs a second room beside it"
-                        : "door touches no rooms yet — paint rooms on either side of it");
-                break;
-            }
             case Tool.Enemy when _level.BlockAt(tile) != null && _ctx.Enemies.EnemyNames.Count > 0:
                 _level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y);
                 _level.Enemies.Add(new LevelEnemy
@@ -1092,7 +1071,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private void Delete(Point tile)
     {
         if (_level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y) > 0) return;
-        if (_level.Doors.RemoveAll(d => d.Covers(tile)) > 0) return;
         if (_level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y) > 0) return;
         if (_level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
         if (_level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y) > 0) return;
@@ -1106,7 +1084,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     {
         int n = 0;
         n += _level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y);
-        n += _level.Doors.RemoveAll(d => d.Covers(tile));
         n += _level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y);
         n += _level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         n += _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
@@ -1185,10 +1162,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         // startup validator demands
         foreach (var e in _level.Enemies)
             n += FootprintGaps(e);
-        n += _level.Doors.Count(d => _level.BlockAt(d.Tile) == null);
-        // a doorway that does not actually join two rooms is a wall with a
-        // handle, and the startup check will refuse it
-        n += _level.Doors.Count(d => _level.RoomsBeside(d.Tile).Count < 2);
         n += _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
         if (_level.PlayerStarts.Count < 4) n++;
         if (_level.Blocks.Count == 0) n++;
@@ -1213,7 +1186,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         int orphans = _level.Triggers.Count(t => _level.BlockAt(new Point(t.X, t.Y)) == null)
             + _level.Decorations.Count(d => _level.BlockAt(new Point(d.X, d.Y)) == null)
             + _level.Enemies.Sum(FootprintGaps)
-            + _level.Doors.Count(d => _level.BlockAt(d.Tile) == null)
             + _level.PlayerStarts.Count(p => _level.BlockAt(p) == null);
         if (orphans > 0) bits.Add($"{orphans} thing(s) floating with no block under them");
         if (_level.PlayerStarts.Count < 4)
@@ -1547,8 +1519,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             var tile = new Point(b.X, b.Y);
             if (_level.BlockAt(tile) != b) continue;
 
-            if (_level.DoorAt(tile) != null)
-                Billboard(batch, "Content/Images/Decorations/Door.png", tile, b.Height, origin, Color.White);
             if (_level.DecorationAt(tile) is LevelDecoration deco)
                 Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, b.Height, origin, Color.White);
             // An enemy goes down when the LAST square of its body is painted,

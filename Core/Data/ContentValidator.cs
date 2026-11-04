@@ -404,36 +404,6 @@ public static class ContentValidator
                     }
                 }
             }
-            foreach (var door in level.Doors)
-            {
-                var at = door.Tile;
-                var under = level.BlockAt(at);
-                if (under == null)
-                {
-                    diag.Error(path, 0, $"door at {at.X},{at.Y} has no block under it, " +
-                        "so nobody can walk through it");
-                    continue;
-                }
-                // A doorway belongs to no room. One left painted is part of a
-                // room instead of a gap between two, and would be revealed with
-                // that room whether or not it had ever been opened.
-                if (under.Room.Length > 0)
-                {
-                    diag.Error(path, 0,
-                        $"door at {at.X},{at.Y} sits on a square painted '{under.Room}' — " +
-                        "a doorway square must belong to no room");
-                    continue;
-                }
-                var joins = level.RoomsBeside(at);
-                if (joins.Count < 2)
-                    diag.Error(path, 0,
-                        $"door at {at.X},{at.Y} touches " +
-                        (joins.Count == 0 ? "no rooms" : $"only '{joins[0]}'") +
-                        " — a door needs a different room on each side");
-                if (level.Doors.Count(d => d.Covers(at)) > 1)
-                    diag.Error(path, 0,
-                        $"more than one door on {at.X},{at.Y}; only one of them can ever be opened");
-            }
             foreach (var start in level.PlayerStarts)
                 if (level.BlockAt(start) == null)
                     diag.Error(path, 0, $"PlayerStart at {start.X},{start.Y} has no block under it");
@@ -495,9 +465,6 @@ public static class ContentValidator
                     diag.Error(DialogueLibrary.PathFor(dest.Level), 0,
                         $"dialogue '{trigger.Dialogue}' has no lines");
             }
-
-            if (!AssetLoader.Exists("Content/Images/Decorations/Door.png") && level.Doors.Count > 0)
-                diag.Error(path, 0, "level has doors but Content/Images/Decorations/Door.png is missing");
         }
     }
 
