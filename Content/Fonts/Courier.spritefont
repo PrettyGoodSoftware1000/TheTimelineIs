@@ -16,6 +16,17 @@
         <End>&#126;</End>
       </CharacterRegion>
       <CharacterRegion>
+        <!-- the middot, used as a separator in prompts -->
+        <Start>&#183;</Start>
+        <End>&#183;</End>
+      </CharacterRegion>
+      <CharacterRegion>
+        <!-- en and em dash: the editor's own text is full of them, and
+             without this every one of them drew as a question mark -->
+        <Start>&#8211;</Start>
+        <End>&#8212;</End>
+      </CharacterRegion>
+      <CharacterRegion>
         <!-- the infinity sign, for something whose nerve cannot be broken -->
         <Start>&#8734;</Start>
         <End>&#8734;</End>

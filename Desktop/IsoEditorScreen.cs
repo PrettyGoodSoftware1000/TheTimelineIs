@@ -67,10 +67,20 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private int _familyIndex;
     private int _pieceIndex;
     private static readonly Random Rng = new();
+
+    /// <summary>
+    /// The placement height, in the small steps the level file stores.
+    /// Everything the editor SHOWS goes through Tall(), which reads it as
+    /// blocks — one cube is 1, a step is 0.25.
+    /// </summary>
     private int _height;
+
+    /// <summary>A stored height read as blocks: four steps to a block, so 2 is 0.5.</summary>
+    private static string Tall(int steps) =>
+        (steps / (float)IsoMath.StepsPerBlock).ToString("0.##");
     private string _room = "Main";
     private string _trigger = "Intro";      // dialogue block a placed trigger calls
-    private bool _typingRoom, _typingTrigger, _typingSaveAs;
+    private bool _typingRoom, _typingTrigger, _typingSaveAs, _typingRename, _typingNewMap;
     private string _roomBuffer = "";
     /// <summary>The window onto the board: whole art pixels at a whole-number zoom.</summary>
     private readonly PixelCamera _camera = new();
@@ -331,12 +341,11 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             x += w + BarGap;
         }
 
-        Add($"Level: {_levelName}", "level", false, menu: true);
+        Add("File", "file", false, menu: true);
+        Add($"Current Level: {_levelName}", "level", false, menu: true);
         Add($"Terrain: {TerrainLabel}", "terrain", _tool == Tool.Block && TerrainBrush, menu: true);
         Add($"Ground: {FamilyName}", "family", _tool == Tool.Block && !TerrainBrush, menu: true);
         Add($"Piece: {PieceLabel}", "piece", _tool == Tool.Block, menu: true);
-        Add("Import", "import", false);
-        Add("Reload", "reload", false);
         Add("Controls", "controls", _showControls);
         Add($"Deco: {Strip(DecoName)}", "deco", _tool == Tool.Decoration, menu: true);
         Add($"Door: {(_tool == Tool.Transition ? TransitionEntry : "Doorway")}", "door",
@@ -347,11 +356,10 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         Add($"Room: {_room}", "room", false);
         Add("Place Room", "placeroom", _tool == Tool.Room);
         Add("Dialogue", "dialogue", false);
+        // the content check: "OK" when the level has nothing wrong with it,
+        // a red count of problems when it has. Clicking it re-checks and
+        // names the first one.
         Add(_problems == 0 ? "OK" : $"! {_problems}", "problems", false, pad: 34);
-        Add("Undo", "undo", false);
-        Add("Save", "save", false);
-        Add("Save As", "saveas", false);
-        Add("Test", "test", false);
         _barRows = row + 1;
         return list;
     }
@@ -359,9 +367,24 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private static string Strip(string file) =>
         file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? file[..^4] : file;
 
+    /// <summary>Opening, saving and leaving — everything that is about the FILE.</summary>
+    private static readonly string[] FileMenu =
+    {
+        "Import a PixelLab export",
+        "Reload from disk",
+        "Save",
+        "Save As",
+        "Rename Map",
+        "Playtest the level",
+    };
+
+    /// <summary>The first entry of the level list: a blank map rather than an old one.</summary>
+    private const string NewMapEntry = "Make a New Map";
+
     /// <summary>The entries a dropdown shows, and what picking one does.</summary>
     private List<string> MenuItems(string id) => id switch
     {
+        "file" => FileMenu.ToList(),
         // "Off" heads the list so the old piece brush is one click away
         "terrain" => TerrainMenuRows().SelectMany(r => r).ToList(),
         "family" => BlockCatalog.Families.ToList(),
@@ -377,22 +400,31 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
 
     /// <summary>
     /// Every level file in the repo's Content/Levels, so one can be opened
-    /// without restarting. Dialogue files sit in the same folder and are not
-    /// levels. Directory enumeration is fine here: the editor is desktop-only
-    /// and already reads and writes the source tree directly.
+    /// without restarting, with "Make a New Map" at the top.
+    ///
+    /// Two files in that folder are not levels and are left out: a level's
+    /// Dialogue, and Destinations, which is the world map's list of pins.
+    /// Opening either of those in the level editor only ever produced an
+    /// empty map and a puzzled face.
+    ///
+    /// Directory enumeration is fine here: the editor is desktop-only and
+    /// already reads and writes the source tree directly.
     /// </summary>
     private List<string> LevelNames()
     {
+        var names = new List<string> { NewMapEntry };
         try
         {
-            return Directory.GetFiles(_levelsDir, "*.txt")
+            names.AddRange(Directory.GetFiles(_levelsDir, "*.txt")
                 .Select(Path.GetFileNameWithoutExtension)
-                .Where(n => n != null && !n.EndsWith("Dialogue", StringComparison.OrdinalIgnoreCase))
+                .Where(n => n != null
+                    && !n.EndsWith("Dialogue", StringComparison.OrdinalIgnoreCase)
+                    && !n.Equals("Destinations", StringComparison.OrdinalIgnoreCase))
                 .Select(n => n!)
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
         }
-        catch { return new List<string> { _levelName }; }
+        catch { names.Add(_levelName); }
+        return names;
     }
 
     private List<Rectangle> MenuRects(string id)
@@ -412,7 +444,12 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     {
         switch (id)
         {
-            case "level": OpenLevel(MenuItems("level")[index]); break;
+            case "file": DoFileMenu(index); break;
+            case "level":
+                string picked = MenuItems("level")[index];
+                if (picked == NewMapEntry) { _typingNewMap = true; _roomBuffer = ""; }
+                else OpenLevel(picked);
+                break;
             case "terrain":
                 _terrain = index == 0 ? "" : MenuItems("terrain")[index];
                 _tool = Tool.Block;
@@ -443,7 +480,9 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 _tool = Tool.Block;
                 _openMenu = _openMenu == id ? null : id;
                 return true;
-            case "import": ImportWithPicker(); return true;
+            case "file":
+                _openMenu = _openMenu == id ? null : id;
+                return true;
             case "family" or "piece" or "deco" or "enemy" or "door":
                 // the button both selects its tool and opens its palette
                 _tool = id is "family" or "piece" ? Tool.Block
@@ -452,7 +491,6 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                     : Tool.Enemy;
                 _openMenu = _openMenu == id ? null : id;
                 return true;
-            case "reload": ReloadFromDisk(); return true;
             case "start": _tool = Tool.PlayerStart; return true;
             case "trigger": _tool = Tool.Trigger; return true;
             case "controls": _showControls = !_showControls; return true;
@@ -460,12 +498,22 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             case "placeroom": _tool = Tool.Room; return true;
             case "dialogue": _typingTrigger = true; _roomBuffer = _trigger; return true;
             case "problems": RecountProblems(); Status(ProblemText()); return true;
-            case "undo": Undo(); return true;
-            case "save": Save(); return true;
-            case "saveas": _typingSaveAs = true; _roomBuffer = _levelName; return true;
-            case "test": PlayTest(); return true;
         }
         return false;
+    }
+
+    /// <summary>One entry of the File menu, in the order FileMenu lists them.</summary>
+    private void DoFileMenu(int index)
+    {
+        switch (index)
+        {
+            case 0: ImportWithPicker(); break;
+            case 1: ReloadFromDisk(); break;
+            case 2: Save(); break;
+            case 3: _typingSaveAs = true; _roomBuffer = _levelName; break;
+            case 4: _typingRename = true; _roomBuffer = _levelName; break;
+            case 5: PlayTest(); break;
+        }
     }
 
     // ---------------- update ----------------
@@ -554,7 +602,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         }
     }
 
-    private bool Typing => _typingRoom || _typingTrigger || _typingSaveAs;
+    private bool Typing =>
+        _typingRoom || _typingTrigger || _typingSaveAs || _typingRename || _typingNewMap;
 
     /// <summary>
     /// Text entry for a room, dialogue or level name.
@@ -585,12 +634,15 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         }
     }
 
-    private void StopTyping() => _typingRoom = _typingTrigger = _typingSaveAs = false;
+    private void StopTyping() =>
+        _typingRoom = _typingTrigger = _typingSaveAs = _typingRename = _typingNewMap = false;
 
     private void CommitTyping()
     {
         if (_typingRoom) { _room = _roomBuffer.Trim(); Status($"room = {_room}"); }
         else if (_typingSaveAs) SaveAs(_roomBuffer);
+        else if (_typingRename) RenameMap(_roomBuffer);
+        else if (_typingNewMap) NewMap(_roomBuffer);
         else
         {
             _trigger = _roomBuffer.Trim();
@@ -1026,7 +1078,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 _tool = Tool.Block;
             }
         }
-        Status($"picked up {b.Type} at {b.Height} ft in room {b.Room}");
+        Status($"picked up {b.Type} at height {Tall(b.Height)} in room {b.Room}");
     }
 
     private static (int X0, int Y0, int X1, int Y1) Span(Point a, Point b) =>
@@ -1049,7 +1101,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             }
         Status($"filled {(x1 - x0 + 1) * (y1 - y0 + 1)} squares with " +
                $"{(TerrainBrush ? _terrain : RandomBrush ? $"random {FamilyName}" : PieceLabel)} " +
-               $"at {_height} ft");
+               $"at height {Tall(_height)}");
     }
 
     /// <summary>+/- with a selection: shift every block inside it up or down.</summary>
@@ -1101,6 +1153,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     {
         Directory.CreateDirectory(_levelsDir);
         File.WriteAllText(SavePath, _level.Serialize());
+        // so playtesting, and opening it again, read what was just written
+        MirrorLevel(_levelName + ".txt", _levelName + ".txt");
         Status($"saved -> {SavePath}");
     }
 
@@ -1112,19 +1166,98 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// </summary>
     private void SaveAs(string typed)
     {
+        if (UsableName(typed) is not string name) return;
+        _levelName = name;
+        _level.Name = name;
+        Save();
+    }
+
+    /// <summary>
+    /// A level name that can be used as a file name, or null with the reason
+    /// already on the status line. Names build paths and the dialogue file's
+    /// name, so they stay plain: no folders, no extension.
+    /// </summary>
+    private string? UsableName(string typed)
+    {
         string name = typed.Trim();
         if (name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
-        // a level name is used to build a path and a dialogue filename, so it
-        // has to stay a plain name
         if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
             name.Contains('/') || name.Contains('\\'))
         {
             Status($"'{typed.Trim()}' is not a usable level name — letters and digits, no folders");
+            return null;
+        }
+        return name;
+    }
+
+    /// <summary>
+    /// Renames the map in hand: the new file replaces the old one, which goes.
+    ///
+    /// Save As leaves the original behind; this does not, which is the whole
+    /// difference between them. The level's own dialogue file is named after
+    /// it, so that moves too — otherwise every trigger would point at a file
+    /// nobody could find.
+    /// </summary>
+    private void RenameMap(string typed)
+    {
+        if (UsableName(typed) is not string name) return;
+        if (name.Equals(_levelName, StringComparison.Ordinal)) { Status("same name"); return; }
+        if (File.Exists(Path.Combine(_levelsDir, name + ".txt")))
+        {
+            Status($"there is already a map called {name} — pick another name");
             return;
         }
+
+        string was = _levelName;
+        string wasLevel = SavePath, wasDialogue = DialoguePath;
         _levelName = name;
         _level.Name = name;
         Save();
+        try
+        {
+            if (File.Exists(wasDialogue))
+            {
+                File.Move(wasDialogue, DialoguePath, overwrite: true);
+                MirrorLevel(name + "Dialogue.txt", name + "Dialogue.txt");
+                MirrorLevel(was + "Dialogue.txt", null);
+            }
+            if (File.Exists(wasLevel)) File.Delete(wasLevel);
+            MirrorLevel(was + ".txt", null);
+        }
+        catch (Exception ex)
+        {
+            Status($"saved as {name}, but the old files are still there: {ex.Message}");
+            return;
+        }
+        Status($"renamed to {name}.txt");
+    }
+
+    /// <summary>
+    /// An empty map under a new name, saved at once so it is a real file and
+    /// shows up in the level list. Nothing is placed on it: the first square
+    /// painted is where the map starts.
+    /// </summary>
+    private void NewMap(string typed)
+    {
+        if (UsableName(typed) is not string name) return;
+        if (File.Exists(Path.Combine(_levelsDir, name + ".txt")))
+        {
+            Status($"there is already a map called {name} — open it, or pick another name");
+            return;
+        }
+
+        _level = new LevelData { Name = name };
+        _levelName = name;
+        _undo.Clear();
+        _selA = _selB = _selStart = _selEnd = null;
+        _boxMode = false;
+        _heights.Clear();
+        _rooms.Clear();
+        RebuildCorners();
+        Save();
+        RecountProblems();
+        CentreOnLevel();
+        Status($"new map {name}.txt — paint a square to start it");
     }
 
     /// <summary>
@@ -1410,9 +1543,15 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         // hovered cell, sitting at the height it would actually place at, with
         // that height written in the middle so it can be read against the blocks
         var (cursor, cursorHeight) = Target(_worldPointer, origin);
+
+        // The blue line stays on the GROUND whatever the yellow square is
+        // lifted to, so a block being placed three high still says which
+        // square of the map it is going over. Raised, the two come apart and
+        // the gap between them is the height.
+        DrawTopOutline(batch, cursor.X, cursor.Y, 0, origin, new Color(80, 170, 255));
         DrawTop(batch, cursor.X, cursor.Y, cursorHeight, origin, Color.Yellow * 0.3f);
         Label(IsoMath.ToScreen(cursor.X, cursor.Y, cursorHeight, origin),
-            cursorHeight.ToString(), Color.Yellow, 0.36f);
+            Tall(cursorHeight), Color.Yellow, 0.36f);
     }
 
     private void DrawToolbar(SpriteBatch batch)
@@ -1484,35 +1623,48 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
 
     private static readonly ControlRow[] ControlLines =
     {
-        new("hold left",           "paint"),
-        new("hold Del",            "rub out"),
-        new("Shift+drag",          "fill a box at the placement height"),
-        new("Ctrl+Del, drag",      "empty a box"),
-        new("Ctrl+drag",           "select a box: +/- raise and lower,"),
-        new("",                    "Ctrl+C copy, Ctrl+V paste, Del empty, Esc drop"),
-        new("middle click",        "eyedropper: that square's piece, height and room"),
-        new("hold Alt",            "write every block's height on top of it"),
-        new("Ctrl+Z",              "undo the last stroke"),
-        new("right-click",         "on a trigger, opens that level's dialogue file"),
-        new("scroll wheel",        "placement height in feet"),
-        new("Ctrl+wheel",          "zoom, in whole pixels"),
-        new("ARROWS",              "pan (WASD are tool keys)"),
-        new("ALT",                 "block heights. SPACE room colours."),
-        new("",                    "Tap either to leave it up, hold it for a glance."),
+        new("hold left",       "paint"),
+        new("hold Del",        "rub out"),
+        new("Shift+drag",      "fill a box at the placement height"),
+        new("Ctrl+Del, drag",  "empty a box"),
+        new("Ctrl+drag",       "select a box"),
+        new("+ / -",           "raise and lower the selection"),
+        new("Ctrl+C",          "copy the selection"),
+        new("Ctrl+V",          "paste it onto the square under the cursor"),
+        new("Del",             "empty the selection"),
+        new("Esc",             "drop the selection"),
+        new("middle click",    "eyedropper: that square's piece, height and room"),
+        new("right-click",     "on a trigger, opens that level's dialogue file"),
+        new("Ctrl+Z",          "undo the last stroke"),
+        new("scroll wheel",    "placement height, in blocks: one cube tall is 1"),
+        new("Ctrl+wheel",      "zoom, in whole pixels"),
+        new("ARROWS",          "pan the view (WASD are tool keys)"),
+        new("ALT",             "block heights: hold for a glance, tap to leave it up"),
+        new("SPACE",           "room colours: hold for a glance, tap to leave it up"),
         new("", ""),
-        new("Terrain",             "pick a terrain; painting blends it into its neighbours"),
-        new("",                    "Terrains that can blend sit side by side in the menu."),
-        new("Import",              "open a PixelLab .zip from anywhere: its tiles and its map"),
-        new("1..9",                "ground family.  B  next piece, then Random"),
-        new("D",                   "deco.  O door.  E enemy.  P start.  G trigger."),
-        new("",                    "Area transition is the last entry in the Door menu:"),
-        new("",                    "paint the pads, then right-click one and its far end."),
-        new("",                    "The Door button picks small, medium (2) or large (4)."),
-        new("R",                   "room name.  Place Room paints it onto blocks"),
-        new("N",                   "dialogue name.  V save as"),
-        new("S",                   "save.  T test"),
+        new("1 2 3",           "ground family"),
+        new("B",               "next piece of that family, then Random"),
+        new("D",               "next decoration"),
+        new("O",               "door"),
+        new("E",               "next enemy"),
+        new("P",               "player start"),
+        new("G",               "trigger"),
+        new("R",               "room name"),
+        new("N",               "dialogue name"),
+        new("S",               "save"),
+        new("V",               "save as"),
+        new("T",               "playtest the level"),
         new("", ""),
-        new("Insert",              "or the Controls button hides this again"),
+        new("File",            "import, reload, save, save as, rename, playtest"),
+        new("Current Level",   "open another map, or make a new one"),
+        new("Terrain",         "pick a terrain; painting blends it into its neighbours"),
+        new("Terrain menu",    "terrains that can blend sit side by side in it"),
+        new("Door menu",       "Area transition is its second entry"),
+        new("Area transition", "paint two pads, then right-click one and its far end"),
+        new("Place Room",      "paints the room name onto blocks"),
+        new("OK",              "the content check: click it to look again"),
+        new("", ""),
+        new("Insert",          "or the Controls button hides this again"),
     };
 
     private void DrawControlsPanel(SpriteBatch batch)
@@ -1557,6 +1709,21 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayTop.png"),
             new Rectangle((int)(c.X - IsoMath.TileW / 2f), (int)(c.Y - IsoMath.TileH / 2f),
                 IsoMath.TileW, IsoMath.TileH), tint);
+    }
+
+    /// <summary>
+    /// The outline of a square's top — one pixel of art, traced round the
+    /// diamond rather than drawn as a box, so it follows the shape the tiles
+    /// actually are.
+    /// </summary>
+    private void DrawTopOutline(SpriteBatch batch, int gx, int gy, int height,
+        Vector2 origin, Color ink)
+    {
+        var top = _ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayTop.png");
+        var c = IsoMath.ToScreen(gx, gy, height, origin);
+        batch.Draw(_ctx.Assets.Outline(top, 1),
+            new Rectangle((int)(c.X - IsoMath.TileW / 2f), (int)(c.Y - IsoMath.TileH / 2f),
+                IsoMath.TileW, IsoMath.TileH), ink);
     }
 
     /// <summary>
@@ -1638,8 +1805,9 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// picks up the alternation on its own.
     /// </summary>
     private void DrawHeightLabel(LevelBlock b, Vector2 origin) =>
-        Label(IsoMath.ToScreen(b.X, b.Y, b.Height, origin), b.Height.ToString(),
-            (b.Height & 1) == 1 ? Color.Magenta : Color.White, 0.34f, plate: true);
+        Label(IsoMath.ToScreen(b.X, b.Y, b.Height, origin), Tall(b.Height),
+            b.Height % IsoMath.StepsPerBlock != 0 ? Color.Magenta : Color.White,
+            0.34f, plate: true);
 
     /// <summary>
     /// The legend for the room overlay: which colour is which room, and how
@@ -1690,7 +1858,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         // still sets it, so it needs somewhere to be read
         batch.DrawString(_ctx.Font,
             $"{_levelName}.txt   room: {_room}   blocks: {_level.Blocks.Count}   " +
-            $"height: {_height} ft{mode}",
+            $"height: {Tall(_height)}{mode}",
             new Vector2(BarX0, y), _boxMode ? Color.Red : Color.Yellow,
             0f, Vector2.Zero, 0.30f, SpriteEffects.None, 0f);
 
@@ -1703,7 +1871,11 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Y, box.Width, 4), Color.Cyan);
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(box.X, box.Bottom - 4, box.Width, 4), Color.Cyan);
             Ui.DrawTextCentered(batch, _ctx.Font,
-                (_typingRoom ? "room name: " : _typingSaveAs ? "save as: " : "dialogue name: ")
+                (_typingRoom ? "room name: "
+                    : _typingSaveAs ? "save as: "
+                    : _typingRename ? "rename this map to: "
+                    : _typingNewMap ? "name the new map: "
+                    : "dialogue name: ")
                 + _roomBuffer + "_",
                 new Rectangle(box.X, box.Y + 40, box.Width, 70), Color.Cyan, 0.42f);
             Ui.DrawTextCentered(batch, _ctx.Font,

@@ -30,6 +30,17 @@ public static class IsoMath
     public const int FootPx = TileW / 8;
 
     /// <summary>
+    /// How many steps of height make one block tall — a block's side wall is
+    /// TileH high, so four.
+    ///
+    /// Levels are stored in the small steps, because that is the smallest
+    /// thing the art can show. The editor counts in BLOCKS, so one cube is 1
+    /// and a step is 0.25, which is the number anybody building a map is
+    /// actually thinking in.
+    /// </summary>
+    public const int StepsPerBlock = TileH / FootPx;
+
+    /// <summary>
     /// A length that was picked by eye against a 64-wide tile, at whatever
     /// size tiles are now. Bars, icons, outlines and boxes all go through
     /// this, so they keep their proportions when the grid changes.

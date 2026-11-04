@@ -46,6 +46,59 @@ public static class FilePicker
         }
     }
 
+    /// <summary>
+    /// Asks a yes/no question and returns true only for a clear yes.
+    ///
+    /// No dialog, a cancel, or anything going wrong all mean no, so a caller
+    /// can treat this as "did the person agree?" and never has to decide what
+    /// silence meant.
+    /// </summary>
+    public static bool Ask(string title, string question)
+    {
+        try
+        {
+            return OperatingSystem.IsWindows() ? AskWindows(title, question)
+                : OperatingSystem.IsMacOS() ? AskMac(title, question)
+                : AskLinux(title, question);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[picker] no question dialog available: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool AskWindows(string title, string question)
+    {
+        string script =
+            "Add-Type -AssemblyName System.Windows.Forms; " +
+            $"[System.Windows.Forms.MessageBox]::Show('{Escape(question)}', " +
+            $"'{Escape(title)}', 'YesNo', 'Question')";
+        return Run("powershell", new[] { "-NoProfile", "-STA", "-Command", script })
+            ?.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static bool AskMac(string title, string question)
+    {
+        string script =
+            $"display dialog \"{question.Replace("\"", "'")}\" " +
+            $"buttons {{\"No\", \"Yes\"}} default button \"No\" with title \"{title.Replace("\"", "'")}\"";
+        return Run("osascript", new[] { "-e", script })?.Contains("Yes") == true;
+    }
+
+    private static bool AskLinux(string title, string question)
+    {
+        if (Which("zenity") != null)
+            return Code("zenity", new[]
+            {
+                "--question", $"--title={title}", $"--text={question}",
+                "--ok-label=Yes", "--cancel-label=No",
+            }) == 0;
+        if (Which("kdialog") != null)
+            return Code("kdialog", new[] { "--title", title, "--yesno", question }) == 0;
+        throw new InvalidOperationException("install zenity or kdialog for a question dialog");
+    }
+
     /// <summary>True when this machine has something that can show a dialog.</summary>
     public static bool Available =>
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ||
@@ -104,6 +157,29 @@ public static class FilePicker
             if (File.Exists(candidate)) return candidate;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Runs a dialog for its ANSWER rather than its output: zenity and
+    /// kdialog say yes with an exit code and print nothing. -1 means it would
+    /// not start at all.
+    /// </summary>
+    private static int Code(string exe, string[] args)
+    {
+        var info = new ProcessStartInfo(exe)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var a in args) info.ArgumentList.Add(a);
+
+        using var p = Process.Start(info);
+        if (p == null) return -1;
+        p.StandardOutput.ReadToEnd();
+        p.WaitForExit();
+        return p.ExitCode;
     }
 
     private static string? Run(string exe, string[] args)

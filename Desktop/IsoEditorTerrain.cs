@@ -267,7 +267,8 @@ public partial class IsoEditorScreen
     /// </summary>
     private void ImportExport(string zipPath)
     {
-        var result = PixelLabImport.Import(zipPath, RepoRoot, _ctx.Game.GraphicsDevice);
+        var result = PixelLabImport.Import(zipPath, RepoRoot, _ctx.Game.GraphicsDevice,
+            askAboutFringe: AskAboutFringe);
         if (!result.Ok) { Status(result.Message); return; }
 
         Keep(zipPath);
@@ -280,6 +281,29 @@ public partial class IsoEditorScreen
         // ready to paint with what just arrived
         if (TerrainCatalog.Get(result.SetName) is TerrainSet set) _terrain = set.A;
         Status(result.Message.Replace(Environment.NewLine, "  "));
+    }
+
+    /// <summary>
+    /// Asks whether to rub the bright edge pixels off an import.
+    ///
+    /// The answer is NO unless somebody says otherwise. PixelLab usually
+    /// leaves a near-white line down each tile edge, which tiles into white
+    /// bars across the map — but "usually" is not "always", and deleting
+    /// somebody's pixels without asking is not the importer's call to make.
+    /// On a machine with no dialog the tiles come in untouched and the status
+    /// line says so.
+    /// </summary>
+    private bool AskAboutFringe(int pixels)
+    {
+        if (!FilePicker.Available)
+        {
+            Status($"{pixels} bright edge pixels left alone — no dialog on this machine to ask with");
+            return false;
+        }
+        return FilePicker.Ask("Imported tiles",
+            $"These tiles have {pixels} very bright pixels down their left and right edges. " +
+            "Laid out on a grid that usually shows up as white bars between the squares.\n\n" +
+            "Make those pixels transparent?");
     }
 
     /// <summary>Files the export in Content/Imports, unless it already lives there.</summary>

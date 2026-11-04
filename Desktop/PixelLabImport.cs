@@ -47,14 +47,25 @@ public static class PixelLabImport
     /// <summary>How far PixelLab lifts a tile for each step of height.</summary>
     private const int StepPx = 48;
 
+    /// <summary>
+    /// Reads an export and writes the set.
+    /// </summary>
+    /// <param name="askAboutFringe">
+    /// Asked once, with the number of bright edge pixels found, when there are
+    /// any. Say yes and they are rubbed out; say nothing — no callback, or no
+    /// — and the tiles are copied exactly as they came. Nothing is ever
+    /// changed without being asked first.
+    /// </param>
     public static ImportResult Import(string path, string repoRoot,
-        GraphicsDevice? device = null, string? setName = null)
+        GraphicsDevice? device = null, string? setName = null,
+        Func<int, bool>? askAboutFringe = null)
     {
         try
         {
             return path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                ? FromZip(path, repoRoot, device, setName)
-                : FromFolder(path, repoRoot, device, setName, new DirectoryInfo(path).Name);
+                ? FromZip(path, repoRoot, device, setName, askAboutFringe)
+                : FromFolder(path, repoRoot, device, setName, askAboutFringe,
+                    new DirectoryInfo(path).Name);
         }
         catch (Exception ex)
         {
@@ -69,14 +80,14 @@ public static class PixelLabImport
     /// so they land as plain files next to all the other art.
     /// </summary>
     private static ImportResult FromZip(string zipPath, string repoRoot,
-        GraphicsDevice? device, string? setName)
+        GraphicsDevice? device, string? setName, Func<int, bool>? askAboutFringe)
     {
         string scratch = Path.Combine(Path.GetTempPath(),
             "pixellab-" + Guid.NewGuid().ToString("N")[..8]);
         try
         {
             ZipFile.ExtractToDirectory(zipPath, scratch);
-            return FromFolder(scratch, repoRoot, device, setName,
+            return FromFolder(scratch, repoRoot, device, setName, askAboutFringe,
                 Path.GetFileNameWithoutExtension(zipPath));
         }
         finally
@@ -86,7 +97,8 @@ public static class PixelLabImport
     }
 
     private static ImportResult FromFolder(string folder, string repoRoot,
-        GraphicsDevice? device, string? setName, string fallbackName = "")
+        GraphicsDevice? device, string? setName, Func<int, bool>? askAboutFringe,
+        string fallbackName = "")
     {
         string layersPath = Path.Combine(folder, "tile-layers.json");
         if (!File.Exists(layersPath))
@@ -170,15 +182,30 @@ public static class PixelLabImport
         // ---- write the set ----
         string setDir = Path.Combine(repoRoot, "Content", "Images", "Terrain", name);
         Directory.CreateDirectory(setDir);
-        int fringe = 0;
+        var sources = Enumerable.Range(0, 16)
+            .Select(m => Path.Combine(folder, files[m])).ToList();
+        string Target(int m) => Path.Combine(setDir, $"mask-{m:00}.png");
+
+        // The fringe is counted first and nothing is touched until somebody
+        // says so. Pixels are not thrown away on a guess: an export that
+        // genuinely has bright edges is still an export we must not alter
+        // behind the importer's back.
+        var cleaned = device == null ? null : sources.Select(f => Defringed(device, f)).ToList();
+        int fringe = cleaned?.Sum(c => c.Cleared) ?? 0;
+        bool rub = fringe > 0 && askAboutFringe != null && askAboutFringe(fringe);
+
         for (int m = 0; m < 16; m++)
-            fringe += CopyTile(device, Path.Combine(folder, files[m]),
-                Path.Combine(setDir, $"mask-{m:00}.png"));
-        if (fringe > 0)
+            if (rub) WritePng(device!, cleaned![m], Target(m));
+            else File.Copy(sources[m], Target(m), overwrite: true);
+
+        if (rub)
             notes.AppendLine($"  rubbed {fringe} pixels of bright fringe off the tile edges, " +
                 "which would otherwise have tiled into white bars");
+        else if (fringe > 0)
+            notes.AppendLine($"  left {fringe} bright edge pixels alone, as asked — " +
+                "they may tile into white bars");
         else if (device == null)
-            notes.AppendLine("  copied as-is: no graphics device here to clean the edges with");
+            notes.AppendLine("  copied as-is: no graphics device here to look at the edges with");
 
         // A is mask 0 and B is mask 15, and PixelLab lists them the other way
         // round: a SET bit means terrains[0]. Measured, not assumed — in both
@@ -197,24 +224,30 @@ public static class PixelLabImport
         return new ImportResult(true, msg.ToString(), name, blocks);
     }
 
+    /// <summary>One tile with its bright fringe taken off, and how much went.</summary>
+    private record Tile(Color[] Pixels, int Width, int Height, int Cleared);
+
     /// <summary>
-    /// Copies one tile, rubbing the bright fringe off its edges on the way —
-    /// see EdgeFringe for what that is and why. Without a graphics device
-    /// (a test, a command line) the file is copied untouched rather than
-    /// refusing to import at all.
+    /// Reads a tile and works out what rubbing its fringe off would do — see
+    /// EdgeFringe for what the fringe is. Nothing is written here, so this can
+    /// be run just to count.
     /// </summary>
-    private static int CopyTile(GraphicsDevice? device, string from, string to)
+    private static Tile Defringed(GraphicsDevice device, string from)
     {
-        if (device == null) { File.Copy(from, to, overwrite: true); return 0; }
         using var source = File.OpenRead(from);
         using var tex = Texture2D.FromStream(device, source);
         var pixels = new Color[tex.Width * tex.Height];
         tex.GetData(pixels);
         int cleared = EdgeFringe.Clear(pixels, tex.Width, tex.Height);
-        tex.SetData(pixels);
+        return new Tile(pixels, tex.Width, tex.Height, cleared);
+    }
+
+    private static void WritePng(GraphicsDevice device, Tile tile, string to)
+    {
+        using var tex = new Texture2D(device, tile.Width, tile.Height);
+        tex.SetData(tile.Pixels);
         using var target = File.Create(to);
-        tex.SaveAsPng(target, tex.Width, tex.Height);
-        return cleared;
+        tex.SaveAsPng(target, tile.Width, tile.Height);
     }
 
     /// <summary>
