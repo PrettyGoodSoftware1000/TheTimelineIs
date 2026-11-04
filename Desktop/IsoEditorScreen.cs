@@ -492,10 +492,14 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         "piece" => new List<string> { "Random" }
             .Concat(FamilyPieces.Select(gp => Strip(gp.File))).ToList(),
         "deco" => BlockCatalog.Decorations.Select(Strip).ToList(),
+        // the name on the button is always one of the entries, even before
+        // anything on the map uses it
         "room" => new List<string> { NewRoomEntry }
-            .Concat(RoomOrder()).ToList(),
+            .Concat(RoomOrder()).Append(_room)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
         "trigger" => new List<string> { NewDialogueEntry }
-            .Concat(DialogueNames()).ToList(),
+            .Concat(DialogueNames()).Append(_trigger)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
         "enemy" => _ctx.Enemies.EnemyNames.ToList(),
         "door" => new List<string> { TransitionEntry },
         "level" => LevelNames(),
