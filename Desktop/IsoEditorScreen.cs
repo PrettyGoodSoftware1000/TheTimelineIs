@@ -406,6 +406,15 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             case "level":
                 _openMenu = _openMenu == "level" ? null : "level";
                 return true;
+            case "terrain":
+                // the terrain palette, and picking from it paints
+                _tool = Tool.Block;
+                _openMenu = _openMenu == id ? null : id;
+                return true;
+            case "import":
+                // no tool of its own: it lists what is waiting in Content/Imports
+                _openMenu = _openMenu == id ? null : id;
+                return true;
             case "family" or "piece" or "deco" or "enemy" or "door":
                 // the button both selects its tool and opens its palette
                 _tool = id is "family" or "piece" ? Tool.Block
