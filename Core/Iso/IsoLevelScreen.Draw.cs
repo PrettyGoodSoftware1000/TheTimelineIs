@@ -20,7 +20,7 @@ public partial class IsoLevelScreen
     {
         foreach (var b in _level.Blocks.Values
                      .Where(b => _level.Shown(new Point(b.X, b.Y), _revealed))
-                     .OrderByDescending(b => b.X + b.Y))
+                     .OrderByDescending(b => b.X + b.Y).ThenByDescending(b => b.Height))
             if (IsoMath.HitsTop(screen, b.X, b.Y, b.Height, Origin))
                 return new Point(b.X, b.Y);
         return null;

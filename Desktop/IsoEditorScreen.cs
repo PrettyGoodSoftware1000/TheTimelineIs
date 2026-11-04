@@ -1002,7 +1002,9 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
 
     private Point? PickTile(Vector2 screen, Vector2 origin)
     {
-        foreach (var b in _level.Blocks.Values.OrderByDescending(b => b.X + b.Y))
+        // nearest square first, and inside a square the top of the stack
+        foreach (var b in _level.Blocks.Values
+                     .OrderByDescending(b => b.X + b.Y).ThenByDescending(b => b.Height))
             if (IsoMath.HitsTop(screen, b.X, b.Y, b.Height, origin))
                 return new Point(b.X, b.Y);
         return null;
@@ -1109,7 +1111,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         n += _level.Transitions.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         n += _level.Triggers.RemoveAll(t => t.X == tile.X && t.Y == tile.Y);
         if (_level.PlayerStarts.Remove(tile)) n++;
-        if (_level.Blocks.TryGetValue(tile, out var gone) && _level.Blocks.Remove(tile))
+        // a box empties a square outright, stack and all
+        foreach (var gone in _level.Blocks.RemoveColumn(tile))
             { ForgetTerrain(tile, gone.Height); n++; }
         return n;
     }
@@ -1300,11 +1303,20 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         int n = 0;
         for (int x = x0; x <= x1; x++)
             for (int y = y0; y <= y1; y++)
-                if (_level.Blocks.TryGetValue(new Point(x, y), out var blk))
+            {
+                var at = new Point(x, y);
+                var column = _level.Blocks.RemoveColumn(at);
+                if (column.Count == 0) continue;
+                // the whole column moves together, keeping the gaps between
+                // its cubes; re-placed so the grid stays in order
+                foreach (var blk in column)
                 {
                     blk.Height = Math.Clamp(blk.Height + by, 0, 12);
+                    _level.Blocks.Place(at, blk);
                     n++;
                 }
+            }
+        RebuildCorners();
         Status($"{(by > 0 ? "raised" : "lowered")} {n} block(s)");
     }
 
@@ -1529,7 +1541,12 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             BlockCatalog.Draw(batch, _ctx.Assets, b.Type,
                 IsoMath.ToScreen(b.X, b.Y, b.Height, origin), Color.White);
 
+            // Everything that stands ON a square belongs to the square, not to
+            // each cube of its stack: a tree on a two-high column is one tree,
+            // on the top of it.
             var tile = new Point(b.X, b.Y);
+            if (_level.BlockAt(tile) != b) continue;
+
             if (_level.DoorAt(tile) != null)
                 Billboard(batch, "Content/Images/Decorations/Door.png", tile, b.Height, origin, Color.White);
             if (_level.DecorationAt(tile) is LevelDecoration deco)

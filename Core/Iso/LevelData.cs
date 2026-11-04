@@ -97,7 +97,11 @@ public class LevelTransition
 public class LevelData
 {
     public string Name = "";
-    public Dictionary<Point, LevelBlock> Blocks { get; } = new();
+    /// <summary>
+    /// The ground, a column per square. See BlockGrid: a square reads as one
+    /// block from outside, which is the top of its column.
+    /// </summary>
+    public BlockGrid Blocks { get; } = new();
     public List<LevelDecoration> Decorations { get; } = new();
     public List<LevelDoor> Doors { get; } = new();
     public List<LevelEnemy> Enemies { get; } = new();
@@ -290,14 +294,22 @@ public class LevelData
     public LevelData Clone()
     {
         var copy = new LevelData { Name = Name };
-        foreach (var (at, b) in Blocks)
-            copy.Blocks[at] = new LevelBlock { X = b.X, Y = b.Y, Height = b.Height, Type = b.Type, Room = b.Room };
+        foreach (var b in Blocks.Values)
+            copy.Blocks.Place(new Point(b.X, b.Y), new LevelBlock
+                { X = b.X, Y = b.Y, Height = b.Height, Type = b.Type, Room = b.Room });
         copy.Decorations.AddRange(Decorations.Select(d =>
             new LevelDecoration { X = d.X, Y = d.Y, File = d.File }));
         copy.Doors.AddRange(Doors.Select(d =>
             new LevelDoor { X = d.X, Y = d.Y, Open = d.Open }));
         copy.Triggers.AddRange(Triggers.Select(t =>
             new LevelTrigger { X = t.X, Y = t.Y, Dialogue = t.Dialogue, Fired = t.Fired }));
+        // Enemies and transitions were missing here, so the editor's undo
+        // restored a level with none of either: placing one enemy and pressing
+        // Ctrl+Z took every enemy on the map with it.
+        copy.Enemies.AddRange(Enemies.Select(e =>
+            new LevelEnemy { X = e.X, Y = e.Y, Name = e.Name }));
+        copy.Transitions.AddRange(Transitions.Select(t =>
+            new LevelTransition { X = t.X, Y = t.Y, Pair = t.Pair }));
         copy.PlayerStarts.AddRange(PlayerStarts);
         return copy;
     }
@@ -306,7 +318,7 @@ public class LevelData
     public void CopyFrom(LevelData other)
     {
         Blocks.Clear();
-        foreach (var (at, b) in other.Blocks) Blocks[at] = b;
+        foreach (var b in other.Blocks.Values) Blocks.Place(new Point(b.X, b.Y), b);
         Decorations.Clear(); Decorations.AddRange(other.Decorations);
         Doors.Clear(); Doors.AddRange(other.Doors);
         Enemies.Clear(); Enemies.AddRange(other.Enemies);
@@ -321,7 +333,7 @@ public class LevelData
         var sb = new StringBuilder();
         sb.AppendLine("# Isometric level. One entity per line; the in-game editor writes this file.");
         sb.AppendLine("# Block: x, y, height(feet), type, room");
-        foreach (var b in Blocks.Values.OrderBy(b => b.Y).ThenBy(b => b.X))
+        foreach (var b in Blocks.Values.OrderBy(b => b.Y).ThenBy(b => b.X).ThenBy(b => b.Height))
             sb.AppendLine($"Block: {b.X}, {b.Y}, {b.Height}, {b.Type}, " +
                 (b.Room.Length > 0 ? b.Room : NoRoomToken));
         foreach (var d in Decorations.OrderBy(d => d.Y).ThenBy(d => d.X))

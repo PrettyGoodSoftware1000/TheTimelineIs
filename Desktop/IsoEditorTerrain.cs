@@ -86,21 +86,19 @@ public partial class IsoEditorScreen
     /// </summary>
     private void PaintTerrain(Point square)
     {
-        // Moving a square to a new height takes it out of the old height's
-        // blending, or it would go on influencing neighbours it no longer
-        // stands level with.
-        if (_level.Blocks.TryGetValue(square, out var had) && had.Height != _height)
-            Release(square, had.Height);
+        // A block landing in a cube level that already has one MOVES that
+        // block, so its old height stops blending; a block landing on a level
+        // of its own stacks, and nothing is released because nothing moved.
+        var moved = _level.Blocks.AtLevel(square, _height);
+        if (moved != null && moved.Height != _height) Release(square, moved.Height);
 
         foreach (var c in Corners.All) _corners[(Corners.Of(square, c), _height)] = _terrain;
 
-        // the square itself must exist; the neighbours are only restyled if
-        // they are already there, so painting never grows the map sideways
-        if (!_level.Blocks.ContainsKey(square))
-            _level.Blocks[square] = new LevelBlock
-                { X = square.X, Y = square.Y, Height = _height, Room = _room };
-        else
-            _level.Blocks[square].Height = _height;
+        _level.Blocks.Place(square, new LevelBlock
+        {
+            X = square.X, Y = square.Y, Height = _height,
+            Type = moved?.Type ?? "", Room = moved?.Room ?? _room,
+        });
 
         // Every neighbour is asked to redraw, but each reads the corners at
         // ITS OWN height. One standing higher or lower finds nothing this
@@ -120,8 +118,7 @@ public partial class IsoEditorScreen
         {
             var at = Corners.Of(square, c);
             bool stillUsed = Corners.Touching(at).Any(t =>
-                t.Square != square &&
-                _level.Blocks.TryGetValue(t.Square, out var b) && b.Height == height);
+                t.Square != square && _level.Blocks.HasHeight(t.Square, height));
             if (!stillUsed) _corners.Remove((at, height));
         }
     }
@@ -135,10 +132,14 @@ public partial class IsoEditorScreen
     /// </summary>
     private void Restyle(Point square)
     {
-        if (!_level.Blocks.TryGetValue(square, out var block)) return;
-        string Corner(Corner c) =>
-            _corners.TryGetValue((Corners.Of(square, c), block.Height), out var t) ? t : "";
-        if (TerrainCatalog.TokenForCorners(Corner) is string token) block.Type = token;
+        // every cube of the column, each reading the corners at its own
+        // height: a stack can be grass on top of stone
+        foreach (var block in _level.Blocks.Column(square).ToList())
+        {
+            string Corner(Corner c) =>
+                _corners.TryGetValue((Corners.Of(square, c), block.Height), out var t) ? t : "";
+            if (TerrainCatalog.TokenForCorners(Corner) is string token) block.Type = token;
+        }
     }
 
     /// <summary>
