@@ -27,6 +27,7 @@ public class WebPlatform : IPlatform
 
     private class NoSave : ISaveStore
     {
+        public bool CanSave => false;
         public bool Exists => false;
         public string? Load() => null;
         public void Save(string payload) { }
@@ -41,6 +42,7 @@ public class WebPlatform : IPlatform
 
     private class NoReplays : IReplayStore
     {
+        public bool CanKeep => false;
         public string DisplayPath => "nowhere (the web version keeps no replays)";
         public IReadOnlyList<string> List() => Array.Empty<string>();
         public string? Save(string name, string replayText, string levelText) => null;

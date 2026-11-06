@@ -15,6 +15,15 @@ namespace TheTimelineIs.Core.Platform;
 /// </summary>
 public interface IReplayStore
 {
+    /// <summary>
+    /// Whether this build can keep a replay at all.
+    ///
+    /// False in the browser, which has nowhere to put one. The record button
+    /// is not drawn where this is false: a button that records for a while
+    /// and then says it could not write the file is worse than no button.
+    /// </summary>
+    bool CanKeep { get; }
+
     /// <summary>Human-readable location, for telling the player where it went.</summary>
     string DisplayPath { get; }
 

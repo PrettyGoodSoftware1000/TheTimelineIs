@@ -130,7 +130,9 @@ public class MapScreen : IScreen
         if (_devPhase == DevPhase.Idle && _tap.HasValue)
             HandleTap(_tap.Value);
 
-        if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveRect, _ctx.Strings.Get("map_save"), _tap))
+        // no Save button where there is nowhere to save: the browser build
+        if (_ctx.SaveStore.CanSave &&
+            Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveRect, _ctx.Strings.Get("map_save"), _tap))
         {
             _ctx.SaveStore.Save(_ctx.State.ToJson());
             Toast(_ctx.Strings.Get("saved"));

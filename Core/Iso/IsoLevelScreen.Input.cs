@@ -506,5 +506,6 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>Whether the record button is on screen, so drawing and clicking agree.</summary>
-    private bool ReplayButtonUp => !_replayMode && _mode != Mode.Victory;
+    private bool ReplayButtonUp =>
+        _ctx.ReplayStore.CanKeep && !_replayMode && _mode != Mode.Victory;
 }

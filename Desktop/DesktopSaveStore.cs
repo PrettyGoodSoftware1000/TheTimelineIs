@@ -11,6 +11,9 @@ public class DesktopSaveStore : ISaveStore
 
     public DesktopSaveStore() => _path = UserData.Path("save.json");
 
+    /// <summary>A desktop build has a folder of its own to write to.</summary>
+    public bool CanSave => true;
+
     public bool Exists => File.Exists(_path);
 
     public string? Load()

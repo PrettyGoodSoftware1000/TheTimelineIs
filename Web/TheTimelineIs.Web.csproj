@@ -46,10 +46,13 @@
   </ItemGroup>
 
   <!-- Raw game data, served as-is from Content/ so TitleContainer finds it at
-       the same "Content/..." paths it uses on desktop. -->
+       the same "Content/..." paths it uses on desktop.
+       Every one of these is downloaded before the game starts, so anything the
+       game never reads is a file the player waits for: the editor's PixelLab
+       archives and the notes-to-ourselves READMEs are left out. -->
   <ItemGroup>
     <Content Include="..\Content\**\*.*"
-             Exclude="..\Content\bin\**;..\Content\obj\**;..\Content\Fonts\**;..\Content\Content.mgcb"
+             Exclude="..\Content\bin\**;..\Content\obj\**;..\Content\Fonts\**;..\Content\Content.mgcb;..\Content\Imports\**;..\Content\**\README.txt"
              Link="wwwroot\Content\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 

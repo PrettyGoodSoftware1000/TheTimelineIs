@@ -20,6 +20,9 @@ namespace TheTimelineIs.Desktop;
 /// </summary>
 public class DesktopReplayStore : IReplayStore
 {
+    /// <summary>A desktop build writes where it likes.</summary>
+    public bool CanKeep => true;
+
     private const string ReplaySuffix = ".txt";
     private const string LevelSuffix = ".level.txt";
 
