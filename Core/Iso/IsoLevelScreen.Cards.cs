@@ -169,6 +169,23 @@ public partial class IsoLevelScreen
                 // to resolve — skip the projectile, not the hit phase
                 if (aim == null) { _hitIndex = 0; EnterAct(Act.Hits, 0f); return; }
                 _projFrom = FootOf(_actor!) - new Vector2(0, MuzzleHeight);
+
+                // One shot per body. A card that lashes three people throws
+                // three things at them, all leaving at once; it used to throw
+                // one, at whichever of them was clicked first, and the other
+                // two took damage out of thin air.
+                if (_victims.Count > 1)
+                {
+                    foreach (var who in _victims)
+                        _shots.Add((FootOf(who) - new Vector2(0, MuzzleHeight),
+                            (float)(Rng.NextDouble() * Math.PI * 2)));
+                    _projWander = 0f;
+                    float furthest = _victims.Max(v =>
+                        IsoMath.GridDistance(Tile(_actor!), Tile(v)));
+                    EnterAct(Act.Projectile, furthest / Math.Max(1f, ranged.Speed));
+                    break;
+                }
+
                 _projTo = FootOf(aim) - new Vector2(0, MuzzleHeight);
                 _projRotation = (float)Math.Atan2(_projTo.Y - _projFrom.Y, _projTo.X - _projFrom.X);
                 // a salvo weaves; everything else flies true

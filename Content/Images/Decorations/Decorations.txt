@@ -1,5 +1,15 @@
 # Decorations placeable in the editor; each blocks its square.
 # Pixel art, drawn at its own size, hung by its bottom on the square's centre.
-Tree.png
+#
+# TWO STATES. A decoration standing on an area transition shows an open state
+# once that way has been opened. The open picture is this one's name with
+# " Open" on the end - Door.png and Door Open.png - and needs no line of its
+# own here. Without one the closed picture is faded instead.
+tree 01.png
 Rock.png
 Chest.png
+Door.png
+trash can 01.png
+trash can 02.png
+trash can 03.png
+old tires 03.png

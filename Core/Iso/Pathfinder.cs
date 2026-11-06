@@ -9,7 +9,7 @@ namespace TheTimelineIs.Core.Iso;
 /// <summary>
 /// Grid movement rules in one place. Step cost: orthogonal 1, diagonal 2,
 /// plus 1 per foot of height climbed; more than 4 feet up in one step is
-/// impassable; any drop is free. Closed doors, decorations, enemies, and
+/// impassable; any drop is free. Decorations, enemies, unrevealed rooms and
 /// empty space all block. Friendly characters can be walked through but not
 /// stopped on.
 /// </summary>
@@ -39,9 +39,55 @@ public static class Pathfinder
         // a doorway square has no room of its own; LevelData knows to look at
         // the rooms beside it instead
         if (!level.Shown(p, revealedRooms)) return false;
-        if (level.DecorationAt(p) != null) return false;
-        if (level.DoorAt(p) is LevelDoor door && !door.Open) return false;
+        // A decoration standing on an area transition is the doorway itself -
+        // a door, a gate, a hole in a hedge - so it is walked through rather
+        // than walked round. Everything else placed on a square blocks it.
+        if (level.DecorationAt(p) != null && level.TransitionAt(p) == null) return false;
         return true;
+    }
+
+    /// <summary>
+    /// Whether ground actually runs from one set of squares to another —
+    /// ignoring which rooms have been revealed, who is standing where, and
+    /// anything placed on top.
+    ///
+    /// This is what tells a door from a gateway. Two rooms with floor joining
+    /// them are ONE place with a door in it: opening the door shows the far
+    /// side and nobody has to be moved. Two rooms with nothing but black
+    /// between them are two places, and the only way across is to be picked up
+    /// and put down on the other side.
+    ///
+    /// The step rule is the walking one, so a ledge too high to climb is not a
+    /// join: two rooms a storey apart are as separate as two rooms across a
+    /// gap, which is what they look like.
+    /// </summary>
+    public static bool GroundJoins(LevelData level, IEnumerable<Point> from, IEnumerable<Point> to)
+    {
+        var want = to.ToHashSet();
+        var seen = new HashSet<Point>();
+        var queue = new Queue<Point>();
+        foreach (var start in from)
+        {
+            if (level.BlockAt(start) == null) continue;
+            if (want.Contains(start)) return true;
+            if (seen.Add(start)) queue.Enqueue(start);
+        }
+
+        while (queue.Count > 0)
+        {
+            var here = queue.Dequeue();
+            int from_ = level.BlockAt(here)?.Height ?? 0;
+            foreach (var (dx, dy, _) in Steps)
+            {
+                var next = new Point(here.X + dx, here.Y + dy);
+                if (!seen.Add(next)) continue;
+                if (level.BlockAt(next) is not LevelBlock b) continue;
+                if (b.Height - from_ > MaxStepUpFeet) continue;   // a drop is free, a climb is not
+                if (want.Contains(next)) return true;
+                queue.Enqueue(next);
+            }
+        }
+        return false;
     }
 
     /// <summary>

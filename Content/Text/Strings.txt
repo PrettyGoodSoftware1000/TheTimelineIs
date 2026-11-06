@@ -52,7 +52,7 @@ error_log = Full list saved to {path}
 
 # --- Isometric mode ---
 iso_enter = Click a character, then a tile, to move. Stay sharp.
-iso_explore_hint = Exploring - click a character to select, a tile to walk, a door to open it.
+iso_explore_hint = Exploring - click a character to select, a tile to walk; step on a doorway to open it.
 iso_end_turn = End Turn
 iso_move_left = Movement left: {points}
 iso_out_of_range = Out of range.

@@ -38,7 +38,14 @@ public class GroundPiece
     /// </summary>
     public Checker Shade = Checker.None;
 
-    public string Path => $"{BlockCatalog.Folder}/{File}";
+    /// <summary>
+    /// Which folder this piece's file sits in. Ordinary ground lives in
+    /// Blocks; a terrain set's sixteen live under Terrain, in a folder of the
+    /// set's name.
+    /// </summary>
+    public string FolderOverride = "";
+
+    public string Path => $"{(FolderOverride.Length > 0 ? FolderOverride : BlockCatalog.Folder)}/{File}";
 
     /// <summary>The file name as levels refer to it, with or without ".png".</summary>
     public string Name => System.IO.Path.GetFileNameWithoutExtension(File);
@@ -107,12 +114,28 @@ public static class BlockCatalog
     /// <summary>
     /// The piece a level line names. Levels may write "Grass" or "Grass.png";
     /// both find the same piece, so hand-edited files keep working.
+    ///
+    /// A square from a terrain set writes "StoneToGrass:6" instead, and that is
+    /// turned into a piece here. Doing it in this one place is the whole trick:
+    /// every caller that could already draw ground can draw terrain too,
+    /// without knowing terrain exists.
     /// </summary>
-    public static GroundPiece? Find(string nameOrFile) =>
-        Pieces.FirstOrDefault(p =>
+    public static GroundPiece? Find(string nameOrFile)
+    {
+        if (TerrainCatalog.Resolve(nameOrFile) is var (set, mask))
+            return new GroundPiece
+            {
+                File = $"{set.Name}/mask-{mask:00}.png",
+                Family = set.Name,
+                Anchor = set.Anchor,
+                FolderOverride = TerrainCatalog.Folder,
+                Line = set.Line,
+            };
+        return Pieces.FirstOrDefault(p =>
             p.File.Equals(nameOrFile, StringComparison.OrdinalIgnoreCase) ||
             p.Name.Equals(System.IO.Path.GetFileNameWithoutExtension(nameOrFile),
                 StringComparison.OrdinalIgnoreCase));
+    }
 
     public static bool IsPiece(string nameOrFile) => Find(nameOrFile) != null;
 
@@ -124,6 +147,28 @@ public static class BlockCatalog
             .Select(l => l.Text).ToList();
 
     public static string DecorationPath(string file) => $"Content/Images/Decorations/{file}";
+
+    /// <summary>
+    /// The picture for a decoration that has two states, open and closed.
+    ///
+    /// A door is the one that matters: it sits on an area transition and shows
+    /// its open state once that way has been opened. The open picture is the
+    /// closed one's name with " Open" on the end — Door.png and Door Open.png —
+    /// and nothing has to be declared for it. Where there is no open picture
+    /// the closed one is used, which the caller is expected to fade, because a
+    /// door that looks shut after it has been opened is worse than a faded one.
+    /// </summary>
+    public static string DecorationPath(string file, bool open)
+    {
+        if (!open) return DecorationPath(file);
+        string stem = file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? file[..^4] : file;
+        string swung = DecorationPath($"{stem} Open.png");
+        return AssetLoader.Exists(swung) ? swung : DecorationPath(file);
+    }
+
+    /// <summary>Whether a decoration has a separate picture for being open.</summary>
+    public static bool HasOpenArt(string file) =>
+        DecorationPath(file, open: true) != DecorationPath(file);
 
     /// <summary>Tests and the editor re-load content between runs.</summary>
     public static void Reset() { _pieces = null; _decorations = null; }
@@ -249,8 +294,13 @@ public static class BlockCatalog
             }
         }
 
-        if (pieces.Count == 0)
-            diag.Error(BlocksIndex, 0, "no ground pieces declared, so levels have nothing to draw");
+        // Empty is fine as long as terrain sets exist: they are where ground
+        // normally comes from now. Both empty means nothing can draw at all,
+        // which is worth stopping for.
+        if (pieces.Count == 0 && TerrainCatalog.Sets.Count == 0)
+            diag.Error(BlocksIndex, 0,
+                $"no ground pieces here and no terrain sets in {TerrainCatalog.Index}, " +
+                "so levels have nothing to draw");
         return pieces;
     }
 

@@ -43,8 +43,27 @@ public struct InputState
     /// <summary>Back out / quit (Escape, or later the Android back button).</summary>
     public bool Cancel;
 
-    /// <summary>Characters typed this frame. Used only by dev-mode text entry.</summary>
-    public string TypedChars;
+    /// <summary>
+    /// Ctrl+S. Its own flag because the editor spends the bare S key on
+    /// panning now, like the other three around it.
+    /// </summary>
+    public bool Save;
+
+    private string? _typedChars;
+
+    /// <summary>
+    /// Characters typed this frame. Used only by dev-mode text entry.
+    ///
+    /// Empty, never null. This is a struct, so a frame that fills in nothing
+    /// at all — the window is not on top, say — still has to hand every
+    /// screen a string it can read. Reading one crashed the editor the moment
+    /// another window was clicked.
+    /// </summary>
+    public string TypedChars
+    {
+        get => _typedChars ?? "";
+        set => _typedChars = value;
+    }
 
     /// <summary>Backspace pressed this frame (dev-mode text entry).</summary>
     public bool Backspace;

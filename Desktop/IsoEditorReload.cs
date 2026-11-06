@@ -72,6 +72,41 @@ public partial class IsoEditorScreen
                $"{BlockCatalog.Families.Count} famil{(BlockCatalog.Families.Count == 1 ? "y" : "ies")}");
     }
 
+    /// <summary>
+    /// Keeps the built copy of a level file in step with the one the editor
+    /// just wrote.
+    ///
+    /// The editor writes to the SOURCE tree, because that is what gets
+    /// committed. Everything that READS a level — playtesting, opening
+    /// another map from the menu — goes through TitleContainer, which resolves
+    /// against the copy the build made next to the executable. Without this
+    /// step a map just saved, renamed or made is only half there: listed in
+    /// the folder the editor reads and missing from the folder the game does.
+    ///
+    /// Passing null for <paramref name="to"/> removes the built copy instead,
+    /// which is what a rename needs for the name it left behind.
+    /// </summary>
+    private static void MirrorLevel(string from, string? to)
+    {
+        string source = Path.Combine(SourceContentDir, "Levels", from);
+        string output = Path.Combine(AppContext.BaseDirectory, "Content", "Levels", to ?? from);
+        try
+        {
+            if (string.Equals(Path.GetFullPath(Path.Combine(SourceContentDir, "Levels")),
+                    Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "Content", "Levels")),
+                    StringComparison.OrdinalIgnoreCase))
+                return;                                   // a shipped build: one copy only
+            if (to == null) { if (File.Exists(output)) File.Delete(output); return; }
+            if (!File.Exists(source)) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+            File.Copy(source, output, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[editor] could not refresh the built copy of {from}: {ex.Message}");
+        }
+    }
+
     /// <summary>The repo's Content folder, so a save lands in the source tree.</summary>
     private static string SourceContentDir
     {

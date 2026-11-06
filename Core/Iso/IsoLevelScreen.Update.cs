@@ -242,7 +242,6 @@ public partial class IsoLevelScreen
             if (!_walker.Alive) { StopWalk(); break; }
 
             // standing beside a door opens it: no clicking, no reach to learn
-            if (_walker.IsPlayer) OpenDoorsBeside(_walker);
 
             // Stepping onto watched ground draws a volley. It only ENDS the
             // walk if it kills; otherwise the walker stands still for a moment
@@ -316,7 +315,6 @@ public partial class IsoLevelScreen
 
             Ignite(e.Who);
             if (!e.Who.Alive) { _escorts.RemoveAt(i); continue; }
-            if (e.Who.IsPlayer) OpenDoorsBeside(e.Who);
             CheckGuards(e.Who);
             if (e.Path.Count == 0) _escorts.RemoveAt(i);
         }
@@ -324,10 +322,20 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>
-    /// Stepping onto a linked transition pad, out of combat: the whole party
-    /// moves to the pad at the other end, that room becomes the only one lit,
-    /// and the room they left goes dark again. Returns false when the square is
-    /// not a pad, leads nowhere, or is the one they just arrived on.
+    /// Stepping onto a linked transition pad, out of combat. What happens
+    /// depends on whether the two ends are joined by floor.
+    ///
+    /// GROUND RUNS BETWEEN THEM. It is a door in one place: it opens, the far
+    /// room lights up, the room they are standing in stays lit, and nobody is
+    /// moved. The walk carries on. Enemies can cross from then on too, because
+    /// the far room is revealed and that is all pathing asks.
+    ///
+    /// NOTHING BUT BLACK BETWEEN THEM. It is a trip to somewhere else: the
+    /// whole party is put down on the pad at the other end, that room becomes
+    /// the only one lit, and the room they left goes dark.
+    ///
+    /// Returns true only when the party was MOVED, because that is what ends
+    /// the walk that set it off. Opening a way does not.
     ///
     /// A pad the party is standing on is disarmed, or arriving would send them
     /// straight back. It re-arms once EVERY party member is clear of it, and
@@ -350,8 +358,39 @@ public partial class IsoLevelScreen
             return false;
         }
 
+        if (Pathfinder.GroundJoins(_level, here.Tiles, there.Tiles))
+        {
+            OpenWay(here, there);
+            return false;        // nobody moved, so the walk is still going
+        }
+
         MoveParty(there);
         return true;
+    }
+
+    /// <summary>
+    /// Opens a way between two pads that already have floor between them:
+    /// both ends' rooms are lit and stay lit, and the pads are disarmed so
+    /// walking back over them does nothing.
+    /// </summary>
+    private void OpenWay(TransitionPad here, TransitionPad there)
+    {
+        if (!_openWays.Add(here.Pair)) return;    // already open; say nothing twice
+
+        foreach (var pad in new[] { here, there })
+            foreach (var t in pad.Tiles)
+            {
+                if (_level.BlockAt(t) is not LevelBlock b) continue;
+                if (b.Room.Length > 0) _revealed.Add(b.Room);
+                else foreach (string beside in _level.RoomsBeside(t)) _revealed.Add(beside);
+            }
+
+        _disarmed.Add(here.Key);
+        _disarmed.Add(there.Key);
+        _overlayKey = null;
+        Log(_ctx.Strings.Get("iso_door_open"));
+        var nearest = LivingParty.OrderBy(p => p.DistanceTo(here.Center)).FirstOrDefault();
+        if (nearest != null) CheckAggro(nearest);
     }
 
     /// <summary>Whether anyone in the party is still standing on a pad.</summary>

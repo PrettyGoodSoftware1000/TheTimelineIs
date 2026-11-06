@@ -21,13 +21,24 @@ public static class IsoMath
     /// a fraction of it, so moving to bigger art means changing this and
     /// redrawing the art, not hunting through the drawing code.
     /// </summary>
-    public const int TileW = 128;
+    public const int TileW = 96;
 
     /// <summary>Half as tall as it is wide — the 2:1 diamond every iso game uses.</summary>
     public const int TileH = TileW / 2;
 
     /// <summary>How far one foot of block height lifts a tile up the screen.</summary>
     public const int FootPx = TileW / 8;
+
+    /// <summary>
+    /// How many steps of height make one block tall — a block's side wall is
+    /// TileH high, so four.
+    ///
+    /// Levels are stored in the small steps, because that is the smallest
+    /// thing the art can show. The editor counts in BLOCKS, so one cube is 1
+    /// and a step is 0.25, which is the number anybody building a map is
+    /// actually thinking in.
+    /// </summary>
+    public const int StepsPerBlock = TileH / FootPx;
 
     /// <summary>
     /// A length that was picked by eye against a 64-wide tile, at whatever

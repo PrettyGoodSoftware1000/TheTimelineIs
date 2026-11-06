@@ -30,8 +30,15 @@ public class DesktopInput : IInputSource
     private readonly StringBuilder _typed = new();
     private bool _backspace;
 
+    /// <summary>
+    /// The game window. Kept so input can be ignored while it is not the
+    /// window you are typing into.
+    /// </summary>
+    private readonly Game _game;
+
     public DesktopInput(Game game)
     {
+        _game = game;
         game.Window.TextInput += (_, e) =>
         {
             if (e.Character == '\b')
@@ -43,6 +50,21 @@ public class DesktopInput : IInputSource
 
     public InputState Poll(VirtualViewport viewport, float dt)
     {
+        // A window that is not on top sees nothing. Mouse.GetState and
+        // Keyboard.GetState answer whatever the hardware is doing, whoever
+        // owns the screen — so clicking a different program's window was
+        // painting tiles on the map behind it. The previous state is kept in
+        // step so the click that brings the window back to the front counts
+        // as a press, not as a button that was already down.
+        if (!_game.IsActive)
+        {
+            _prevKeys = Keyboard.GetState();
+            _prevMouse = Mouse.GetState();
+            _typed.Clear();
+            _backspace = false;
+            return new InputState();
+        }
+
         var keys = Keyboard.GetState();
         var mouse = Mouse.GetState();
         var state = new InputState { TypedChars = _typed.ToString(), Backspace = _backspace };
@@ -132,6 +154,7 @@ public class DesktopInput : IInputSource
         state.AltHeld = keys.IsKeyDown(Keys.LeftAlt) || keys.IsKeyDown(Keys.RightAlt);
         state.SpaceHeld = keys.IsKeyDown(Keys.Space);
         state.Undo = state.CtrlHeld && Pressed(keys, Keys.Z);
+        state.Save = state.CtrlHeld && Pressed(keys, Keys.S);
         state.ToggleDevMap = state.CtrlHeld && Pressed(keys, Keys.D);
         state.ToggleControls = Pressed(keys, Keys.Insert);
         state.SelectAll = Pressed(keys, Keys.Tab);
