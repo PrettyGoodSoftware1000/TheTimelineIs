@@ -138,7 +138,7 @@ Speed: 9
 Melee Time: 0.5
 Hit Sound: [DefaultPop.wav], Delay 0.3, [DefaultPop.wav], Delay 0.3, [DefaultPop.wav]
 Effect: Single target. 3 times x 4 damage.
-Card Text: Stab something for 4 Stabby damage 3 times, then slip away 4 spaces.
+Card Text: Stab something 3 times, then move 4 spaces.
 Bottom Right: 12 Stabby
 []
 
@@ -155,8 +155,8 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [DefaultPop.wav]
 Effect: Two targets. 5 damage each.
-Card Text: Blast 2 guys for 5 damage.
-Bottom Right: 5 Energy
+Card Text: Blast 2 guys.
+Bottom Right: 10 Energy
 []
 
 []
@@ -172,8 +172,8 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [DefaultPop.wav]
 Effect: Three targets. 5 damage each.
-Card Text: Lash 3 guys for 5 damage.
-Bottom Right: 5 Lash
+Card Text: Bitch slap 3 foes with tentacles. 
+Bottom Right: 15 Lash
 []
 
 []
