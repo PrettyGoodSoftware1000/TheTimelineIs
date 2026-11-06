@@ -1,20 +1,34 @@
 name: Web build
 
-# Builds the browser version and keeps it as a download named "web-game".
-# That download is a zip with index.html at the top: upload it to itch.io
-# as an HTML game and tick "This file will be played in the browser".
+# Builds the browser version and puts it online.
 #
-#   - push to TheBrowserOne   -> a fresh build
-#   - or press "Run workflow"
+#   - push to main           -> build, then publish to the site
+#   - press "Run workflow"   -> the same, from whichever branch you pick
+#                               (it only publishes when run from main)
+#
+# The build is kept as a download named "web-game" either way: a zip with
+# index.html at the top, which is what itch.io wants for an HTML game.
+#
+# PUBLISHING. The site is a second repository, TTIF_mac_attack, whose main
+# branch IS the built game — GitHub Pages serves it at
+# https://prettygoodsoftware1000.github.io/TTIF_mac_attack/. Keeping the
+# build out of this repository keeps a few megabytes of changed wasm out of
+# its history every time the game is touched.
+#
+# The publish step needs a key, because it writes to another repository. It
+# is skipped, without failing, where there isn't one — see README.md for the
+# two minutes of setup.
 
 on:
   push:
-    branches: [TheBrowserOne]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_KEY: ${{ secrets.PAGES_DEPLOY_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,3 +48,43 @@ jobs:
         with:
           name: web-game
           path: out/wwwroot
+
+      - name: Publish to the site
+        if: github.ref == 'refs/heads/main' && env.DEPLOY_KEY != ''
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+
+          git clone --depth 1 git@github.com:PrettyGoodSoftware1000/TTIF_mac_attack.git site
+          cd site
+
+          # Out with the old build, in with the new. Everything but .git is
+          # the build, so a renamed or deleted file does not linger.
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a ../out/wwwroot/. .
+          touch .nojekyll          # or Pages hides every _framework file
+
+          cat > README.md <<'NOTE'
+          # The Timeline Is — browser build
+
+          Play: https://prettygoodsoftware1000.github.io/TTIF_mac_attack/
+
+          Built game files only, written by a robot. Do not edit by hand: the
+          next build overwrites everything here. The source, and the workflow
+          that publishes this, live in PrettyGoodSoftware1000/TheTimelineIs.
+
+          No saves, no replays, no editor: closing the tab starts over.
+          NOTE
+          echo "" >> README.md
+          echo "Built from TheTimelineIs ${GITHUB_SHA}" >> README.md
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          # a build that changed nothing is not worth a commit
+          git diff --cached --quiet && echo "nothing changed" && exit 0
+          git commit -m "Build from TheTimelineIs ${GITHUB_SHA:0:7}"
+          git push

@@ -20,9 +20,12 @@ dotnet run --project Desktop -- --editor        # the level editor
 
 Plays in a browser. No editor, no saves, no dev tools.
 
-- **Get a build:** push to `TheBrowserOne`, or press "Run workflow" on
-  *Web build* in GitHub Actions. Download `web-game` from the run.
-- **Put it online:** upload that zip to itch.io as an HTML game.
+- **Play it:** https://prettygoodsoftware1000.github.io/TTIF_mac_attack/
+- **Updating that page:** nothing to do. Every push to `main` builds and
+  publishes it. Other branches build but never publish.
+- **Get a zip instead:** press "Run workflow" on *Web build* in GitHub
+  Actions, from any branch, and download `web-game` from the run. That zip
+  is what itch.io wants for an HTML game.
 - **Try it locally:**
   ```
   dotnet publish Web -c Release -o out
@@ -34,6 +37,21 @@ Plays in a browser. No editor, no saves, no dev tools.
   content file. New art shows up after the next build.
 - All content downloads behind a progress bar before the title screen, so
   nothing loads mid-game. `Web/ContentPreload.cs`.
+
+### The key that lets CI publish
+
+The built game lives in a second repository, `TTIF_mac_attack`, so the wasm
+doesn't bloat this one's history. Writing to it needs a key. One-time setup:
+
+1. `ssh-keygen -t ed25519 -C ttif-pages -f ttif-deploy -N ""`
+2. `ttif-deploy.pub` → *TTIF_mac_attack* → Settings → Deploy keys → Add.
+   **Tick "Allow write access."**
+3. `ttif-deploy` (the one without `.pub`) → *TheTimelineIs* → Settings →
+   Secrets and variables → Actions → New repository secret, named
+   `PAGES_DEPLOY_KEY`.
+4. Delete both local files.
+
+Without the secret the build still runs; it just skips publishing.
 
 ## Controls
 
