@@ -38,8 +38,13 @@ public class DirectionalSprite
     /// <summary>
     /// The animation played when a card is cast and nothing more specific was
     /// asked for — not the card's own line, not the class's.
+    ///
+    /// Several spellings, for the same reason Run takes two: what the folder
+    /// is called is whatever the person drawing it typed, and a set of frames
+    /// that never plays because of an underscore is a bug nobody can see.
     /// </summary>
-    public const string SpellCast = "SpellCast";
+    public static readonly string[] SpellCast =
+        { "SpellCast", "SpellCasting", "Spell_Casting", "Spell Casting", "Spell_Cast" };
 
     /// <summary>The pose folders this character was read from, standing pose first.</summary>
     public IReadOnlyList<string> Poses { get; }

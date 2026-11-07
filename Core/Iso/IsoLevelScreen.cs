@@ -121,6 +121,12 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     /// <summary>Ground the card in flight will set alight when it lands.</summary>
     private HashSet<Point> _burnArea = new();
 
+    /// <summary>
+    /// The two squares a gate card was aimed at, kept from the moment it is
+    /// played until its effect runs — see PlayArea.
+    /// </summary>
+    private List<Point> _gateAims = new();
+
     /// <summary>The square a sky-angled shot is falling onto.</summary>
     private Point _skyTarget;
 
@@ -332,8 +338,23 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     private const float CardBodyPt = 26.8f;    // was 28.8
     private const float CardTotalPt = 32.6f;   // was 34.6
     private const float CardRangePt = 26.8f;   // was 28.8
+
+    // The panel to the left has room the card never had, so the same words
+    // are set bigger there.
+    private const float CardTextNamePt = 40f;
+    private const float CardTextBodyPt = 32f;
     private static float Pt(float points) => points / FontBakedPt;
     private static readonly int CardRestY = VirtualViewport.Height - CardH / 2;
+
+    /// <summary>
+    /// How wide the card-text panel wants to be, and the least it will take.
+    ///
+    /// A card's own words used to be printed on the card, in the smallest type
+    /// on the screen, in a column 350px wide — "Stab something 3 times, then
+    /// move 4 spaces." came out over four cramped lines and still ran off the
+    /// bottom. One panel, one card at a time, in type you can read.
+    /// </summary>
+    private const int CardTextW = 820, CardTextMinW = 560, CardTextGap = 40;
     private const float HoverScale = 1.3f;
 
     /// <summary>

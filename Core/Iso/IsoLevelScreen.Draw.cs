@@ -126,6 +126,7 @@ public partial class IsoLevelScreen
         // last, and over the top of everything: while the salts are working
         // there is nothing to see but the pictures
         DrawTrip(batch);
+        DrawMenu(batch);
         DrawDevMenu(batch);
         batch.End();
         _tap = null;
@@ -897,6 +898,28 @@ public partial class IsoLevelScreen
 
         var tex = ProjectileArt(_actingCard.ProjectileArt);
         batch.Draw(tex, pos, null, Color.White, angle, Middle(tex), 1f, SpriteEffects.None, 0f);
+    }
+
+    /// <summary>
+    /// The box a card's own words are read in: beside the hand, on its left,
+    /// so it reads as belonging to the cards rather than to the corner.
+    ///
+    /// It takes whatever room there is between the screen edge and the first
+    /// card. A hand wide enough to leave less than CardTextMinW gets no panel
+    /// at all — null — because a column three words wide is worse than none.
+    /// </summary>
+    private Rectangle? CardTextPanel()
+    {
+        var rects = HandRects();
+        int handLeft = rects.Count > 0 ? rects[0].X : VirtualViewport.Width / 2;
+        int right = handLeft - CardTextGap;
+        int x = Math.Max(60, right - CardTextW);
+        int w = right - x;
+        if (w < CardTextMinW) return null;
+        // lifted clear of the very bottom of the screen: the cards rest half
+        // off it, but words have to be read
+        int top = CardRestY - 40;
+        return new Rectangle(x, top, w, VirtualViewport.Height - top - 24);
     }
 
     /// <summary>

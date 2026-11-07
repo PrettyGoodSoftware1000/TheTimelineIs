@@ -433,6 +433,12 @@ public partial class IsoLevelScreen
             report.AppendLine(_ctx.Strings.Format("iso_summoned",
                 ("owner", owner.Name), ("name", def.Name)));
         }
+        // The owner's hand changes the moment the creature lands: a card that
+        // the pet carries out — Bite — is only in his hand while that pet is
+        // standing. Without this it did not show up until the turn came round
+        // again, so calling the 'Gator and setting it on somebody took two
+        // turns instead of one.
+        _hand = HandOf(ActiveMover ?? owner);
         _overlayKey = null;
     }
 
@@ -617,7 +623,7 @@ public partial class IsoLevelScreen
                 }
                 else if (effect.Is(Data.Effects.Gate))
                 {
-                    OpenGate(_salvoAims, report);
+                    OpenGate(_gateAims, report);
                 }
                 // Leap already did its work when the approach was planned, and
                 // Channel is handled where the card is played rather than here

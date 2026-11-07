@@ -54,34 +54,16 @@ public partial class IsoLevelScreen
                 0f, Vector2.Zero, 0.42f, SpriteEffects.None, 0f);
         }
 
-        // Save Replay is up from the moment the level loads, not only at the
-        // end: the interesting part of a mission is often over well before the
-        // mission is, and a fight you want to keep is one you want to keep now.
-        //
-        // The button reports its own result for a few seconds. It used to say
-        // nothing at all and leave the news to the toast, which prints small and
-        // plain in the opposite corner of the screen — technically feedback,
-        // practically invisible.
-        if (ReplayButtonUp)
+        // Recording moved into the Escape menu — it is pressed once a
+        // mission, and a button that wide across the top of the screen for
+        // the whole fight was paying rent it did not earn. What stays is the
+        // dot: a recording left running has to be obvious without opening
+        // anything.
+        if (_recording && _replaySavedTimer <= 0)
         {
-            // Three things this button can be saying: it has just written a
-            // file, it is writing things down, or it is doing nothing.
-            bool justSaved = _replaySavedTimer > 0;
-            string label = justSaved ? "replay_done"
-                : _recording ? "replay_stop" : "replay_start";
-            Color? tint = justSaved ? new Color(24, 86, 34, 235)
-                : _recording ? new Color(110, 30, 30, 235) : null;
-
-            // the press is handled in HitButton; this only paints it
-            Ui.Button(batch, _ctx.Pixel, _ctx.Font, SaveReplayRect,
-                _ctx.Strings.Get(label), null, tint);
-
-            // a dot beside it while it is running, so a recording left on is
-            // obvious without reading the button
-            if (_recording && !justSaved)
-                Ui.FillRect(batch, _ctx.Pixel,
-                    new Rectangle(SaveReplayRect.X - 46, SaveReplayRect.Y + 44, 32, 32),
-                    Color.Red);
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(3180, 104, 32, 32), Color.Red);
+            Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("replay_recording"),
+                new Rectangle(2700, 88, 460, 70), Color.Red * 0.9f, 0.30f);
         }
 
         if (_replayMode) { DrawReplayHud(batch); return; }
@@ -305,6 +287,11 @@ public partial class IsoLevelScreen
         if (hovered >= 0)
             DrawCard(batch, _hand[hovered], drawn[hovered], true);
 
+        // Whatever the player is looking at is what the panel explains: the
+        // card under the pointer, or failing that the one already armed.
+        var reading = hovered >= 0 ? _hand[hovered] : _selectedCard;
+        DrawCardText(batch, reading);
+
         // The key that plays each card, over its top edge — the grown card's
         // edge when hovered, so the number rides above it instead of sitting
         // in the middle of it. Drawn last so no card covers a number.
@@ -314,6 +301,39 @@ public partial class IsoLevelScreen
                 Acting is CharacterInstance who && who.ActionPoints >= _hand[i].ActionCost
                     ? Color.White : Color.White * 0.35f,
                 0.42f);
+    }
+
+    /// <summary>
+    /// A card's own words, in the panel to the left of the hand.
+    ///
+    /// Nothing is drawn at all when no card is being looked at: an empty box
+    /// sitting there is furniture, and the corner is better given back to the
+    /// board.
+    /// </summary>
+    private void DrawCardText(SpriteBatch batch, Card? card)
+    {
+        if (card == null || card.CardText.Length == 0) return;
+        if (CardTextPanel() is not Rectangle panel) return;
+
+        Ui.FillRect(batch, _ctx.Pixel, panel, new Color(16, 16, 24, 235));
+        int bw = 5;
+        var edge = Color.White * 0.45f;
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(panel.X, panel.Y, panel.Width, bw), edge);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(panel.X, panel.Bottom - bw, panel.Width, bw), edge);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(panel.X, panel.Y, bw, panel.Height), edge);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(panel.Right - bw, panel.Y, bw, panel.Height), edge);
+
+        int pad = 34;
+        var inner = new Rectangle(panel.X + pad, panel.Y + pad,
+            panel.Width - pad * 2, panel.Height - pad * 2);
+
+        float nameH = Ui.DrawWrappedCentered(batch, _ctx.Font, card.Name,
+            new Rectangle(inner.X, inner.Y, inner.Width, 0), Color.White, Pt(CardTextNamePt));
+
+        batch.DrawString(_ctx.Font,
+            Ui.Wrap(_ctx.Font, card.CardText, inner.Width, Pt(CardTextBodyPt)),
+            new Vector2(inner.X, inner.Y + nameH + 24), Color.White * 0.85f,
+            0f, Vector2.Zero, Pt(CardTextBodyPt), SpriteEffects.None, 0f);
     }
 
     /// <summary>
@@ -368,13 +388,11 @@ public partial class IsoLevelScreen
         // 18px both were drawn across the top of the card and "Pew Pew" ran
         // straight through "Actions 5".
         float nameTop = rect.Y + 74 * s;
-        float nameHeight = Ui.DrawWrappedCentered(batch, _ctx.Font, card.Name,
+        // The card's own words are NOT on the card any more — they are read
+        // in the panel to the left, one card at a time. See DrawCardText. All
+        // the card itself carries is its name, what it costs and what it does.
+        Ui.DrawWrappedCentered(batch, _ctx.Font, card.Name,
             new Rectangle(inner.X, (int)nameTop, inner.Width, 0), ink, Pt(CardNamePt) * s);
-
-        batch.DrawString(_ctx.Font,
-            Ui.Wrap(_ctx.Font, card.CardText, inner.Width, Pt(CardBodyPt) * s),
-            new Vector2(inner.X, nameTop + nameHeight + 22 * s), ink * 0.9f,
-            0f, Vector2.Zero, Pt(CardBodyPt) * s, SpriteEffects.None, 0f);
 
         int hitCount = card.TargetsGround && _blastSet.Count > 0
             ? VisibleEnemies.Count(e => e.Footprint.Any(_blastSet.Contains))

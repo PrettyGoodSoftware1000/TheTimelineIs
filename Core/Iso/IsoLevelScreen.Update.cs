@@ -56,6 +56,10 @@ public partial class IsoLevelScreen
         // the ~ menu answers before anything else, and swallows the frame
         if (UpdateDevMenu(input)) return;
 
+        // Escape, and then the pause menu, which swallows every frame it is up
+        // for — a click meant for a menu button must not also reach the board
+        if (UpdateMenu(input)) return;
+
         if (_tap is Point logTap && LogToggleRect.Contains(logTap))
         {
             _logOpen = !_logOpen;
@@ -64,17 +68,6 @@ public partial class IsoLevelScreen
             return;
         }
 
-        // The record button is answered here, before anything else looks at the
-        // tap. It used to be answered where it is DRAWN — after the board had
-        // already eaten the click — so it never fired on any screen you play
-        // on. Handling it up here also means it works in every mode it appears
-        // in, including while an enemy is taking its turn.
-        if (_tap is Point recTap && ReplayButtonUp && SaveReplayRect.Contains(recTap))
-        {
-            _tap = null;
-            if (_recording) SaveReplay("asked for"); else StartRecording();
-            return;
-        }
         // the wheel scrolls the log back through history while it is open, and
         // zooms the board everywhere else — in whole steps, so a pixel is still
         // a whole number of screen pixels afterwards
@@ -190,7 +183,7 @@ public partial class IsoLevelScreen
         actor.CastFrames =
             _ctx.Sprites.Frames(actor, card?.Animation ?? "")
             ?? _ctx.Sprites.Frames(actor, actor.CastAnimation)
-            ?? _ctx.Sprites.Frames(actor, DirectionalSprite.SpellCast);
+            ?? _ctx.Sprites.FirstFrames(actor, DirectionalSprite.SpellCast);
         actor.CastAnimTime = 0f;
     }
 

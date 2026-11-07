@@ -81,12 +81,7 @@ public partial class IsoLevelScreen
             me.MovePoints = 0;
             if (goal != null && path.Count > 0)
             {
-                _walker = me;
-                _walkFrom = Tile(me);
-                _walkPath = path;
-                _walkT = 0f;
-                _walkPause = 0f;
-                _afterWalk = NextTurn;
+                StartWalkAlong(me, path, NextTurn);
                 return;
             }
             NextTurn();

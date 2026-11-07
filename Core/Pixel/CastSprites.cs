@@ -95,6 +95,14 @@ public class CastSprites
     public IReadOnlyList<Texture2D>? Frames(CharacterInstance who, string animation) =>
         animation.Length == 0 ? null : For(who)?.Animation(animation, who.Facing);
 
+    /// <summary>The first of these animations this character has frames for.</summary>
+    public IReadOnlyList<Texture2D>? FirstFrames(CharacterInstance who, IEnumerable<string> names)
+    {
+        foreach (string name in names)
+            if (Frames(who, name) is { Count: > 0 } frames) return frames;
+        return null;
+    }
+
     /// <summary>
     /// The frames for crossing a square: Walk out of a fight, Run in one.
     /// Whichever is missing borrows the other. Null when neither is drawn
@@ -105,9 +113,7 @@ public class CastSprites
         var names = inCombat
             ? DirectionalSprite.Run.Append(DirectionalSprite.Walk)
             : DirectionalSprite.Run.Prepend(DirectionalSprite.Walk);
-        foreach (string name in names)
-            if (Frames(who, name) is { Count: > 0 } frames) return frames;
-        return null;
+        return FirstFrames(who, names);
     }
 
     private static char InitialOf(string name) =>

@@ -201,14 +201,7 @@ public partial class IsoLevelScreen
 
         // the walk is shown last, so the whole turn is on screen while it runs
         if (walker != null && walkTo is Point goal)
-        {
-            _walker = walker;
-            _walkFrom = Tile(walker);
-            _walkPath = new List<Point> { goal };
-            _walkT = 0f;
-            _walkPause = 0f;
-            _afterWalk = null;
-        }
+            StartWalkAlong(walker, new List<Point> { goal }, null);
         _overlayKey = null;
     }
 

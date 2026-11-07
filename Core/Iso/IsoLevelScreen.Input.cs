@@ -225,6 +225,29 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>
+    /// Sets somebody walking along a path that has already been worked out.
+    ///
+    /// Everything that starts a walk comes through here or through BeginWalk,
+    /// and the reason is the first line: TURN FIRST. An enemy closing the
+    /// distance used to have its path pushed straight into the fields below,
+    /// facing whatever way it happened to be pointed, so a Living Stone set
+    /// off walking backwards and only swung round after it had already
+    /// crossed a square.
+    /// </summary>
+    private void StartWalkAlong(CharacterInstance mover, List<Point> path, Action? after)
+    {
+        _walker = mover;
+        _walkFrom = Tile(mover);
+        _escorts.Clear();
+        _walkPath = path;
+        if (path.Count > 0) mover.Face(_walkFrom, path[0]);
+        _walkT = 0f;
+        _walkPause = 0f;
+        _afterWalk = after;
+        _overlayKey = null;
+    }
+
+    /// <summary>
     /// Hands the turn's controls to one of the characters sharing it — the
     /// summoner or one of its pets. Clicking anybody else does nothing, since
     /// they do not act on this turn.
@@ -446,6 +469,11 @@ public partial class IsoLevelScreen
         // the ground the card covered is remembered here, because by the time
         // the hits resolve the aim and the area are gone
         _burnArea = card.FireTileTurns > 0 ? new HashSet<Point>(area) : new HashSet<Point>();
+        // The same goes for a gate's two ends. They were read straight off
+        // _salvoAims, which the projectile phase empties the moment the shots
+        // are in the air — so by the time the effect ran there was nothing
+        // left to open a gate between, and the card quietly did nothing.
+        _gateAims = card.IsGate ? new List<Point>(_salvoAims) : new List<Point>();
         _skyTarget = aim;
         PlayCard(caught, aim);
     }
@@ -516,7 +544,5 @@ public partial class IsoLevelScreen
         return false;
     }
 
-    /// <summary>Whether the record button is on screen, so drawing and clicking agree.</summary>
-    private bool ReplayButtonUp =>
-        _ctx.ReplayStore.CanKeep && !_replayMode && _mode != Mode.Victory;
+
 }
