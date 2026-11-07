@@ -107,19 +107,10 @@ public partial class IsoLevelScreen
                 }
                 if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, EndTurnRect, _ctx.Strings.Get("iso_end_turn"), _tap))
                     NextTurn();
-                if (_mode == Mode.PlayerTarget)
-                {
-                    // how many more it is really waiting for, which is not
-                    // the card's number when nobody else is in reach
-                    int more = _selectedCard == null || Acting == null
-                        ? 1 : StillWanted(Acting, _selectedCard);
-                    string prompt = _targets.Count == 0
-                        ? _ctx.Strings.Get("iso_pick_target")
-                        : _ctx.Strings.Format("iso_pick_more",
-                            ("count", Math.Max(1, more).ToString()));
-                    Ui.DrawTextCentered(batch, _ctx.Font, prompt,
-                        new Rectangle(0, 1330, VirtualViewport.Width, 100), Color.OrangeRed, 0.44f);
-                }
+                // No standing "pick a target" banner while aiming: the gold
+                // card and the highlighted squares already say what the game
+                // is waiting for. A card wanting more than one target still
+                // toasts after each click.
                 DrawHand(batch);
                 break;
             case Mode.EnemyTurn:
@@ -356,6 +347,18 @@ public partial class IsoLevelScreen
         var ink = spent ? Color.White * 0.4f : Color.White;
         int pad = (int)(24 * s);
         var inner = new Rectangle(rect.X + pad, rect.Y, rect.Width - pad * 2, rect.Height);
+
+        // Top-left, opposite the cost: a card you only get to play once. It is
+        // said on the card rather than in the log because the player needs it
+        // BEFORE they spend it.
+        if (card.Expendable)
+        {
+            string once = _ctx.Strings.Get("iso_card_expendable");
+            float onceScale = Ui.FitScale(_ctx.Font, once, inner.Width / 2, Pt(CardRangePt) * s);
+            batch.DrawString(_ctx.Font, once, new Vector2(inner.X, rect.Y + 20 * s),
+                spent ? Color.Violet * 0.4f : Color.Violet, 0f, Vector2.Zero, onceScale,
+                SpriteEffects.None, 0f);
+        }
 
         // The name wraps and reports how tall it came out, so a long one like
         // "Beg, Borrow, but Mostly Steal" takes two lines instead of running

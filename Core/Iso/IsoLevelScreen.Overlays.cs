@@ -259,6 +259,12 @@ public partial class IsoLevelScreen
     /// Where the caster acts from: where it already stands if that works, else
     /// the cheapest square it can afford with every chosen target in reach. The
     /// player never picks the angle — melee just closes in by the shortest walk.
+    ///
+    /// ONLY MELEE WALKS. A ranged card fires from where its caster is standing
+    /// or does not fire at all: a gun whose Range is its reach was quietly
+    /// marching people across the room to use it, which spent their movement
+    /// on a card that had no business asking for it and put them somewhere
+    /// they had not chosen to stand.
     /// </summary>
     private Point? BestApproach(CharacterInstance me, List<CharacterInstance> targets, Card card)
     {
@@ -268,6 +274,7 @@ public partial class IsoLevelScreen
         // reach of anything standing against any of its sides
         bool InRange(Point from) => targets.All(t => t.DistanceTo(from) <= card.Range);
         if (InRange(here)) return here;
+        if (card.Delivery != Delivery.Melee) return null;
         return _moveSet.Keys.Where(InRange)
             .OrderBy(t => _moveSet[t]).Select(t => (Point?)t).FirstOrDefault();
     }

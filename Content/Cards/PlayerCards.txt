@@ -53,7 +53,15 @@
 #                    Nimble N  - the CASTER may move N more spaces after
 #                                playing this card.
 #                    Leap N    - the approach move for THIS card reaches N
-#                                further and ignores height entirely.
+#                                further and ignores height entirely. Only
+#                                [melee] cards approach at all.
+#                    Grant X   - puts the card named X into the CASTER's hand.
+#                                X says "Dealt: No" so nobody starts with it.
+#                    Gate 1    - drops a pair of portals on the two squares
+#                                the card was aimed at (needs "Aims: 2").
+#                                Stepping on one puts the walker one square
+#                                south-west of the other. Anyone in the party
+#                                may use it.
 #                    Curse N   - the victim takes N extra damage from melee
 #                                cards, for 10 of their turns. Curses stack
 #                                and each keeps its own clock.
@@ -75,6 +83,22 @@
 #                                someone who only crosses it.)
 # Form:           (Optional. The card only appears while its owner wears this
 #                  form - see the class's "Form:" lines in Classes.txt.)
+# Expendable:     (Yes or No. Yes means the card leaves the hand for good the
+#                  moment it is played, and the word is printed across the top
+#                  of the card so the player knows before spending it. No is
+#                  the default.)
+# Dealt:          (Yes or No. No keeps the card out of the opening hand while
+#                  still letting its holder carry it once something puts it
+#                  there - a Grant, or a Swap.)
+# Replaces:/With: (Swap cards only. Each "Replaces:" takes that card out of the
+#                  caster's hand and the "With:" under it puts that one in its
+#                  place. Write the pair as many times as you need: Lightning
+#                  Shells changes the cone it fires AND turns itself into
+#                  Flaming Shells.)
+# Acts As:        (Optional. The card sits in its holder's hand but is carried
+#                  out by the named pet of theirs - the Florida Man holds Bite,
+#                  the 'Gator is what bites. It only appears while that pet is
+#                  standing, and the pet pays for it and does the walking.)
 # Explosion Range:(AoE cards only: blast radius in tiles around the impact
 #                  point. Separate from Range, which is only how far the card
 #                  reaches. Shown as a purple area while aiming.)
@@ -111,6 +135,7 @@ Card Name: Fireball
 Tags: Gun-O-Mancer
 Type: [ranged] AoE damage. Single Projectile
 Action Points: 2
+Expendable: Yes
 Friendly Fire: Yes
 Stops Movement: Yes
 Explosion Range: 3
@@ -120,7 +145,7 @@ Casting Time: 0.2
 Speed: 9
 Hit Sound: [FireballBoom.wav]
 Effect: AoE 5 fire damage to enemies
-Card Text: Goes boom. Does 5 fire damage to everything
+Card Text: Goes boom. Does 5 fire damage to everything. One shot only.
 Bottom Right: 15 Fire
 []
 
@@ -157,6 +182,30 @@ Hit Sound: [DefaultPop.wav]
 Effect: Two targets. 5 damage each.
 Card Text: Blast 2 guys.
 Bottom Right: 10 Energy
+[]
+
+# Two squares, picked one after the other, joined to each other. Walk onto
+# either end and you come out one square SOUTH-WEST of the other - beside it,
+# not on it, or the pair would bounce you back and forth forever. Anybody in
+# the party may use it, not just the Vessel.
+[]
+Card Name: Summon Gate
+Tags: The Vessel
+Type: [ranged] Single target, X hits.
+Action Points: 2
+Aims: 2
+Friendly Fire: No
+Stops Movement: Yes
+Range: 12
+Effects: Gate 1
+Projectile Art: Ball.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.4
+Speed: 20
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Tear a hole here, and another there. Mind the step.
+Bottom Right: 0 Gate
 []
 
 []
@@ -239,15 +288,39 @@ Type: [melee] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
 Stops Movement: Yes
-Effects: Leap 5
+Effects: Grant Leap
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 12
 Melee Time: 0.3
 Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 8 damage.
-Card Text: Leap 5 further, over anything in the way, and rake for 8.
+Card Text: Rake for 8, and come away coiled to spring.
 Bottom Right: 8 Stabby
+[]
+
+# What Claw 'Em leaves behind. Nobody starts holding it - "Dealt: No" keeps
+# it out of the opening hand - and it is gone again the moment it is used.
+[]
+Card Name: Leap
+Tags: Werewitch
+Form: Werewolf
+Type: [ranged] Single target, X hits.
+Action Points: 0
+Expendable: Yes
+Dealt: No
+Friendly Fire: No
+Stops Movement: No
+Effects: Nimble 5
+Range: 1
+Projectile Art: Ball.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Spring 5 squares, free, on whatever is left of the claw.
+Bottom Right: 0 Spring
 []
 
 []
@@ -399,6 +472,7 @@ Bottom Right: 2 Gunfire
 []
 Card Name: Bite
 Tags: Gator
+Acts As: Gator
 Type: [melee] Single target, X hits.
 Range: 1
 Action Points: 1
@@ -410,7 +484,7 @@ Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 8 damage.
-Card Text: Snap. Not much of a plan, but it works.
+Card Text: Snap. You say when; the 'Gator does the biting.
 Bottom Right: 8 Chomp
 []
 
@@ -472,6 +546,26 @@ Bottom Right: 20 Chainsaw
 # is reach into the Gun-O-Mancer's own hand and change which cone he is
 # carrying. 'Replaces:' is what comes out, 'With:' is what goes in, and the
 # swap sticks to that character - a second Gun-O-Mancer keeps his own shells.
+# His bread and butter: no shells to load, no blast to place, just a slug that
+# goes where it is pointed.
+[]
+Card Name: Elemental Slug
+Tags: Gun-O-Mancer
+Type: [ranged] Single target, X hits.
+Action Points: 1
+Friendly Fire: No
+Stops Movement: Yes
+Range: 10
+Projectile Art: Ball.png
+Casting Sound: [Blank.wav]
+Casting Time: 0.2
+Speed: 14
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 7 damage.
+Card Text: One round, whatever is loaded, straight down the range.
+Bottom Right: 7 Arcane
+[]
+
 []
 Card Name: Lightning Shells
 Tags: Gun-O-Mancer
@@ -483,6 +577,8 @@ Range: 1
 Effects: Swap 1
 Replaces: Hot Lead
 With: Shock Shot
+Replaces: Lightning Shells
+With: Flaming Shells
 Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
@@ -498,12 +594,15 @@ Card Name: Flaming Shells
 Tags: Gun-O-Mancer
 Type: [ranged] Single target, X hits.
 Action Points: 0
+Dealt: No
 Friendly Fire: No
 Stops Movement: No
 Range: 1
 Effects: Swap 1
 Replaces: Shock Shot
 With: Hot Lead
+Replaces: Flaming Shells
+With: Lightning Shells
 Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: 0.2

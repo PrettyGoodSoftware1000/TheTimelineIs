@@ -97,11 +97,26 @@ public static class Effects
     /// </summary>
     public const string Fear = "Fear";
 
+    /// <summary>
+    /// Grant X: puts the card named X into the caster's own hand, where it
+    /// stays until it is played. The card itself says "Dealt: No" so nobody
+    /// starts holding it — Claw 'Em is what puts Leap in the Werewitch's paw.
+    /// </summary>
+    public const string Grant = "Grant";
+
+    /// <summary>
+    /// Gate 1: drops a pair of portals on the two squares the card was aimed
+    /// at. Stepping on either puts the walker beside the other. See
+    /// <see cref="Iso.IsoLevelScreen"/>'s gate handling.
+    /// </summary>
+    public const string Gate = "Gate";
+
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
     public static readonly string[] Known =
     {
         Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles,
         Summon, Guard, Vulnerable, Mower, Stun, Swap, BathSalts, Fear,
+        Grant, Gate,
     };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
@@ -151,9 +166,12 @@ public static class Effects
         name.Equals(Summon, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Guard, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Swap, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Grant, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Gate, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(BathSalts, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>These carry a word (a form name) instead of a number.</summary>
+    /// <summary>These carry a word (a form or card name) instead of a number.</summary>
     public static bool TakesText(string name) =>
-        name.Equals(Form, StringComparison.OrdinalIgnoreCase);
+        name.Equals(Form, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Grant, StringComparison.OrdinalIgnoreCase);
 }

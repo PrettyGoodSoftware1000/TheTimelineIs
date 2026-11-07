@@ -87,6 +87,14 @@ public partial class IsoLevelScreen
         }
         if (card.IsChannelled) ClearChannel(_actor);
 
+        // An expendable card is spent the moment it is really played — after
+        // the channel branch above, so starting a channel does not eat it.
+        if (card.Expendable)
+        {
+            _actor.Spent.Add(card.Name);
+            _hand = HandOf(ActiveMover ?? _actor);
+        }
+
         _ctx.Sounds.Play(card.CastingSound);
         StartCastAnimation(_actor!, card);
         _mode = Mode.Acting;
@@ -440,31 +448,66 @@ public partial class IsoLevelScreen
     /// </summary>
     private void SwapCard(CharacterInstance who, Card card, StringBuilder report)
     {
-        if (card.Replaces.Length == 0 || card.With.Length == 0)
+        if (card.Swaps.Count == 0)
         {
             _ctx.ReportProblem(card.Source,
                 $"'{card.Name}' swaps cards but is missing its 'Replaces:' or 'With:' line");
             return;
         }
-        if (DeckOf(who).All.All(c => !c.Name.Equals(card.With, StringComparison.OrdinalIgnoreCase)))
+        foreach (var (replaces, with) in card.Swaps)
         {
-            _ctx.ReportProblem(card.Source,
-                $"'{card.Name}' loads '{card.With}', which is not a card in {DeckOf(who).Source}");
-            return;
+            if (replaces.Length == 0 || with.Length == 0)
+            {
+                _ctx.ReportProblem(card.Source,
+                    $"'{card.Name}' has a 'Replaces:' with no 'With:' under it");
+                continue;
+            }
+            if (DeckOf(who).All.All(c => !c.Name.Equals(with, StringComparison.OrdinalIgnoreCase)))
+            {
+                _ctx.ReportProblem(card.Source,
+                    $"'{card.Name}' loads '{with}', which is not a card in {DeckOf(who).Source}");
+                continue;
+            }
+
+            // a swap already pointing at this card is replaced, not stacked, so
+            // loading back and forth cannot leave a chain behind
+            foreach (var stale in who.Swapped
+                         .Where(kv => kv.Value.Equals(replaces, StringComparison.OrdinalIgnoreCase))
+                         .Select(kv => kv.Key).ToList())
+                who.Swapped.Remove(stale);
+
+            who.Swapped[replaces] = with;
+            report.AppendLine(_ctx.Strings.Format("iso_swapped",
+                ("name", who.Name), ("old", replaces), ("new", with)));
         }
-
-        // a swap already pointing at this card is replaced, not stacked, so
-        // loading back and forth cannot leave a chain behind
-        foreach (var stale in who.Swapped
-                     .Where(kv => kv.Value.Equals(card.Replaces, StringComparison.OrdinalIgnoreCase))
-                     .Select(kv => kv.Key).ToList())
-            who.Swapped.Remove(stale);
-
-        who.Swapped[card.Replaces] = card.With;
         _hand = HandOf(who);
         _overlayKey = null;
-        report.AppendLine(_ctx.Strings.Format("iso_swapped",
-            ("name", who.Name), ("old", card.Replaces), ("new", card.With)));
+    }
+
+    /// <summary>
+    /// Hands a card to the character who played this one. The card is an
+    /// ordinary one in the same deck, marked "Dealt: No" so nobody starts with
+    /// it; granting only puts it in this character's hand.
+    ///
+    /// Taking it again when it is already held does nothing — a granted card
+    /// is held or it is not, and there is no stack of them.
+    /// </summary>
+    private void GrantCard(CharacterInstance who, string name, StringBuilder report)
+    {
+        if (name.Length == 0) return;
+        if (DeckOf(who).All.All(c => !c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            _ctx.ReportProblem(DeckOf(who).Source,
+                $"a card grants '{name}', which is not a card in {DeckOf(who).Source}");
+            return;
+        }
+        // playing it again re-arms it, which is what makes Claw 'Em worth
+        // casting a second time once the Leap it gave has been spent
+        bool fresh = who.Spent.Remove(name) | who.Granted.Add(name);
+        if (!fresh) return;                      // already in hand, unspent
+        _hand = HandOf(ActiveMover ?? who);
+        report.AppendLine(_ctx.Strings.Format("iso_granted",
+            ("name", who.Name), ("card", name)));
     }
 
     /// <summary>The closest square to a point where a body of this shape fits.</summary>
@@ -567,6 +610,14 @@ public partial class IsoLevelScreen
                 else if (effect.Is(Data.Effects.Form))
                 {
                     ChangeForm(_actor, effect.Text, report);
+                }
+                else if (effect.Is(Data.Effects.Grant))
+                {
+                    GrantCard(_actor, effect.Text, report);
+                }
+                else if (effect.Is(Data.Effects.Gate))
+                {
+                    OpenGate(_salvoAims, report);
                 }
                 // Leap already did its work when the approach was planned, and
                 // Channel is handled where the card is played rather than here

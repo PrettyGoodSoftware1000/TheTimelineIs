@@ -249,6 +249,7 @@ public partial class IsoLevelScreen
                         ? Color.White * 0.35f : Color.White) * alpha);
             }
             if (_fires.ContainsKey(tile)) DrawFire(batch, tile, block.Height, alpha);
+            if (IsGateTile(tile)) DrawGate(batch, tile, block.Height, alpha);
         }
         DrawBandCast(batch, byDepth, band, alpha);
 
@@ -341,6 +342,17 @@ public partial class IsoLevelScreen
     }
 
     private const string FireArtPath = "Content/Images/Effects/FireTile.png";
+
+    /// <summary>
+    /// One end of a pair of gates: a square that breathes violet, with its rim
+    /// lit. Both ends pulse on the same clock so the two read as one thing.
+    /// </summary>
+    private void DrawGate(SpriteBatch batch, Point tile, int height, float alpha)
+    {
+        float pulse = 0.40f + 0.22f * (float)Math.Sin(_clock * 3.0);
+        Fill(batch, tile, height, new Color(150, 70, 230) * pulse * alpha);
+        Edge(batch, tile, height, new Color(220, 170, 255) * alpha);
+    }
 
     /// <summary>
     /// How far back along its angle a sky shot starts, in art pixels. Well
@@ -800,8 +812,13 @@ public partial class IsoLevelScreen
         var b = IsoMath.ToScreen(here.X, here.Y, HeightAt(here), Origin);
         var pos = Vector2.Lerp(a, b, t);
 
+        // Which way it is POINTED is a separate question from where it slides
+        // between: the first beat and the blast at the end both share a square
+        // with their neighbour, and asking those for a direction gave none.
+        var facing = Facings.Towards(_mower.Approach(i), here);
+
         // art drawn per direction is already turned; one picture spins instead
-        if (EffectArt.Turned(_actingCard.ProjectileArt, Facings.Towards(last, here)) is string turned)
+        if (EffectArt.Turned(_actingCard.ProjectileArt, facing) is string turned)
         {
             var art = _ctx.Assets.LoadTexture(turned);
             batch.Draw(art, pos - Standing(art), null, Color.White, 0f,

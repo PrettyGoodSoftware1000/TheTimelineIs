@@ -142,21 +142,38 @@ public static class ContentValidator
             // hand and put nothing back, leaving a hole and no explanation.
             if (card.IsSwap)
             {
-                if (card.Replaces.Length == 0 || card.With.Length == 0)
+                if (card.Swaps.Count == 0)
                     diag.Error(card.Source, card.Line,
                         $"'{card.Name}': swaps cards but needs both a 'Replaces:' and a 'With:' line");
-                foreach (var (field, name) in new[] { ("Replaces", card.Replaces), ("With", card.With) })
-                    if (name.Length > 0 &&
-                        !cards.All.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                foreach (var (replaces, with) in card.Swaps)
+                {
+                    if (replaces.Length == 0 || with.Length == 0)
                         diag.Error(card.Source, card.Line,
-                            $"'{card.Name}': {field} names '{name}', which is not a card in {cards.Source}");
+                            $"'{card.Name}': every 'Replaces:' needs a 'With:' under it");
+                    foreach (var (field, name) in new[] { ("Replaces", replaces), ("With", with) })
+                        if (name.Length > 0 &&
+                            !cards.All.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                            diag.Error(card.Source, card.Line,
+                                $"'{card.Name}': {field} names '{name}', which is not a card in {cards.Source}");
+                }
             }
-            else if (card.Replaces.Length > 0 || card.With.Length > 0)
+            else if (card.Swaps.Count > 0)
             {
                 diag.Warn(card.Source, card.Line,
                     $"'{card.Name}': has a Replaces/With line but no 'Effects: Swap 1', " +
                     "so it never swaps anything");
             }
+
+            // A card granting or acting through something nobody wrote would
+            // do nothing at all, with no sign of why.
+            if (card.Grants is string gift &&
+                !cards.All.Any(c => c.Name.Equals(gift, StringComparison.OrdinalIgnoreCase)))
+                diag.Error(card.Source, card.Line,
+                    $"'{card.Name}': grants '{gift}', which is not a card in {cards.Source}");
+
+            if (card.IsGate && card.Aims < 2)
+                diag.Error(card.Source, card.Line,
+                    $"'{card.Name}': a Gate card needs 'Aims: 2' — one square for each end");
 
             if (!card.FriendlyFireDeclared)
                 diag.Warn(card.Source, card.Line,
@@ -488,11 +505,12 @@ public static class ContentValidator
             "iso_afraid", "iso_mind_damage", "iso_mind_immune", "iso_mind_took",
             "iso_mind_held", "iso_mind_back", "iso_mind_broken", "iso_mind_shaken", "iso_fear_flees",
             "iso_end_turn", "iso_move_left", "iso_out_of_range",
-            "iso_door_open", "iso_victory", "iso_card_range", "iso_transition",
-            "iso_move_spent", "iso_pick_target", "iso_dialogue_next",
+            "iso_door_open", "iso_victory", "iso_card_range", "iso_card_expendable", "iso_transition",
+            "iso_move_spent", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
-            "iso_cursed", "iso_form", "iso_pet_turn", "iso_summoned", "iso_summon_no_room", "iso_summon_already",
+            "iso_cursed", "iso_form", "iso_granted",
+            "iso_gate_opened", "iso_gate_used", "iso_gate_blocked", "iso_pet_turn", "iso_summoned", "iso_summon_no_room", "iso_summon_already",
             "iso_guarding", "iso_guard_fires",
             "iso_stole", "iso_steal_over", "iso_nothing_to_steal", "iso_no_cards", "iso_needs_other",
             "iso_log_empty", "iso_log_more", "iso_actions_left", "iso_card_actions", "iso_no_actions",

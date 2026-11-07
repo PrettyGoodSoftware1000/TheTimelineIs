@@ -144,7 +144,7 @@ public class Card
     /// </summary>
     public bool TargetsGround =>
         Kind == CardKind.AoEDamage || Delivery is Delivery.Cone or Delivery.Swipe ||
-        IsSummon || IsMower;
+        IsSummon || IsMower || IsGate;
 
     /// <summary>
     /// The chance out of a hundred that any one square a card lands on
@@ -245,12 +245,41 @@ public class Card
     public bool IsGuard => GuardReach > 0;
 
     /// <summary>
-    /// A Swap card takes <see cref="Replaces"/> out of its caster's hand and
-    /// puts <see cref="With"/> there instead. Both name cards in the same deck.
+    /// A Swap card takes each "Replaces:" card out of its caster's hand and
+    /// puts the "With:" card under it there instead. Both name cards in the
+    /// same deck, and the lines pair up in the order they are written, so one
+    /// card can load several things at once: Lightning Shells changes the cone
+    /// it fires AND turns itself into Flaming Shells.
     /// </summary>
-    public string Replaces = "", With = "";
+    public List<(string Replaces, string With)> Swaps = new();
+
+    /// <summary>The first pair, for the cards and checks that only ever had one.</summary>
+    public string Replaces => Swaps.Count > 0 ? Swaps[0].Replaces : "";
+    public string With => Swaps.Count > 0 ? Swaps[0].With : "";
 
     public bool IsSwap => Effects.Exists(e => e.Is(Data.Effects.Swap));
+
+    /// <summary>
+    /// A card that leaves its holder's hand for good the moment it is played,
+    /// rather than coming back next turn. The word is printed across the top
+    /// of the card so the player knows before spending it.
+    /// </summary>
+    public bool Expendable;
+
+    /// <summary>
+    /// The card this one puts into its caster's hand, from "Effects: Grant X".
+    /// </summary>
+    public string? Grants => EffectNamed(Data.Effects.Grant)?.Text is { Length: > 0 } g ? g : null;
+
+    /// <summary>
+    /// A card held by one character but carried out by another — the pet named
+    /// here. The Florida Man holds Bite; the Gator is what bites. Empty for
+    /// everything else, which acts for itself.
+    /// </summary>
+    public string ActsAs = "";
+
+    /// <summary>A card that drops a pair of portals on the squares it was aimed at.</summary>
+    public bool IsGate => Effects.Exists(e => e.Is(Data.Effects.Gate));
 
     /// <summary>A card that blacks the screen out and shows pictures while it works.</summary>
     public bool IsBathSalts => Effects.Exists(e => e.Is(Data.Effects.BathSalts));
@@ -367,7 +396,7 @@ public class CardLibrary
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
         "explosion range", "aims", "fire chance", "action points", "friendly fire", "stops movement", "mind damage",
-        "mind effect", "sky angle", "animation", "effects", "effect",
+        "mind effect", "sky angle", "animation", "expendable", "acts as", "effects", "effect",
         "speed", "range", "summons", "replaces", "blast", "dealt", "with", "form", "tags", "type", "sounds",
     };
 
@@ -534,12 +563,30 @@ public class CardLibrary
                     $"'{card.Name}': Dealt must be Yes or No, got '{value}'");
                 break;
 
+            // Replaces/With pair up in the order written, so a card may load
+            // more than one thing. A "With:" with no "Replaces:" above it is a
+            // typo, not a swap, and is reported rather than quietly dropped.
             case "replaces":
-                card.Replaces = value;
+                card.Swaps.Add((value, ""));
                 break;
 
             case "with":
-                card.With = value;
+                if (card.Swaps.Count == 0 || card.Swaps[^1].With.Length > 0)
+                    diag.Error(card.Source, lineNo,
+                        $"'{card.Name}': 'With: {value}' has no 'Replaces:' line above it");
+                else
+                    card.Swaps[^1] = (card.Swaps[^1].Replaces, value);
+                break;
+
+            case "expendable":
+                if (value.Equals("yes", StringComparison.OrdinalIgnoreCase)) card.Expendable = true;
+                else if (value.Equals("no", StringComparison.OrdinalIgnoreCase)) card.Expendable = false;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Expendable must be Yes or No, got '{value}'");
+                break;
+
+            case "acts as":
+                card.ActsAs = value;
                 break;
 
             case "blast":

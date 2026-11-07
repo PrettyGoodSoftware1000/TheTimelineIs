@@ -300,6 +300,19 @@ public class CharacterInstance
     public Dictionary<string, string> Swapped = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Expendable cards this character has already played. They do not come
+    /// back next turn: an expendable card is spent for the rest of the level.
+    /// </summary>
+    public HashSet<string> Spent = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Cards handed to this character mid-fight by something they played, by
+    /// name. Claw 'Em puts Leap here; the hand picks it up from the deck like
+    /// any other card, so nothing else has to know it was granted.
+    /// </summary>
+    public HashSet<string> Granted = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// The card being channelled, if any. While this is set the character is
     /// rooted: they cannot move, and the only card they can play is this one,
     /// which releases it.
@@ -414,6 +427,8 @@ public class CharacterInstance
         copy.Stolen = new List<StolenCard>(Stolen);
         copy.Lost = new List<StolenCard>(Lost);
         copy.Swapped = new Dictionary<string, string>(Swapped, StringComparer.OrdinalIgnoreCase);
+        copy.Spent = new HashSet<string>(Spent, StringComparer.OrdinalIgnoreCase);
+        copy.Granted = new HashSet<string>(Granted, StringComparer.OrdinalIgnoreCase);
         return copy;
     }
 }

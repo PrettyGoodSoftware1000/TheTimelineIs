@@ -250,6 +250,12 @@ public partial class IsoLevelScreen
             if (CheckGuards(_walker)) { StopWalk(); break; }
             if (_walkPause > 0f) break;
 
+            // Stepping onto a portal puts you out beside its far end. The walk
+            // stops there: the path that was planned started from the square
+            // just left behind and means nothing from the other side of the
+            // level.
+            if (TakeGate(_walker, arrived)) { StopWalk(); break; }
+
             if (_walker.IsPlayer && FireTrigger(arrived)) { StopWalk(); break; }
 
             // an area transition takes the whole party somewhere else, so the
@@ -316,6 +322,9 @@ public partial class IsoLevelScreen
             Ignite(e.Who);
             if (!e.Who.Alive) { _escorts.RemoveAt(i); continue; }
             CheckGuards(e.Who);
+            // a portal takes whoever stands on it, escort or leader; the rest
+            // of their path is from the wrong side of the level now
+            if (TakeGate(e.Who, arrived)) { _escorts.RemoveAt(i); continue; }
             if (e.Path.Count == 0) _escorts.RemoveAt(i);
         }
         _overlayKey = null;

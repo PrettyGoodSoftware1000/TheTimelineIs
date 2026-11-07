@@ -268,6 +268,17 @@ public partial class IsoLevelScreen
     /// </summary>
     private void SelectCard(Card card)
     {
+        // A card the holder carries but a pet carries OUT. Picking it hands
+        // the controls to that pet first, so everything after this — the
+        // reach, the walk in, the action point, the teeth — is the pet's.
+        // The Florida Man holds Bite; the Gator is what bites.
+        if (card.ActsAs.Length > 0 && Acting is CharacterInstance owner &&
+            LivingParty.FirstOrDefault(p => p.Owner == owner &&
+                p.Name.Equals(card.ActsAs, StringComparison.OrdinalIgnoreCase)) is CharacterInstance pet)
+        {
+            TakeControlOf(pet);     // clears any card already armed
+        }
+
         if (Acting is CharacterInstance holder && holder.ActionPoints < card.ActionCost)
         {
             Toast(_ctx.Strings.Format("iso_no_actions",
@@ -429,7 +440,7 @@ public partial class IsoLevelScreen
         // however many people happen to be near where the creature lands. A
         // mower catches people too, but only once it has driven into them —
         // who that turns out to be is settled by the run, not by the aim.
-        var caught = card.IsSummon || card.IsMower
+        var caught = card.IsSummon || card.IsMower || card.IsGate
             ? new List<CharacterInstance>()
             : CatchableBy(Acting, card).Where(c => c.Footprint.Any(area.Contains)).ToList();
         // the ground the card covered is remembered here, because by the time

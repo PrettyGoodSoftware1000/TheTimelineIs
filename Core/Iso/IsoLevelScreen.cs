@@ -554,6 +554,28 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
         // new level starts with a fresh party and no pets at all.
         hand = hand.Where(c => !c.IsSummon || !SummonAlive(who, c.Summons)).ToList();
 
+        // Cards something handed this character mid-fight — Claw 'Em grants
+        // Leap. They are ordinary deck cards marked "Dealt: No", so nobody
+        // starts holding them and nothing else has to know they were given.
+        foreach (string name in who.Granted)
+            if (DeckOf(who).All.FirstOrDefault(c =>
+                    c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is Card gift
+                && !hand.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                && (gift.Form.Length == 0 || gift.Form.Equals(who.Form, StringComparison.OrdinalIgnoreCase)))
+                hand.Add(gift);
+
+        // A card the owner holds but a pet carries out — the Florida Man holds
+        // Bite, the Gator is what bites. It is in his hand for exactly as long
+        // as he has that pet standing.
+        foreach (var proxy in DeckOf(who).All.Where(c => c.ActsAs.Length > 0))
+            if (SummonAlive(who, proxy.ActsAs)
+                && !hand.Any(c => c.Name.Equals(proxy.Name, StringComparison.OrdinalIgnoreCase)))
+                hand.Add(proxy);
+
+        // An expendable card is gone once played, for the rest of the level.
+        if (who.Spent.Count > 0)
+            hand = hand.Where(c => !who.Spent.Contains(c.Name)).ToList();
+
         if (who.Lost.Count > 0)
             hand = hand.Where(c => !who.Lost.Any(l =>
                 l.CardName.Equals(c.Name, StringComparison.OrdinalIgnoreCase))).ToList();

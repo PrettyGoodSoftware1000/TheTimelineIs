@@ -39,6 +39,9 @@ public class MowerRun
 
     public List<MowerBeat> Beats { get; } = new();
 
+    /// <summary>The caster's square. The machine is launched out of here.</summary>
+    public Point Start { get; private set; }
+
     /// <summary>Where it went up, or null if it somehow never did.</summary>
     public Point? Blast { get; private set; }
 
@@ -84,7 +87,7 @@ public class MowerRun
         Func<Point, bool> ground, Func<Point, string?> occupant,
         Func<Point, string, (int Damage, bool Killed)> strike, Random rng)
     {
-        var run = new MowerRun();
+        var run = new MowerRun { Start = start };
         var at = start;
         var dir = heading;
 
@@ -132,4 +135,24 @@ public class MowerRun
 
     /// <summary>Squares the mower actually passed over, in order, without repeats.</summary>
     public IEnumerable<Point> Path => Beats.Select(b => b.Tile);
+
+    /// <summary>
+    /// The square the machine was pointed away from on a given beat — the last
+    /// one before it that is a DIFFERENT square, or the caster's own if there
+    /// is none.
+    ///
+    /// Two beats can share a square: the first beat is the one it drives onto,
+    /// with nothing before it, and the blast at the end sits on the square it
+    /// arrived at. Asking "which way did it come?" of either of those with the
+    /// beat before it gives no direction at all, and the picture fell back to
+    /// facing south-east — so the mower was launched pointing the wrong way
+    /// and spun to face the wrong way again as it went up.
+    /// </summary>
+    public Point Approach(int beat)
+    {
+        var here = Beats[beat].Tile;
+        for (int i = beat - 1; i >= 0; i--)
+            if (Beats[i].Tile != here) return Beats[i].Tile;
+        return Start;
+    }
 }
