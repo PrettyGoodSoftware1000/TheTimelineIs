@@ -78,6 +78,51 @@ public static class ContentValidator
             var def = enemies.Get(name)!;
             CheckState(EnemyLibrary.Path, def.Line, name, def.Folder, def.Art, def.CastAnimation);
         }
+
+        OrphanedArt(classes, enemies, index, diag);
+    }
+
+    /// <summary>
+    /// Art nobody is going to draw: a folder under Cast that no class, form,
+    /// enemy or summon claims.
+    ///
+    /// The art folder IS the character's name, so "Dirt Bag" next to a class
+    /// called "Dirtbag" is a space nobody can see and a character who keeps
+    /// drawing as a cube with eight finished pictures sitting beside him. It
+    /// is the quietest kind of content mistake there is — nothing is missing,
+    /// nothing is misspelled anywhere a reader would look, and the game
+    /// starts perfectly happily.
+    /// </summary>
+    private static void OrphanedArt(ClassLibrary classes, EnemyLibrary enemies,
+        Platform.IContentIndex? index, Diagnostics diag)
+    {
+        if (index == null) return;
+
+        var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in classes.ClassNames)
+        {
+            var cls = classes.Get(name)!;
+            claimed.Add(cls.Folder);
+            // a summon's art lives inside its summoner's folder, so that one
+            // is spoken for too
+            if (cls.IsSummon) claimed.Add($"Content/Cast/PlayerCharacters/{cls.SummonedBy}");
+        }
+        foreach (var name in enemies.EnemyNames)
+            claimed.Add(enemies.Get(name)!.Folder);
+
+        foreach (string root in new[]
+                 { "Content/Cast/PlayerCharacters", "Content/Cast/EnemyCharacters" })
+            foreach (string folder in index.Folders(root))
+            {
+                string path = $"{root}/{folder}";
+                if (claimed.Contains(path)) continue;
+                // an empty folder is somewhere to put art, not a mistake
+                if (Pixel.DirectionalSprite.PosesOf(index, path, "").Count == 0) continue;
+                diag.Warn(path, 0,
+                    $"'{folder}' holds art but no class or enemy is called that, so none of it " +
+                    "is ever drawn. The folder name has to match the name in Classes.txt or " +
+                    "Enemies.txt exactly.");
+            }
     }
 
     /// <summary>
