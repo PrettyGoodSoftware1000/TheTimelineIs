@@ -33,6 +33,23 @@ public static class Facings
         _ => "north-west",
     };
 
+    /// <summary>
+    /// A direction back from the name a file or a level line writes it under
+    /// — "south-east". False when the word is not one of the eight, so a typo
+    /// in a level file is reported rather than quietly becoming south-east.
+    /// </summary>
+    public static bool TryParse(string name, out Facing8 facing)
+    {
+        foreach (var f in All)
+            if (f.FileName().Equals(name.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                facing = f;
+                return true;
+            }
+        facing = Default;
+        return false;
+    }
+
     /// <summary>Every direction, in compass order.</summary>
     public static readonly Facing8[] All =
     {

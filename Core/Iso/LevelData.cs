@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Microsoft.Xna.Framework;
 using TheTimelineIs.Core.Data;
+using TheTimelineIs.Core.Pixel;
 
 namespace TheTimelineIs.Core.Iso;
 
@@ -20,6 +21,13 @@ public class LevelDecoration
 {
     public int X, Y;
     public string File = "";    // in Content/Images/Decorations/; blocks its square
+
+    /// <summary>
+    /// Which way it is turned, for a decoration whose art is a folder of
+    /// rotations. Ignored by the rest, which are one picture and face
+    /// wherever they were drawn facing.
+    /// </summary>
+    public Pixel.Facing8 Facing = Pixel.Facings.Default;
 }
 
 /// <summary>
@@ -65,7 +73,7 @@ public class LevelTransition
 /// One isometric level: Content/Levels/{Name}.txt, one entity per line.
 ///
 ///   Block: x, y, height, type, room      (room '-' means a doorway square)
-///   Decoration: x, y, file
+///   Decoration: x, y, file[, facing]   facing only for the ones that turn
 ///   Enemy: x, y, name
 ///   PlayerStart: x, y
 ///   Trigger: x, y, dialogueName
@@ -206,7 +214,16 @@ public class LevelData
                     };
                     break;
                 case "decoration" when Num(0, out int dx) && Num(1, out int dy) && parts.Length >= 3:
-                    level.Decorations.Add(new LevelDecoration { X = dx, Y = dy, File = parts[2] });
+                    // a fourth field is the way it is turned, for the ones
+                    // that turn; anything else keeps the default and says so
+                    var facing = Pixel.Facings.Default;
+                    if (parts.Length >= 4 && parts[3].Length > 0 &&
+                        !Pixel.Facings.TryParse(parts[3], out facing))
+                        Diagnostics.Current.Error(path, lineNo,
+                            $"'{parts[3]}' is not a direction — " +
+                            $"use one of {string.Join(", ", Pixel.Facings.All.Select(f => f.FileName()))}");
+                    level.Decorations.Add(new LevelDecoration
+                        { X = dx, Y = dy, File = parts[2], Facing = facing });
                     break;
                 // Doors are gone: an area transition is the only doorway
                 // there is now. Said out loud rather than skipped, because a
@@ -260,7 +277,7 @@ public class LevelData
             copy.Blocks.Place(new Point(b.X, b.Y), new LevelBlock
                 { X = b.X, Y = b.Y, Height = b.Height, Type = b.Type, Room = b.Room });
         copy.Decorations.AddRange(Decorations.Select(d =>
-            new LevelDecoration { X = d.X, Y = d.Y, File = d.File }));
+            new LevelDecoration { X = d.X, Y = d.Y, File = d.File, Facing = d.Facing }));
         copy.Triggers.AddRange(Triggers.Select(t =>
             new LevelTrigger { X = t.X, Y = t.Y, Dialogue = t.Dialogue, Fired = t.Fired }));
         // Enemies and transitions were missing here, so the editor's undo
@@ -296,7 +313,9 @@ public class LevelData
             sb.AppendLine($"Block: {b.X}, {b.Y}, {b.Height}, {b.Type}, " +
                 (b.Room.Length > 0 ? b.Room : NoRoomToken));
         foreach (var d in Decorations.OrderBy(d => d.Y).ThenBy(d => d.X))
-            sb.AppendLine($"Decoration: {d.X}, {d.Y}, {d.File}");
+            sb.AppendLine(BlockCatalog.Turns(d.File)
+                ? $"Decoration: {d.X}, {d.Y}, {d.File}, {d.Facing.FileName()}"
+                : $"Decoration: {d.X}, {d.Y}, {d.File}");
         foreach (var e in Enemies)
             sb.AppendLine($"Enemy: {e.X}, {e.Y}, {e.Name}");
         foreach (var t in Triggers.OrderBy(t => t.Y).ThenBy(t => t.X))

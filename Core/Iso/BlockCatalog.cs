@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheTimelineIs.Core.Data;
+using TheTimelineIs.Core.Pixel;
 
 namespace TheTimelineIs.Core.Iso;
 
@@ -169,6 +170,38 @@ public static class BlockCatalog
     /// <summary>Whether a decoration has a separate picture for being open.</summary>
     public static bool HasOpenArt(string file) =>
         DecorationPath(file, open: true) != DecorationPath(file);
+
+    /// <summary>
+    /// A decoration listed as a FOLDER rather than a file turns: the folder
+    /// holds one picture per direction, named the way every other rotation in
+    /// the game is — south-east.png and so on.
+    ///
+    /// Same rule as a card's Projectile Art, and told apart the same way: a
+    /// name with a dot in it is one picture, a name without is a folder of
+    /// them. It is the only thing that has to be true for a new rotatable
+    /// decoration — drop the folder in, name it in Decorations.txt, done.
+    /// </summary>
+    public static bool Turns(string file) =>
+        !file.Contains('.') &&
+        Pixel.Facings.All.Any(f => AssetLoader.Exists($"{DecorationPath(file)}/{f.FileName()}.png"));
+
+    /// <summary>
+    /// The picture for one direction of a turning decoration, falling back
+    /// round the compass to the nearest direction that was actually drawn, so
+    /// four rotations are enough to ship with.
+    /// </summary>
+    public static string DecorationPath(string file, Pixel.Facing8 facing)
+    {
+        if (!Turns(file)) return DecorationPath(file);
+        for (int step = 0; step <= 4; step++)
+            foreach (int side in step == 0 ? new[] { 0 } : new[] { step, -step })
+            {
+                var near = Pixel.Facings.All[(((int)facing + side) % 8 + 8) % 8];
+                string path = $"{DecorationPath(file)}/{near.FileName()}.png";
+                if (AssetLoader.Exists(path)) return path;
+            }
+        return DecorationPath(file);
+    }
 
     /// <summary>Tests and the editor re-load content between runs.</summary>
     public static void Reset() { _pieces = null; _decorations = null; }

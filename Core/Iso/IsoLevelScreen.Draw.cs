@@ -245,8 +245,13 @@ public partial class IsoLevelScreen
             if (_level.DecorationAt(tile) is LevelDecoration deco)
             {
                 bool open = OpenedWayAt(tile);
-                Billboard(batch, BlockCatalog.DecorationPath(deco.File, open), tile, block.Height,
-                    (open && !BlockCatalog.HasOpenArt(deco.File)
+                // one that turns is drawn from the rotation it was placed at;
+                // the rest have one picture and an open state
+                string art = BlockCatalog.Turns(deco.File)
+                    ? BlockCatalog.DecorationPath(deco.File, deco.Facing)
+                    : BlockCatalog.DecorationPath(deco.File, open);
+                Billboard(batch, art, tile, block.Height,
+                    (open && !BlockCatalog.Turns(deco.File) && !BlockCatalog.HasOpenArt(deco.File)
                         ? Color.White * 0.35f : Color.White) * alpha);
             }
             if (_fires.ContainsKey(tile)) DrawFire(batch, tile, block.Height, alpha);
@@ -350,10 +355,26 @@ public partial class IsoLevelScreen
     /// </summary>
     private void DrawGate(SpriteBatch batch, Point tile, int height, float alpha)
     {
-        float pulse = 0.40f + 0.22f * (float)Math.Sin(_clock * 3.0);
-        Fill(batch, tile, height, new Color(150, 70, 230) * pulse * alpha);
+        // It lies FLAT, on the square rather than standing on it, so it is
+        // drawn into the diamond instead of billboarded like a tree. Both ends
+        // breathe on the same clock, which is what reads them as one thing.
+        float pulse = 0.78f + 0.22f * (float)Math.Sin(_clock * 3.0);
+        if (AssetLoader.Exists(GateArtPath))
+        {
+            var tex = _ctx.Assets.LoadTexture(GateArtPath);
+            var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
+            int w = IsoMath.TileW;
+            int h = (int)(w * tex.Height / (float)tex.Width);
+            batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y - h / 2f), w, h),
+                Color.White * pulse * alpha);
+            return;
+        }
+        Fill(batch, tile, height, new Color(150, 70, 230) * (pulse - 0.38f) * alpha);
         Edge(batch, tile, height, new Color(220, 170, 255) * alpha);
     }
+
+    /// <summary>The Vessel's gate, lying open on a square. A wash when it is not drawn yet.</summary>
+    private const string GateArtPath = "Content/Images/Pixel/Effects/VesselGate.png";
 
     /// <summary>
     /// How far back along its angle a sky shot starts, in art pixels. Well

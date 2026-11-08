@@ -1,6 +1,11 @@
 # Decorations placeable in the editor; each blocks its square.
 # Pixel art, drawn at its own size, hung by its bottom on the square's centre.
 #
+# TURNING. A line naming a FOLDER instead of a .png is a decoration that
+# turns: the folder holds one picture per direction, named south-east.png and
+# so on, exactly like a card's Projectile Art. The editor rotates it with the
+# mouse wheel and writes the direction into the level file beside it.
+#
 # TWO STATES. A decoration standing on an area transition shows an open state
 # once that way has been opened. The open picture is this one's name with
 # " Open" on the end - Door.png and Door Open.png - and needs no line of its
@@ -13,3 +18,4 @@ trash can 01.png
 trash can 02.png
 trash can 03.png
 old tires 03.png
+StandingPortal

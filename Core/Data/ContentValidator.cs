@@ -386,10 +386,21 @@ public static class ContentValidator
                     $"piece '{piece.File}' has no Anchor, so it will draw off the grid — " +
                     "set one with the editor's Anchor button");
         }
+        // A decoration is one picture, or a folder of rotations. A name with
+        // no dot and no rotations in it is neither, and would draw nothing at
+        // all once somebody put it on a map.
         foreach (var deco in BlockCatalog.Decorations)
-            if (!AssetLoader.Exists(BlockCatalog.DecorationPath(deco)))
+        {
+            if (BlockCatalog.Turns(deco)) continue;
+            if (!deco.Contains('.'))
+                diag.Error(BlockCatalog.DecorationsIndex, 0,
+                    $"decoration '{deco}' has no '.' so it is read as a folder of rotations, " +
+                    $"but {BlockCatalog.DecorationPath(deco)} holds none — add south-east.png " +
+                    "and the rest, or name the file itself");
+            else if (!AssetLoader.Exists(BlockCatalog.DecorationPath(deco)))
                 diag.Error(BlockCatalog.DecorationsIndex, 0,
                     $"decoration '{deco}' not found at {BlockCatalog.DecorationPath(deco)}");
+        }
 
         var destinations = DestinationTable.Load();
         if (destinations.All.Count == 0)

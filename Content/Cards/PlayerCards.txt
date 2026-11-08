@@ -270,7 +270,7 @@ Action Points: 1
 Friendly Fire: No
 Stops Movement: Yes
 Range: 5
-Projectile Art: Circle.png
+Projectile Art: Knife
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20

@@ -326,6 +326,28 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         return (RandomBrush ? pieces[Rng.Next(pieces.Count)]
                             : pieces[Math.Clamp(_pieceIndex, 0, pieces.Count - 1)]).File;
     }
+    /// <summary>
+    /// Which way the decoration brush is turned. One setting for the brush,
+    /// not per square: you point it the way you want and then place as many
+    /// as you like, the way the height works.
+    /// </summary>
+    private Facing8 _decoFacing = Facings.Default;
+
+    /// <summary>Whether the wheel should be turning something rather than raising it.</summary>
+    private bool RotatingDeco =>
+        _tool == Tool.Decoration && BlockCatalog.Decorations.Count > 0 && BlockCatalog.Turns(DecoFile);
+
+    /// <summary>The decoration the brush will place, as Decorations.txt writes it.</summary>
+    private string DecoFile => BlockCatalog.Decorations.Count > 0
+        ? BlockCatalog.Decorations[Math.Clamp(_decoIndex, 0, BlockCatalog.Decorations.Count - 1)] : "";
+
+    /// <summary>Wheel up turns it one eighth one way, wheel down the other.</summary>
+    private void TurnDeco(int steps)
+    {
+        int at = Array.IndexOf(Facings.All, _decoFacing);
+        _decoFacing = Facings.All[((at + steps) % 8 + 8) % 8];
+    }
+
     private string DecoName => BlockCatalog.Decorations.Count > 0
         ? BlockCatalog.Decorations[Math.Clamp(_decoIndex, 0, BlockCatalog.Decorations.Count - 1)] : "-";
     private string EnemyName => _ctx.Enemies.EnemyNames.Count > 0
@@ -416,7 +438,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         ["terrain"] = "paint ground that blends into its neighbours",
         ["family"] = "pick a set of one-off ground art, for squares terrain cannot do",
         ["piece"] = "which piece of that set, or Random to scatter them",
-        ["deco"] = "a tree, a rock: something standing on a square, blocking it",
+        ["deco"] = "a tree, a rock: something standing on a square, blocking it. "
+                   + "The wheel turns the ones that turn",
         ["door"] = "paint two pads, then right-click one and its far end to join them",
         ["enemy"] = "drop one enemy per click on a square that has ground",
         ["start"] = "where the party stands when the level opens, up to four",
@@ -694,11 +717,16 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             return;   // clicks on the bar never fall through to the ground
         }
         UpdateHotkeys(input);
-        // the wheel sets the placement height; with Ctrl it zooms instead,
-        // in whole steps, so a pixel stays a whole number of screen pixels
+        // The wheel sets the placement height; with Ctrl it zooms instead, in
+        // whole steps, so a pixel stays a whole number of screen pixels.
+        //
+        // While a turning decoration is the brush it TURNS that instead. A
+        // thing that stands on a square cannot be raised off it anyway, so
+        // the wheel has nothing else to do there.
         if (input.ScrollDelta != 0)
         {
             if (input.CtrlHeld) _camera.ZoomBy(Math.Sign(input.ScrollDelta), input.RawPointer);
+            else if (RotatingDeco) TurnDeco(input.ScrollDelta);
             else _height = Math.Clamp(_height + input.ScrollDelta, 0, 12);
         }
 
@@ -1041,7 +1069,11 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             case Tool.Decoration when _level.BlockAt(tile) != null && BlockCatalog.Decorations.Count > 0:
                 _level.Decorations.RemoveAll(d => d.X == tile.X && d.Y == tile.Y);
                 _level.Decorations.Add(new LevelDecoration
-                    { X = tile.X, Y = tile.Y, File = BlockCatalog.Decorations[_decoIndex] });
+                {
+                    X = tile.X, Y = tile.Y,
+                    File = BlockCatalog.Decorations[_decoIndex],
+                    Facing = _decoFacing,
+                });
                 break;
             case Tool.Enemy when _level.BlockAt(tile) != null && _ctx.Enemies.EnemyNames.Count > 0:
                 _level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y);
@@ -1230,6 +1262,9 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             if (which >= 0)
             {
                 _decoIndex = which;
+                // the eyedropper takes the way it is turned too, so copying
+                // one portal and placing another gives you the same portal
+                if (BlockCatalog.Turns(deco.File)) _decoFacing = deco.Facing;
                 _tool = Tool.Decoration;
                 Status($"picked up {Strip(deco.File)} - the ground under it is untouched");
                 return;
@@ -1590,7 +1625,10 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             if (_level.BlockAt(tile) != b) continue;
 
             if (_level.DecorationAt(tile) is LevelDecoration deco)
-                Billboard(batch, BlockCatalog.DecorationPath(deco.File), tile, b.Height, origin, Color.White);
+                Billboard(batch, BlockCatalog.Turns(deco.File)
+                        ? BlockCatalog.DecorationPath(deco.File, deco.Facing)
+                        : BlockCatalog.DecorationPath(deco.File),
+                    tile, b.Height, origin, Color.White);
             // An enemy goes down when the LAST square of its body is painted,
             // not the first. Drawn on its anchor, a body covering more than one
             // tile was buried by its own other squares — every one of them has
@@ -1801,6 +1839,60 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         DrawTop(batch, cursor.X, cursor.Y, cursorHeight, origin, Color.Yellow * 0.3f);
         Label(IsoMath.ToScreen(cursor.X, cursor.Y, cursorHeight, origin),
             Tall(cursorHeight), Color.Yellow, 0.36f);
+
+        if (RotatingDeco) DrawRotateHint(batch, cursor, cursorHeight, origin);
+    }
+
+    /// <summary>
+    /// What the brush is about to place, and the two curved arrows that say
+    /// the wheel will turn it.
+    ///
+    /// The ghost matters more than the arrows: a portal has a front and a
+    /// back, and being told which way it will face BEFORE it goes down is the
+    /// whole reason the wheel does this. The arrows are there so nobody has
+    /// to be told the wheel does it.
+    /// </summary>
+    private void DrawRotateHint(SpriteBatch batch, Point cursor, int height, Vector2 origin)
+    {
+        Billboard(batch, BlockCatalog.DecorationPath(DecoFile, _decoFacing),
+            cursor, height, origin, Color.White * 0.55f);
+
+        var c = IsoMath.ToScreen(cursor.X, cursor.Y, height, origin);
+        var ink = new Color(190, 140, 255);
+        // an ellipse on the ground, not a circle: the grid is seen at an angle
+        float rx = IsoMath.TileW * 0.72f, ry = IsoMath.TileH * 0.72f;
+        TurnArrow(batch, c, rx, ry, 200f, 340f, ink);
+        TurnArrow(batch, c, rx, ry, 20f, 160f, ink);
+
+        Label(c + new Vector2(0, IsoMath.TileH * 1.1f), _decoFacing.FileName(), ink, 0.30f);
+    }
+
+    /// <summary>
+    /// One curved arrow lying on the ground, swept between two angles with a
+    /// head on the end it is pointing at.
+    /// </summary>
+    private void TurnArrow(SpriteBatch batch, Vector2 centre, float rx, float ry,
+        float fromDeg, float toDeg, Color color)
+    {
+        Vector2 At(float deg)
+        {
+            float r = MathHelper.ToRadians(deg);
+            return centre + new Vector2((float)Math.Cos(r) * rx, (float)Math.Sin(r) * ry);
+        }
+
+        const int Steps = 16;
+        var prev = At(fromDeg);
+        for (int i = 1; i <= Steps; i++)
+        {
+            var next = At(MathHelper.Lerp(fromDeg, toDeg, i / (float)Steps));
+            Line(batch, prev, next, color, 3f);
+            prev = next;
+        }
+        // the head points along the sweep, so the pair read as turning rather
+        // than as a ring drawn round the square
+        var tip = At(toDeg);
+        var back = At(MathHelper.Lerp(fromDeg, toDeg, (Steps - 2) / (float)Steps));
+        Arrow(batch, back, tip, color);
     }
 
     private void DrawToolbar(SpriteBatch batch)
