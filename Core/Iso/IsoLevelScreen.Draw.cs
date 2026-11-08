@@ -70,9 +70,18 @@ public partial class IsoLevelScreen
     {
         if (c.CastFrames is { Count: > 0 } cast)
             return cast[Math.Clamp((int)(c.CastAnimTime * DirectionalSprite.Fps), 0, cast.Count - 1)];
-        if (MovingToward(c) == null) return null;
-        if (_ctx.Sprites.MoveFrames(c, _mode != Mode.Explore) is not { } walk) return null;
-        return walk[(int)(_clock * DirectionalSprite.Fps) % walk.Count];
+        if (MovingToward(c) != null &&
+            _ctx.Sprites.MoveFrames(c, _mode != Mode.Explore) is { Count: > 0 } walk)
+            return walk[(int)(_clock * DirectionalSprite.Fps) % walk.Count];
+
+        // Doing nothing is still something to draw. An idle animation loops
+        // in place of the still rotation for anybody who has one — an imp
+        // hovers while it stands about and while it waits for its turn.
+        // Everyone shares one clock, so a row of them does not beat in step
+        // only because they were all drawn on the same frame.
+        if (_ctx.Sprites.FirstFrames(c, DirectionalSprite.Idle) is { Count: > 0 } idle)
+            return idle[(int)(_clock * DirectionalSprite.Fps + c.OccurrenceIndex * 3) % idle.Count];
+        return null;
     }
 
     /// <summary>
@@ -559,8 +568,28 @@ public partial class IsoLevelScreen
     /// Whether somebody's bars are up: the selected party, whoever the mouse
     /// is over on the board or in the turn strip, and everybody under Ctrl.
     /// </summary>
-    private bool ShowsBars(CharacterInstance c) =>
-        _ctrl || Picked.Contains(c) || c == _hoveredCast || c == _stripHover;
+    private bool ShowsBars(CharacterInstance c)
+    {
+        // Ctrl and the mouse always win: holding Ctrl to read the board, or
+        // pointing at somebody, is asking for that one's bars whatever the
+        // setting says.
+        if (_ctrl || c == _hoveredCast || c == _stripHover) return true;
+        return _ctx.Settings.Bars switch
+        {
+            BarVisibility.Always => true,
+            BarVisibility.Damaged => Picked.Contains(c) || Hurt(c),
+            _ => Picked.Contains(c),
+        };
+    }
+
+    /// <summary>
+    /// Whether either bar is short of full — including the pale ghost still
+    /// sliding down, so a bar does not blink out halfway through its own
+    /// animation on the hit that took it back to full.
+    /// </summary>
+    private static bool Hurt(CharacterInstance c) =>
+        c.Hp < c.MaxHp || c.ShownHp > c.Hp ||
+        (!c.MindImmune && (c.Mind < c.MaxMind || c.ShownMind > c.Mind));
 
     /// <summary>
     /// Health and mind bars filled into two boxes. Used over heads on the board
@@ -590,8 +619,13 @@ public partial class IsoLevelScreen
         if (armW > 0)
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, armW, back.Height),
                 new Color(168, 172, 180));
-        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, back.Width, 1),
-            Color.Black * 0.5f);
+
+        // One division per point of health, so the bar can be counted rather
+        // than estimated. Armour is part of the span, so a character with
+        // armour up has more divisions than points of health, which is the
+        // truth about what has to be chewed through.
+        Pips(batch, back, span);
+        Outline(batch, back);
 
         // The mind bar under it. Purple for anything with nerve to lose; grey
         // for a Living Stone, which has none to lose and is drawn full.
@@ -610,7 +644,46 @@ public partial class IsoLevelScreen
         }
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(mindBar.X, mindBar.Y, mindW, mindBar.Height),
             c.MindImmune ? new Color(130, 130, 138) : new Color(150, 60, 200));
+        Outline(batch, mindBar);
     }
+
+    /// <summary>A one-pixel white edge, drawn last so nothing paints over it.</summary>
+    private void Outline(SpriteBatch batch, Rectangle r)
+    {
+        if (r.Width <= 2 || r.Height <= 2) return;
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(r.X, r.Y, r.Width, 1), Color.White);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(r.X, r.Bottom - 1, r.Width, 1), Color.White);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(r.X, r.Y, 1, r.Height), Color.White);
+        Ui.FillRect(batch, _ctx.Pixel, new Rectangle(r.Right - 1, r.Y, 1, r.Height), Color.White);
+    }
+
+    /// <summary>
+    /// The dividing lines that cut a health bar into one box per point.
+    ///
+    /// They are drawn only while they would leave something to see between
+    /// them. A Werewitch has eighty health in a bar forty pixels wide: a line
+    /// every half pixel is not eighty boxes, it is a white bar, and it would
+    /// cost the player the one thing the bar is for. So below
+    /// <see cref="PipMinPx"/> of colour per point the divisions are left off
+    /// and the bar reads as a bar. The bars under the turn strip are far
+    /// wider and keep theirs much longer.
+    /// </summary>
+    private void Pips(SpriteBatch batch, Rectangle bar, int points)
+    {
+        if (points <= 1) return;
+        float each = bar.Width / (float)points;
+        if (each < PipMinPx) return;
+        for (int i = 1; i < points; i++)
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(bar.X + (int)Math.Round(i * each), bar.Y, 1, bar.Height),
+                Color.White);
+    }
+
+    /// <summary>
+    /// How much bar one point of health has to be worth before it is given
+    /// its own box: the dividing line plus two pixels of colour to read.
+    /// </summary>
+    private const float PipMinPx = 3f;
 
 
     /// <summary>How big a status icon is, in art pixels.</summary>

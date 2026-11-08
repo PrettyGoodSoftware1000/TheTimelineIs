@@ -21,6 +21,12 @@ public class GameContext
     public required ISaveStore SaveStore;
     public required Texture2D Pixel;
     public required GameConfig Config;
+
+    /// <summary>
+    /// What the player chose in Settings. Not a save and not content: a
+    /// preference about looking at the game, kept for the session.
+    /// </summary>
+    public PlayerSettings Settings = new();
     /// <summary>Cards the party plays.</summary>
     public required CardLibrary Cards;
 

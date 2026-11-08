@@ -278,6 +278,7 @@ public partial class IsoLevelScreen
         {
             _mode = Mode.EnemyTurn;
             _enemyHold = EnemyHoldSeconds;
+            _glideWait = 0f;
         }
     }
 

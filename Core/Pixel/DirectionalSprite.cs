@@ -36,6 +36,17 @@ public class DirectionalSprite
     public static readonly string[] Run = { "Run", "Running" };
 
     /// <summary>
+    /// Doing nothing: standing, or waiting its turn. It loops in place of the
+    /// still rotation for anybody who has one drawn, so an imp hovers instead
+    /// of hanging in the air like a sticker.
+    ///
+    /// Several spellings for the same reason the cast animation takes
+    /// several: the folder is called whatever the person drawing it typed.
+    /// </summary>
+    public static readonly string[] Idle =
+        { "Idle", "Hover", "Hovering", "Flying", "Fly", "Float", "Floating", "Breathing" };
+
+    /// <summary>
     /// The animation played when a card is cast and nothing more specific was
     /// asked for — not the card's own line, not the class's.
     ///

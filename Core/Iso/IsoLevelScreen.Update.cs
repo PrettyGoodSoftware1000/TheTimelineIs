@@ -128,8 +128,13 @@ public partial class IsoLevelScreen
             case Mode.StealPick: UpdateStealPick(input); break;
             case Mode.Acting: UpdateAction(dt); break;
             case Mode.EnemyTurn:
-                // the camera glides over first and the player gets a beat to
-                // see who is up; panning away in the meantime cancels the glide
+                // The camera glides over first, and the beat only starts once
+                // it has ARRIVED — counting it down during the slide spent
+                // most of the pause watching the screen catch up rather than
+                // looking at whoever is about to act. Panning away cancels the
+                // glide, which starts the beat early, which is what somebody
+                // taking the camera off it is asking for.
+                if (_glideTo != null && _glideWait < GlideWaitMax) { _glideWait += dt; break; }
                 if (_enemyHold > 0f) _enemyHold -= dt;
                 else EnemyAct();
                 break;
@@ -601,6 +606,16 @@ public partial class IsoLevelScreen
     private float _stunHold;
 
     /// <summary>How long an enemy waits, once its turn comes up, before it does anything.</summary>
-    private const float EnemyHoldSeconds = 1f;
+    private const float EnemyHoldSeconds = 2f;
+
+    /// <summary>
+    /// The longest the beat before an enemy acts will wait for the camera to
+    /// finish sliding. The glide always converges today, but a turn that
+    /// never comes is the worst thing this screen could do, and it would be
+    /// one clamp or one zero-sized window away. After this the beat starts
+    /// wherever the camera has got to.
+    /// </summary>
+    private const float GlideWaitMax = 1.5f;
+    private float _glideWait;
     private float _enemyHold;
 }
