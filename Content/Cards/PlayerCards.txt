@@ -319,7 +319,7 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: Spring 5 squares, free, on whatever is left of the claw.
+Card Text: It's time to pounce. 
 Bottom Right: 0 Spring
 []
 
@@ -359,7 +359,7 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: Return to your real form. Move fast.
+Card Text: Return to your true form and gain LEAP.
 Bottom Right: 0 Change
 []
 
@@ -398,7 +398,7 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: Lift a card off anyone - friend or foe. They lose it, you hold it. Play it now, or on either of your next 2 turns.
+Card Text: Nick a card and use it yourself. 
 Bottom Right: 0 Stolen
 []
 
