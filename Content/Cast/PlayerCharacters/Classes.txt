@@ -28,7 +28,7 @@ Colour: 73, 66, 56
 
 Class: Gun-O-Mancer
 HP: 20
-Movement: 4
+Movement: 5
 Actions: 2
 Colour: 97, 92, 92
 

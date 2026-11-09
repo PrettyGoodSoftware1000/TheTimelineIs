@@ -287,10 +287,14 @@ public partial class IsoLevelScreen
         if (hovered >= 0)
             DrawCard(batch, _hand[hovered], drawn[hovered], true);
 
-        // Whatever the player is looking at is what the panel explains: the
-        // card under the pointer, or failing that the one already armed.
-        var reading = hovered >= 0 ? _hand[hovered] : _selectedCard;
-        DrawCardText(batch, reading);
+        // Whatever the player is looking at is what the info window explains.
+        // A card under the pointer wins, then a character under it, then
+        // whatever card is already armed — the pointer can only be in one of
+        // those places at a time, so the order only settles the leftovers.
+        var reading = hovered >= 0 ? _hand[hovered] : null;
+        var looking = reading == null ? (_hoveredCast ?? _stripHover) : null;
+        if (reading == null && looking == null) reading = _selectedCard;
+        DrawInfoWindow(batch, reading, looking);
 
         // The key that plays each card, over its top edge — the grown card's
         // edge when hovered, so the number rides above it instead of sitting
@@ -304,16 +308,32 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>
-    /// A card's own words, in the panel to the left of the hand.
+    /// The info window: a card's own words, or everything happening to a
+    /// character right now.
     ///
-    /// Nothing is drawn at all when no card is being looked at: an empty box
+    /// Nothing is drawn at all when there is nothing to say: an empty box
     /// sitting there is furniture, and the corner is better given back to the
     /// board.
     /// </summary>
-    private void DrawCardText(SpriteBatch batch, Card? card)
+    private void DrawInfoWindow(SpriteBatch batch, Card? card, CharacterInstance? who)
     {
-        if (card == null || card.CardText.Length == 0) return;
-        if (CardTextPanel() is not Rectangle panel) return;
+        var rows = who == null ? new List<Status>() : StatusesOn(who);
+        string title = card != null ? Caps(card.Name) : who?.Name ?? "";
+        string body = card?.CardText ?? "";
+        if (title.Length == 0 || (card != null && body.Length == 0)) return;
+        if (who != null && rows.Count == 0) body = _ctx.Strings.Get("iso_nothing_on");
+
+        // measured first, because the window is built to fit what goes in it
+        if (InfoWindow(InfoMinH) is not Rectangle probe) return;
+        int pad = 34;
+        int innerW = probe.Width - pad * 2;
+        float nameH = Ui.MeasureWrapped(_ctx.Font, title, innerW, Pt(InfoNamePt));
+        float bodyH = body.Length == 0 ? 0
+            : _ctx.Font.MeasureString(Ui.Wrap(_ctx.Font, body, innerW, Pt(InfoBodyPt))).Y
+              * Pt(InfoBodyPt) + 24;
+        int rowsW = innerW - (InfoRowH - 12) - 16;
+        int wanted = (int)(pad * 2 + nameH + 24 + bodyH + rows.Sum(r => RowHeight(r, rowsW)));
+        if (InfoWindow(wanted) is not Rectangle panel) return;
 
         Ui.FillRect(batch, _ctx.Pixel, panel, new Color(16, 16, 24, 235));
         int bw = 5;
@@ -323,17 +343,109 @@ public partial class IsoLevelScreen
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(panel.X, panel.Y, bw, panel.Height), edge);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(panel.Right - bw, panel.Y, bw, panel.Height), edge);
 
-        int pad = 34;
-        var inner = new Rectangle(panel.X + pad, panel.Y + pad,
-            panel.Width - pad * 2, panel.Height - pad * 2);
+        var inner = new Rectangle(panel.X + pad, panel.Y + pad, innerW, panel.Height - pad * 2);
+        float y = inner.Y + Ui.DrawWrappedCentered(batch, _ctx.Font, title,
+            new Rectangle(inner.X, inner.Y, inner.Width, 0), Color.White, Pt(InfoNamePt)) + 24;
 
-        float nameH = Ui.DrawWrappedCentered(batch, _ctx.Font, card.Name,
-            new Rectangle(inner.X, inner.Y, inner.Width, 0), Color.White, Pt(CardTextNamePt));
+        if (body.Length > 0)
+        {
+            batch.DrawString(_ctx.Font, Ui.Wrap(_ctx.Font, body, inner.Width, Pt(InfoBodyPt)),
+                new Vector2(inner.X, y), Color.White * 0.85f, 0f, Vector2.Zero,
+                Pt(InfoBodyPt), SpriteEffects.None, 0f);
+            y += bodyH;
+        }
 
-        batch.DrawString(_ctx.Font,
-            Ui.Wrap(_ctx.Font, card.CardText, inner.Width, Pt(CardTextBodyPt)),
-            new Vector2(inner.X, inner.Y + nameH + 24), Color.White * 0.85f,
-            0f, Vector2.Zero, Pt(CardTextBodyPt), SpriteEffects.None, 0f);
+        // The mark on the left, then what it is and what it does, starting on
+        // the icon's own line and wrapping under itself if the words need it.
+        // Shrinking a long one to fit a single line was legible at about
+        // four point, which is a way of not showing it at all.
+        foreach (var row in rows)
+        {
+            int icon = InfoRowH - 12;
+            var box = new Rectangle(inner.X, (int)y + 6, icon, icon);
+            if (row.Icon != null && AssetLoader.Exists(row.Icon))
+                batch.Draw(_ctx.Assets.LoadTexture(row.Icon), box, Color.White);
+            else
+                Ui.FillRect(batch, _ctx.Pixel, box, row.Tint);
+
+            int textX = box.Right + 16;
+            int textW = inner.Right - textX;
+            string line = $"{row.Name} - {row.Detail}";
+            batch.DrawString(_ctx.Font, Ui.Wrap(_ctx.Font, line, textW, Pt(InfoRowPt)),
+                new Vector2(textX, y + 4), Color.White * 0.9f, 0f, Vector2.Zero,
+                Pt(InfoRowPt), SpriteEffects.None, 0f);
+            y += RowHeight(row, textW);
+        }
+    }
+
+    /// <summary>How tall one effect row comes out once its words have wrapped.</summary>
+    private float RowHeight(Status row, int textW) =>
+        Math.Max(InfoRowH,
+            Ui.MeasureWrapped(_ctx.Font, $"{row.Name} - {row.Detail}", textW, Pt(InfoRowPt)) + 12);
+
+    /// <summary>One thing currently true of somebody, as the info window lists it.</summary>
+    private readonly record struct Status(string Name, string Detail, string? Icon, Color Tint);
+
+    private static string Fx(string file) => $"Content/Images/Pixel/Effects/{file}";
+
+    /// <summary>
+    /// Everything happening to a character, in the order it matters: what is
+    /// hurting them, then what is holding them, then what they are doing.
+    ///
+    /// Marks that already have a picture on the board use the same picture
+    /// here, so the thing under their feet and the line in the window are
+    /// obviously the same thing. The rest get a coloured block — inventing
+    /// eight more icons to say "armour" is not what this needed.
+    /// </summary>
+    private List<Status> StatusesOn(CharacterInstance c)
+    {
+        var all = new List<Status>();
+        string S(string key, params (string, string)[] args) => _ctx.Strings.Format(key, args);
+
+        if (c.BurningStacks > 0)
+            all.Add(new Status(S("fx_burning"),
+                S("fx_burning_d", ("dmg", (c.BurningStacks * Data.Effects.BurnDamagePerStack).ToString())),
+                Fx("Flame.png"), new Color(255, 120, 30)));
+        if (c.IsHexed)
+            all.Add(new Status(S("fx_hex"),
+                S("fx_hex_d", ("dmg", c.Hexes.Sum(h => h.Amount).ToString()),
+                    ("turns", c.Hexes.Max(h => h.Turns).ToString())),
+                Fx("Knife/south-east.png"), new Color(200, 200, 210)));
+        if (c.CurseBonus > 0)
+            all.Add(new Status(S("fx_curse"), S("fx_curse_d", ("bonus", c.CurseBonus.ToString())),
+                null, new Color(180, 90, 230)));
+        if (c.IsVulnerable)
+            all.Add(new Status(S("fx_vulnerable"), S("fx_vulnerable_d"),
+                Fx("Bullseye.png"), new Color(255, 200, 60)));
+        if (c.Armor > 0)
+            all.Add(new Status(S("fx_armor"), S("fx_armor_d", ("armor", c.Armor.ToString())),
+                null, new Color(168, 172, 180)));
+        if (c.IsStunned)
+            all.Add(new Status(S("fx_stun"), S("fx_stun_d", ("turns", c.StunTurns.ToString())),
+                Fx("Stun.png"), new Color(120, 180, 255)));
+        if (c.IsAfraid)
+            all.Add(new Status(S("fx_fear"), S("fx_fear_d", ("turns", c.FearTurns.ToString())),
+                null, new Color(150, 60, 200)));
+        if (c.IsLurking)
+            all.Add(new Status(S("fx_lurk"),
+                S("fx_lurk_d", ("range", c.LurkReach.ToString()), ("dmg", c.LurkDamage.ToString())),
+                null, new Color(60, 60, 80)));
+        if (c.IsGuarding && !c.IsLurking)
+            all.Add(new Status(S("fx_guard"),
+                S("fx_guard_d", ("shots", c.Watch.Shots.ToString()), ("dmg", c.Watch.Damage.ToString())),
+                Fx("Skull.png"), new Color(210, 40, 40)));
+        if (c.IsChannelling)
+            all.Add(new Status(S("fx_channel"), S("fx_channel_d", ("card", Caps(c.ChannellingCard))),
+                null, new Color(120, 200, 255)));
+        if (c.FreeCard)
+            all.Add(new Status(S("fx_free"), S("fx_free_d"), null, new Color(255, 215, 90)));
+        foreach (var loot in c.Stolen)
+            all.Add(new Status(S("fx_stolen"), S("fx_stolen_d", ("card", Caps(loot.CardName))),
+                null, new Color(90, 200, 140)));
+        foreach (var lost in c.Lost)
+            all.Add(new Status(S("fx_lost"), S("fx_lost_d", ("card", Caps(lost.CardName))),
+                null, new Color(200, 90, 90)));
+        return all;
     }
 
     /// <summary>
@@ -391,7 +503,7 @@ public partial class IsoLevelScreen
         // The card's own words are NOT on the card any more — they are read
         // in the panel to the left, one card at a time. See DrawCardText. All
         // the card itself carries is its name, what it costs and what it does.
-        Ui.DrawWrappedCentered(batch, _ctx.Font, card.Name,
+        Ui.DrawWrappedCentered(batch, _ctx.Font, Caps(card.Name),
             new Rectangle(inner.X, (int)nameTop, inner.Width, 0), ink, Pt(CardNamePt) * s);
 
         int hitCount = card.TargetsGround && _blastSet.Count > 0

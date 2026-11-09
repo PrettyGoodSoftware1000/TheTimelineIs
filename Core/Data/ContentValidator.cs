@@ -254,7 +254,10 @@ public static class ContentValidator
                     $"'{card.Name}': FireTiles needs ground to burn, so the card should be " +
                     "AoE damage or a [cone]");
 
-            if (card.Delivery == Delivery.Cone && card.Kind != CardKind.AoEDamage)
+            // A planted card is the exception: its cone is the ground it
+            // WATCHES, and what it does happens later, to one body at a time.
+            if (card.Delivery == Delivery.Cone && card.Kind != CardKind.AoEDamage
+                && !card.IsAimedGuard)
                 diag.Warn(card.Source, card.Line,
                     $"'{card.Name}': a [cone] card should be 'AoE damage' — the cone is its area");
         }
@@ -560,12 +563,20 @@ public static class ContentValidator
             "iso_enter", "iso_explore_hint", "iso_clear",
             "iso_afraid", "iso_mind_damage", "iso_mind_immune", "iso_mind_took",
             "iso_mind_held", "iso_mind_back", "iso_mind_broken", "iso_mind_shaken", "iso_fear_flees",
-            "iso_end_turn", "iso_move_left", "iso_out_of_range",
+            "iso_end_turn", "iso_move_left", "iso_out_of_range", "iso_no_back",
             "iso_door_open", "iso_victory", "iso_card_range", "iso_card_expendable", "iso_transition",
             "iso_move_spent", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
-            "iso_cursed", "iso_form", "iso_granted", "replay_recording",
+            "iso_cursed", "iso_form", "iso_granted", "iso_nothing_on",
+            "fx_burning", "fx_burning_d", "fx_hex", "fx_hex_d", "fx_curse", "fx_curse_d",
+            "fx_vulnerable", "fx_vulnerable_d", "fx_armor", "fx_armor_d", "fx_stun", "fx_stun_d",
+            "fx_fear", "fx_fear_d", "fx_lurk", "fx_lurk_d", "fx_guard", "fx_guard_d",
+            "fx_channel", "fx_channel_d", "fx_free", "fx_free_d", "fx_stolen", "fx_stolen_d",
+            "fx_lost", "fx_lost_d", "iso_lurking", "iso_lurk_strikes",
+            "iso_freecast", "iso_freecast_spent", "iso_hexed", "iso_hex_moved", "iso_shoved",
+            "iso_devoured", "iso_devour_missed", "iso_stop_channel", "iso_yes", "iso_no",
+            "iso_channel_lands", "iso_channel_dropped", "replay_recording",
             "iso_menu_title", "iso_menu_resume", "iso_menu_settings", "iso_menu_back",
             "set_bars", "set_bars_always", "set_bars_selected", "set_bars_damaged",
             "iso_gate_opened", "iso_gate_used", "iso_gate_blocked", "iso_pet_turn", "iso_summoned", "iso_summon_no_room", "iso_summon_already",

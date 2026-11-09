@@ -113,6 +113,13 @@ public static class Ui
     }
 
     /// <summary>
+    /// How tall wrapped text will come out, without drawing any of it. For
+    /// anything that has to be built to fit its own contents.
+    /// </summary>
+    public static float MeasureWrapped(SpriteFont font, string text, float width, float scale) =>
+        Wrap(font, text, width, scale).Split('\n').Length * font.LineSpacing * scale;
+
+    /// <summary>
     /// <paramref name="scale"/>, or just enough less for the text to fit the
     /// width. Two labels sharing a row can each be given half of it and neither
     /// can then run into the other, however long the words turn out to be.

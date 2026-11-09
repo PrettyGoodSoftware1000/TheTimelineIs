@@ -176,7 +176,7 @@ public partial class IsoLevelScreen
                     break;
 
                 case ReplayEventKind.Card when who != null:
-                    Log(_ctx.Strings.Format("replay_card", ("name", e.Who), ("card", e.Card)));
+                    Log(_ctx.Strings.Format("replay_card", ("name", e.Who), ("card", Caps(e.Card))));
                     StartCastAnimation(who, CardNamed(e.Card));
                     break;
 

@@ -111,12 +111,47 @@ public static class Effects
     /// </summary>
     public const string Gate = "Gate";
 
+    /// <summary>
+    /// Lurk N: the caster goes still and goes unseen. Anything that moves
+    /// within N squares of them is stabbed. Enemies choosing a target cannot
+    /// see them at all while it holds — a blast that happens to cover them
+    /// still will, because that is aimed at the ground, not at a person.
+    /// </summary>
+    public const string Lurk = "Lurk";
+
+    /// <summary>
+    /// Devour N: anything already below N PERCENT of its full health dies
+    /// outright. Above that the card does nothing at all, which is what makes
+    /// it worth looking before you bite.
+    /// </summary>
+    public const string Devour = "Devour";
+
+    /// <summary>
+    /// Hex N: the victim takes the card's damage again at the start of each
+    /// of their next N turns. If they die with the hex still running it moves
+    /// to somebody else on their side and goes on counting. It lands as MELEE
+    /// damage, so a Curse makes every tick of it worse.
+    /// </summary>
+    public const string Hex = "Hex";
+
+    /// <summary>
+    /// Shove N: the victim is pushed N squares directly away from the caster,
+    /// as far as there is room for.
+    /// </summary>
+    public const string Shove = "Shove";
+
+    /// <summary>
+    /// Freecast 1: the caster's next card costs no action points. It is spent
+    /// by the next card they play, whatever it is.
+    /// </summary>
+    public const string Freecast = "Freecast";
+
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
     public static readonly string[] Known =
     {
         Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles,
         Summon, Guard, Vulnerable, Mower, Stun, Swap, BathSalts, Fear,
-        Grant, Gate,
+        Grant, Gate, Lurk, Devour, Hex, Shove, Freecast,
     };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
@@ -168,6 +203,8 @@ public static class Effects
         name.Equals(Swap, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Grant, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Gate, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Lurk, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Freecast, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(BathSalts, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>These carry a word (a form or card name) instead of a number.</summary>

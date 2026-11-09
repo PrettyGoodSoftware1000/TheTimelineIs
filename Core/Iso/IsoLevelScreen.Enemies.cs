@@ -34,6 +34,14 @@ public partial class IsoLevelScreen
         var players = LivingParty;
         if (PartyWiped) { FinishMission("party down"); _ctx.SwitchTo(new DeathScreen(_ctx)); return; }
 
+        // A lurker is not there as far as an enemy choosing a target is
+        // concerned. They can still be caught — a blast is aimed at the
+        // GROUND and does not care who is standing on it — but nothing picks
+        // them out to shoot at. If the whole party is lying in wait there is
+        // nobody to aim at, and the enemy moves rather than standing still.
+        var seen = players.Where(p => !p.IsLurking).ToList();
+        if (seen.Count > 0) players = seen;
+
         // an enemy is bound by action points exactly as the party is
         var hand = HandOf(me)
             .Where(c => !c.TargetsAllies && c.ActionCost <= me.ActionPoints).ToList();

@@ -110,6 +110,17 @@ public partial class IsoLevelScreen
     /// <summary>Lifts a guard zone: the ground stops being watched and the marks come off.</summary>
     private static void StopGuarding(CharacterInstance c) => c.Watch.Stand_Down();
 
+    /// <summary>
+    /// Breaking cover. The watched ground goes with it: a lurker who has been
+    /// seen is just somebody standing there.
+    /// </summary>
+    private static void StopLurking(CharacterInstance c)
+    {
+        c.LurkReach = 0;
+        c.LurkDamage = 0;
+        c.Watch.Stand_Down();
+    }
+
     private void StartCombat()
     {
         ClearSavedActions();
@@ -207,6 +218,7 @@ public partial class IsoLevelScreen
         // you the rest of THAT turn's movement; it does not cost you every
         // turn after, so the zone lifts here and you walk again.
         if (current.IsGuarding) StopGuarding(current);
+        if (current.IsLurking) StopLurking(current);
         current.MovePoints = current.MoveMax;
         current.RefreshActionPoints();
         if (current.IsBroken)
@@ -216,13 +228,26 @@ public partial class IsoLevelScreen
         AgeFires(current);
         _overlayKey = null;
 
-        // a channelled card roots its caster: no movement until it is released
+        // A channelled card roots its caster: no movement until it goes off.
+        // It also FIRES ITSELF once the wait is up. The player aimed it on the
+        // turn they started it and has been rooted ever since — asking them to
+        // click the same card a second time to let go of it was a second
+        // decision they had already made, and one that could be forgotten.
         if (current.IsChannelling)
         {
             if (current.ChannelTurnsLeft > 0) current.ChannelTurnsLeft--;
             current.MovePoints = 0;
+            if (current.ChannelTurnsLeft <= 0 && CardNamed(current.ChannellingCard) is Card ready)
+            {
+                Log(_ctx.Strings.Format("iso_channel_lands",
+                    ("name", current.Name), ("card", Caps(ready.Name))));
+                _mode = current.IsPlayer ? Mode.PlayerTurn : Mode.EnemyTurn;
+                _selectedCard = ready;
+                PlayArea(AreaOf(ready, Tile(current), current.ChannelAim), current.ChannelAim);
+                return;
+            }
             Log(_ctx.Strings.Format("iso_channelling",
-                ("name", current.Name), ("card", current.ChannellingCard)));
+                ("name", current.Name), ("card", Caps(current.ChannellingCard))));
         }
 
         if (!BurnAtTurnStart(current)) { NextTurn(); return; }

@@ -60,6 +60,9 @@ public partial class IsoLevelScreen
         // for — a click meant for a menu button must not also reach the board
         if (UpdateMenu(input)) return;
 
+        // a question waiting for an answer swallows the frame too
+        if (UpdateAsk(input)) return;
+
         if (_tap is Point logTap && LogToggleRect.Contains(logTap))
         {
             _logOpen = !_logOpen;
@@ -396,8 +399,18 @@ public partial class IsoLevelScreen
         _disarmed.Add(there.Key);
         _overlayKey = null;
         Log(_ctx.Strings.Get("iso_door_open"));
-        var nearest = LivingParty.OrderBy(p => p.DistanceTo(here.Center)).FirstOrDefault();
-        if (nearest != null) CheckAggro(nearest);
+
+        // Whoever opened it is about to walk through; the rest of the party
+        // come up behind. Opening a way used to leave three of them wherever
+        // they had been left, which meant every door was followed by three
+        // separate walks across ground already explored — and, if the far
+        // room had anything in it, one character meeting it alone.
+        var opener = LivingParty.OrderBy(p => p.DistanceTo(here.Center)).FirstOrDefault();
+        if (opener != null)
+        {
+            GatherParty(opener);
+            CheckAggro(opener);
+        }
     }
 
     /// <summary>Whether anyone in the party is still standing on a pad.</summary>
@@ -464,6 +477,48 @@ public partial class IsoLevelScreen
         foreach (var t in candidates) return t;
         return null;
     }
+
+    /// <summary>
+    /// Brings everybody else up to within a few squares of one character.
+    ///
+    /// They are PLACED rather than walked. A walk would be prettier, but four
+    /// of them pathing round each other through a doorway is four more ways
+    /// for somebody to end up stuck behind a tree, and what the player asked
+    /// for by opening the door is the party on the other side of it.
+    /// Anybody with nowhere to stand is left where they are.
+    /// </summary>
+    private void GatherParty(CharacterInstance leader)
+    {
+        var around = Tile(leader);
+        var taken = new HashSet<Point>();
+        foreach (var t in leader.Footprint) taken.Add(t);
+
+        foreach (var member in LivingParty.Where(m => m != leader))
+        {
+            if (IsoMath.GridDistance(Tile(member), around) <= GatherWithin)
+            {
+                foreach (var t in member.Footprint) taken.Add(t);
+                continue;
+            }
+            var spot = _level.Blocks.Keys
+                .Where(t => IsoMath.GridDistance(t, around) <= GatherWithin)
+                .Where(t => Fits(member, t, taken))
+                .OrderBy(t => IsoMath.GridDistance(t, around))
+                .Select(t => (Point?)t)
+                .FirstOrDefault();
+            if (spot is not Point at) continue;
+
+            Record(ReplayEventKind.Move, member, from: Tile(member), to: at);
+            member.GX = at.X;
+            member.GY = at.Y;
+            member.Face(around, at);
+            foreach (var t in member.Footprint) taken.Add(t);
+        }
+        _overlayKey = null;
+    }
+
+    /// <summary>How close "with the party" is, in squares.</summary>
+    private const int GatherWithin = 3;
 
     /// <summary>Drops the camera on somebody, for when the party is moved under it.</summary>
     private void RecenterOn(CharacterInstance? who)
@@ -556,6 +611,30 @@ public partial class IsoLevelScreen
         return zone;
     }
 
+    /// <summary>
+    /// The ground a planted card watches: the wedge it was POINTED at when
+    /// the card is a cone, and the ring around the caster otherwise.
+    ///
+    /// Stand Your Ground State used to cover a circle, which meant pointing
+    /// it was meaningless and standing in the open covered nothing useful.
+    /// Aimed, it is a decision: a corridor, a doorway, the side they are
+    /// coming from.
+    /// </summary>
+    private HashSet<Point> WatchedGroundFor(CharacterInstance who, Card card)
+    {
+        int reach = Math.Max(card.GuardReach, card.LurkReach);
+        if (!card.IsAimedGuard) return GuardZoneAround(Tile(who), reach);
+
+        var from = Tile(who);
+        var zone = new HashSet<Point>();
+        foreach (var block in _level.Blocks.Values)
+        {
+            var tile = new Point(block.X, block.Y);
+            if (IsoMath.InCone(from, _aimPoint, tile, reach)) zone.Add(tile);
+        }
+        return zone;
+    }
+
     /// <summary>Whether any part of a body is standing on a guard's ground.</summary>
     private static bool InGuardZone(CharacterInstance guard, CharacterInstance who) =>
         guard.Watch.Covers(who.Footprint);
@@ -573,17 +652,20 @@ public partial class IsoLevelScreen
     {
         foreach (var guard in Everyone.Where(g => g.Alive && g.IsGuarding && g != walker).ToList())
         {
+            // a lurker only stabs the other side; a planted gun shoots anybody
+            if (guard.IsLurking && guard.IsPlayer == walker.IsPlayer) continue;
             if (!guard.Watch.Entered(Key(walker), walker.Footprint)) continue;
 
             var report = new StringBuilder();
-            report.AppendLine(_ctx.Strings.Format("iso_guard_fires",
+            report.AppendLine(_ctx.Strings.Format(
+                guard.IsLurking ? "iso_lurk_strikes" : "iso_guard_fires",
                 ("name", guard.Name), ("target", walker.Name),
                 ("shots", guard.Watch.Shots.ToString())));
 
             var was = _actor;
             _actor = guard;                       // so the shots are credited to the guard
             for (int i = 0; i < guard.Watch.Shots && walker.Alive; i++)
-                ApplyHit(walker, guard.Watch.Damage, "Gunfire", report);
+                ApplyHit(walker, guard.Watch.Damage, guard.IsLurking ? "Stabby" : "Gunfire", report);
             _actor = was;
 
             _ctx.Sounds.Play("DefaultPop.wav");

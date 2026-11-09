@@ -50,6 +50,28 @@ public static class Facings
         return false;
     }
 
+    /// <summary>
+    /// The step along the GRID that matches a screen direction.
+    ///
+    /// The board is turned 45 degrees, so the two do not line up: +X on the
+    /// grid is south-east to somebody looking at it and +Y is south-west.
+    /// Anything that has to work out "one square that way" — the square
+    /// behind somebody's back, a shove — goes through here rather than
+    /// guessing, because guessing is right half the time and the half it is
+    /// wrong looks like a bug in the card.
+    /// </summary>
+    public static Point GridStep(this Facing8 f) => f switch
+    {
+        Facing8.SouthEast => new Point(1, 0),
+        Facing8.SouthWest => new Point(0, 1),
+        Facing8.NorthWest => new Point(-1, 0),
+        Facing8.NorthEast => new Point(0, -1),
+        Facing8.South => new Point(1, 1),
+        Facing8.North => new Point(-1, -1),
+        Facing8.East => new Point(1, -1),
+        _ => new Point(-1, 1),
+    };
+
     /// <summary>Every direction, in compass order.</summary>
     public static readonly Facing8[] All =
     {

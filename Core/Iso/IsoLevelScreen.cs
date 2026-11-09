@@ -168,6 +168,18 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     private readonly HashSet<Point> _watchedGround = new();
 
     /// <summary>
+    /// Squares an armed card wants its caster to stand on: the ones behind an
+    /// enemy's back, for a card that only works from there.
+    /// </summary>
+    private readonly HashSet<Point> _approachSet = new();
+
+    /// <summary>
+    /// Anybody the armed card would kill outright — Devour's threshold. They
+    /// are outlined and their health bar is drawn bigger while it is in hand.
+    /// </summary>
+    private readonly HashSet<CharacterInstance> _edible = new();
+
+    /// <summary>
     /// Everyone the card being aimed would hit, outlined in red while you aim.
     /// Rebuilt every frame from the same rule the card uses when it lands, so
     /// what lights up is exactly what gets hurt — friendly fire included.
@@ -339,10 +351,14 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     private const float CardTotalPt = 32.6f;   // was 34.6
     private const float CardRangePt = 26.8f;   // was 28.8
 
-    // The panel to the left has room the card never had, so the same words
-    // are set bigger there.
-    private const float CardTextNamePt = 40f;
-    private const float CardTextBodyPt = 32f;
+    // The info window has room the card never had, so the same words are set
+    // bigger there.
+    private const float InfoNamePt = 40f;
+    private const float InfoBodyPt = 32f;
+
+    /// <summary>One row of the effect list: icon, then the name and what it does.</summary>
+    private const int InfoRowH = 54;
+    private const float InfoRowPt = 26f;
     private static float Pt(float points) => points / FontBakedPt;
     private static readonly int CardRestY = VirtualViewport.Height - CardH / 2;
 
@@ -352,9 +368,9 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     /// A card's own words used to be printed on the card, in the smallest type
     /// on the screen, in a column 350px wide — "Stab something 3 times, then
     /// move 4 spaces." came out over four cramped lines and still ran off the
-    /// bottom. One panel, one card at a time, in type you can read.
+    /// bottom. One window, one thing at a time, in type you can read.
     /// </summary>
-    private const int CardTextW = 820, CardTextMinW = 560, CardTextGap = 40;
+    private const int InfoW = 900, InfoMinW = 420, InfoGap = 32, InfoMinH = 240;
     private const float HoverScale = 1.3f;
 
     /// <summary>
@@ -407,6 +423,18 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
             // person who played it by the time they finished
             foreach (var b in _level.Blocks.Values) _revealed.Add(b.Room);
             _mode = Mode.Replay;
+            return;
+        }
+
+        // A level that opens with enemies already in sight opens in a FIGHT.
+        // Exploring was a mode for a room you had not met anything in yet;
+        // standing in the open walking about while three goblins watched was
+        // nobody's idea of either exploring or fighting, and the fight only
+        // started once somebody wandered close enough to be noticed.
+        if (VisibleEnemies.Count > 0)
+        {
+            foreach (var e in VisibleEnemies) _aggroed.Add(e);
+            StartCombat();
         }
     }
 
@@ -532,6 +560,17 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
 
     /// <summary>The deck a character's own cards come from.</summary>
     private CardLibrary DeckOf(CharacterInstance c) => c.IsPlayer ? _ctx.Cards : _ctx.EnemyCards;
+
+    /// <summary>
+    /// A card's name as the player reads it: in capitals, always.
+    ///
+    /// The decks keep names written normally — they are read by people
+    /// editing content, and a file of shouting is hard to scan — so the
+    /// shouting is put on at the last moment, everywhere a name reaches the
+    /// screen. Lookups are by the written name and are case-insensitive
+    /// anyway, so nothing else has to know.
+    /// </summary>
+    private static string Caps(string cardName) => cardName.ToUpperInvariant();
 
     /// <summary>Looks a card up by name in whichever deck it came from.</summary>
     private Card? FindCard(string name, bool enemyDeck) =>

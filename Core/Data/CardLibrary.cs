@@ -147,6 +147,13 @@ public class Card
         IsSummon || IsMower || IsGate;
 
     /// <summary>
+    /// A card that plants its caster and watches ground they POINT at rather
+    /// than ground around them. It is aimed like any cone — one click for the
+    /// direction — and the wedge is what gets watched.
+    /// </summary>
+    public bool IsAimedGuard => (IsGuard || IsLurk) && Delivery == Delivery.Cone;
+
+    /// <summary>
     /// The chance out of a hundred that any one square a card lands on
     /// catches fire, for cards whose FireTiles is a scattering rather than a
     /// certainty. 0 means every square it covers burns, which is what
@@ -281,6 +288,26 @@ public class Card
     /// <summary>A card that drops a pair of portals on the squares it was aimed at.</summary>
     public bool IsGate => Effects.Exists(e => e.Is(Data.Effects.Gate));
 
+    /// <summary>How far a lurker watches, or 0 for a card that does not lurk.</summary>
+    public int LurkReach => EffectNamed(Data.Effects.Lurk)?.Amount ?? 0;
+
+    public bool IsLurk => LurkReach > 0;
+
+    /// <summary>Health, as a PERCENTAGE, below which this card kills outright. 0 for most.</summary>
+    public int DevourUnder => EffectNamed(Data.Effects.Devour)?.Amount ?? 0;
+
+    /// <summary>How many of the victim's turns a hex from this card keeps cutting.</summary>
+    public int HexTurns => EffectNamed(Data.Effects.Hex)?.Amount ?? 0;
+
+    /// <summary>Squares this card pushes whoever it hits, directly away from the caster.</summary>
+    public int ShoveTiles => EffectNamed(Data.Effects.Shove)?.Amount ?? 0;
+
+    /// <summary>
+    /// Whether this card may only be played from DIRECTLY BEHIND its target —
+    /// the square their back is turned to. Written "Behind: Yes".
+    /// </summary>
+    public bool FromBehind;
+
     /// <summary>A card that blacks the screen out and shows pictures while it works.</summary>
     public bool IsBathSalts => Effects.Exists(e => e.Is(Data.Effects.BathSalts));
 
@@ -396,7 +423,7 @@ public class CardLibrary
         "projectile art", "casting sound", "casting time", "bottom right",
         "card name", "card text", "melee time", "hit sound",
         "explosion range", "aims", "fire chance", "action points", "friendly fire", "stops movement", "mind damage",
-        "mind effect", "sky angle", "animation", "expendable", "acts as", "effects", "effect",
+        "mind effect", "sky angle", "animation", "expendable", "acts as", "behind", "effects", "effect",
         "speed", "range", "summons", "replaces", "blast", "dealt", "with", "form", "tags", "type", "sounds",
     };
 
@@ -587,6 +614,13 @@ public class CardLibrary
 
             case "acts as":
                 card.ActsAs = value;
+                break;
+
+            case "behind":
+                if (value.Equals("yes", StringComparison.OrdinalIgnoreCase)) card.FromBehind = true;
+                else if (value.Equals("no", StringComparison.OrdinalIgnoreCase)) card.FromBehind = false;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Behind must be Yes or No, got '{value}'");
                 break;
 
             case "blast":

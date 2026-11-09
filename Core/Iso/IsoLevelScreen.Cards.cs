@@ -52,12 +52,29 @@ public partial class IsoLevelScreen
         {
             ReturnStolen(spent, _actor);
             Log(_ctx.Strings.Format("iso_steal_over",
-                ("card", spent.CardName), ("owner", spent.From?.Name ?? "?")));
+                ("card", Caps(spent.CardName)), ("owner", spent.From?.Name ?? "?")));
         }
 
         Record(ReplayEventKind.Card, _actor, card: card.Name, to: blastCenter,
             target: string.Join("/", aimed.Select(v => v.Name)), amount: card.ActionCost);
-        _actor!.ActionPoints = Math.Max(0, _actor.ActionPoints - card.ActionCost);
+
+        // A free cast pays for the next card, whatever it is — and is spent
+        // even by a card that cost nothing anyway, because the alternative is
+        // it quietly surviving a free card and nobody knowing the rule.
+        if (_actor!.FreeCard)
+        {
+            _actor.FreeCard = false;
+            Log(_ctx.Strings.Format("iso_freecast_spent",
+                ("name", _actor.Name), ("card", Caps(card.Name))));
+        }
+        else
+        {
+            _actor.ActionPoints = Math.Max(0, _actor.ActionPoints - card.ActionCost);
+        }
+
+        // Playing anything at all gives a lurker away — except the card that
+        // put them there in the first place.
+        if (_actor.IsLurking && !card.IsLurk) StopLurking(_actor);
         // Most cards end the turn's walking; the ones marked "Stops Movement: No"
         // do not — a shapeshift or a shell swap changes what you are holding
         // rather than doing something with it. Nimble is added afterwards
@@ -77,7 +94,7 @@ public partial class IsoLevelScreen
             _actor.ChannelAim = blastCenter;      // aimed now, fired later
             _actor.MovePoints = 0;
             Log(_ctx.Strings.Format("iso_channel_start",
-                ("name", _actor.Name), ("card", card.Name)));
+                ("name", _actor.Name), ("card", Caps(card.Name))));
             _ctx.Sounds.Play(card.CastingSound);
             StartCastAnimation(_actor, card);
             _actingCard = null;
@@ -513,7 +530,45 @@ public partial class IsoLevelScreen
         if (!fresh) return;                      // already in hand, unspent
         _hand = HandOf(ActiveMover ?? who);
         report.AppendLine(_ctx.Strings.Format("iso_granted",
-            ("name", who.Name), ("card", name)));
+            ("name", who.Name), ("card", Caps(name))));
+    }
+
+    /// <summary>
+    /// Whether somebody is already below a percentage of their full health —
+    /// what Devour asks before it bites.
+    /// </summary>
+    private static bool BelowFraction(CharacterInstance c, int percent) =>
+        c.Alive && c.MaxHp > 0 && c.Hp * 100 < c.MaxHp * percent;
+
+    /// <summary>
+    /// Pushes somebody directly away from whoever hit them, as far as there
+    /// is room for. It stops at the first square that is not free floor, so a
+    /// shove into a wall simply does not move them rather than putting them
+    /// inside it.
+    /// </summary>
+    private void Shove(CharacterInstance victim, int tiles, StringBuilder report)
+    {
+        if (_actor == null || victim == _actor) return;
+        var from = Tile(_actor);
+        var at = Tile(victim);
+        int dx = Math.Sign(at.X - from.X), dy = Math.Sign(at.Y - from.Y);
+        if (dx == 0 && dy == 0) return;
+
+        var landed = at;
+        for (int step = 0; step < tiles; step++)
+        {
+            var next = new Point(landed.X + dx, landed.Y + dy);
+            var taken = OccupiedExcept(victim);
+            if (!Pathfinder.Fits(_level, next, victim.SizeX, victim.SizeY, _revealed, taken)) break;
+            landed = next;
+        }
+        if (landed == at) return;
+        Record(ReplayEventKind.Move, victim, from: at, to: landed);
+        victim.GX = landed.X;
+        victim.GY = landed.Y;
+        _overlayKey = null;
+        report.AppendLine(_ctx.Strings.Format("iso_shoved",
+            ("name", victim.Name), ("tiles", IsoMath.GridDistance(at, landed).ToString())));
     }
 
     /// <summary>The closest square to a point where a body of this shape fits.</summary>
@@ -595,7 +650,7 @@ public partial class IsoLevelScreen
                     // once, and marks out the ground you are covering. The zone
                     // is worked out here and then left alone: it is a patch of
                     // dirt, not a bubble that follows anybody.
-                    _actor.Watch.Cover(GuardZoneAround(Tile(_actor), card.GuardReach),
+                    _actor.Watch.Cover(WatchedGroundFor(_actor, card),
                         Math.Max(1, card.Hits), card.Damage);
                     _actor.MovePoints = 0;
                     // whoever is already standing in it does not get shot for
@@ -624,6 +679,28 @@ public partial class IsoLevelScreen
                 else if (effect.Is(Data.Effects.Gate))
                 {
                     OpenGate(_gateAims, report);
+                }
+                else if (effect.Is(Data.Effects.Lurk))
+                {
+                    // Lurking is guarding with the lights off: the same watched
+                    // ground and the same "walked in" bookkeeping, plus going
+                    // unseen and half-transparent until it breaks.
+                    _actor.Watch.Cover(WatchedGroundFor(_actor, card),
+                        Math.Max(1, card.Hits), card.Damage);
+                    _actor.LurkReach = effect.Amount;
+                    _actor.LurkDamage = card.Damage;
+                    _actor.MovePoints = 0;
+                    foreach (var c in Everyone.Where(c => c.Alive && c != _actor &&
+                                                         _actor.Watch.Covers(c.Footprint)))
+                        _actor.Watch.AlreadyHere(Key(c));
+                    report.AppendLine(_ctx.Strings.Format("iso_lurking",
+                        ("name", _actor.Name), ("range", effect.Amount.ToString()),
+                        ("dmg", card.Damage.ToString())));
+                }
+                else if (effect.Is(Data.Effects.Freecast))
+                {
+                    _actor.FreeCard = true;
+                    report.AppendLine(_ctx.Strings.Format("iso_freecast", ("name", _actor.Name)));
                 }
                 // Leap already did its work when the approach was planned, and
                 // Channel is handled where the card is played rather than here
@@ -659,6 +736,37 @@ public partial class IsoLevelScreen
                     c.StunTurns = Math.Max(c.StunTurns, effect.Amount);
                     report.AppendLine(_ctx.Strings.Format("iso_stunned",
                         ("name", c.Name), ("turns", c.StunTurns.ToString())));
+                }
+                else if (effect.Is(Data.Effects.Hex))
+                {
+                    // Its own clock per hex, like a burn, and its own amount,
+                    // so two of them cut twice.
+                    c.Hexes.Add((card.Damage, effect.Amount));
+                    report.AppendLine(_ctx.Strings.Format("iso_hexed",
+                        ("name", c.Name), ("dmg", card.Damage.ToString()),
+                        ("turns", effect.Amount.ToString())));
+                }
+                else if (effect.Is(Data.Effects.Shove))
+                {
+                    Shove(c, effect.Amount, report);
+                }
+                else if (effect.Is(Data.Effects.Devour))
+                {
+                    // The card does no damage of its own: either they were
+                    // already far enough gone, or nothing happens at all.
+                    if (BelowFraction(c, effect.Amount))
+                    {
+                        // armour and all: it is a throat, not a damage roll,
+                        // and 5 points of plate is not what saves you from it
+                        ApplyHit(c, c.Hp + c.Armor, "Teeth", report);
+                        report.AppendLine(_ctx.Strings.Format("iso_devoured",
+                            ("name", _actor?.Name ?? "?"), ("victim", c.Name)));
+                    }
+                    else
+                    {
+                        report.AppendLine(_ctx.Strings.Format("iso_devour_missed",
+                            ("victim", c.Name), ("percent", effect.Amount.ToString())));
+                    }
                 }
                 else if (effect.Is(Data.Effects.Fear))
                 {
@@ -760,7 +868,7 @@ public partial class IsoLevelScreen
         thief.Stolen.Add(record);
         victim.Lost.Add(record);
         Log(_ctx.Strings.Format("iso_stole",
-            ("thief", thief.Name), ("card", loot.Name), ("victim", victim.Name),
+            ("thief", thief.Name), ("card", Caps(loot.Name)), ("victim", victim.Name),
             ("turns", record.TurnsLeft.ToString())));
 
         // the one exception to one-card-per-steal: taking a shapeshift card
@@ -874,8 +982,23 @@ public partial class IsoLevelScreen
             if (--loot.TurnsLeft > 0) continue;
             ReturnStolen(loot, c);
             Log(_ctx.Strings.Format("iso_steal_over",
-                ("card", loot.CardName), ("owner", loot.From?.Name ?? "?")));
+                ("card", Caps(loot.CardName)), ("owner", loot.From?.Name ?? "?")));
         }
+        // Hexes cut at the start of their victim's turn, like a burn, but as
+        // MELEE damage — a curse on the same body makes every tick worse,
+        // which is the pairing the two cards are for.
+        if (c.Hexes.Count > 0)
+        {
+            var cuts = new StringBuilder();
+            int bite = c.Hexes.Sum(h => h.Amount) + c.CurseBonus * c.Hexes.Count;
+            ApplyHit(c, bite, "Stabby", cuts);
+            for (int i = 0; i < c.Hexes.Count; i++)
+                c.Hexes[i] = (c.Hexes[i].Amount, c.Hexes[i].Turns - 1);
+            c.Hexes.RemoveAll(h => h.Turns <= 0);
+            Log(cuts.ToString().TrimEnd());
+            if (!c.Alive) { MoveHexesOn(c); return false; }
+        }
+
         if (c.Burns.Count == 0) return true;
         var report = new StringBuilder();
         ApplyHit(c, c.Burns.Count * Data.Effects.BurnDamagePerStack, "Fire", report);
@@ -889,7 +1012,35 @@ public partial class IsoLevelScreen
                 ("left", c.Burns.Count.ToString())));
 
         Log(report.ToString().TrimEnd());
+        if (!c.Alive) MoveHexesOn(c);
         return c.Alive;
+    }
+
+    /// <summary>
+    /// A hex outlives whoever it was cast on. When they go down with turns
+    /// still on it, the knives pick somebody else on their side — the nearest
+    /// one not already carrying that hex — and go on counting there.
+    ///
+    /// Nobody left to move to and it simply ends; it does not wait around for
+    /// reinforcements.
+    /// </summary>
+    private void MoveHexesOn(CharacterInstance dead)
+    {
+        if (dead.Hexes.Count == 0) return;
+        var moving = dead.Hexes.ToList();
+        dead.Hexes.Clear();
+
+        var side = (dead.IsPlayer ? _party : _enemies)
+            .Where(c => c.Alive && c != dead)
+            .OrderBy(c => IsoMath.GridDistance(Tile(c), Tile(dead)))
+            .ToList();
+        if (side.Count == 0) return;
+
+        var next = side[0];
+        next.Hexes.AddRange(moving);
+        Log(_ctx.Strings.Format("iso_hex_moved",
+            ("from", dead.Name), ("to", next.Name),
+            ("turns", moving.Max(h => h.Turns).ToString())));
     }
 
     /// <summary>

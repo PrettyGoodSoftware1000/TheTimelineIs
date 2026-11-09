@@ -32,6 +32,7 @@ public partial class IsoLevelScreen
 
         _moveSet = new Dictionary<Point, int>();
         _rangeSet = new HashSet<Point>();
+        _approachSet.Clear();
         _cardArmed = false;
         if (mover == null) return;
         _cardArmed = card != null && _mode != Mode.Explore;
@@ -47,6 +48,21 @@ public partial class IsoLevelScreen
         // lighter wash rather than drowning the level in red
         _rangeOpacityKey = card.LeapBonus > 0 ? "Leap" : "Range";
 
+        // A card that strikes from behind does not have a reach so much as a
+        // short list of places to be: every square some enemy has its back
+        // to that this character could get to. Those are marked instead, in
+        // the broken red the watched ground uses, because it is the same kind
+        // of statement — this ground matters to the card in hand.
+        if (card.FromBehind)
+        {
+            foreach (var foe in CatchableBy(mover, card))
+                foreach (var back in BehindSquares(foe))
+                    if (_level.Shown(back, _revealed) && CanStandOn(mover, back)
+                        && (back == Tile(mover) || _moveSet.ContainsKey(back)))
+                        _approachSet.Add(back);
+            return;
+        }
+
         // a cone is shown by the purple wedge that follows the cursor, so a red
         // diamond around it would only be a second, wrong-shaped answer
         if (card.Delivery == Delivery.Cone) return;
@@ -61,7 +77,7 @@ public partial class IsoLevelScreen
         // a card that plants its caster shows the ground it will WATCH, which
         // is measured by the Guard amount rather than by how far the card
         // reaches — the same number the zone itself is built from
-        int reach = card.IsGuard ? card.GuardReach : card.Range;
+        int reach = card.IsGuard ? card.GuardReach : card.IsLurk ? card.LurkReach : card.Range;
         foreach (var block in _level.Blocks.Values)
         {
             var tile = new Point(block.X, block.Y);
@@ -87,6 +103,15 @@ public partial class IsoLevelScreen
     {
         _blastSet = new HashSet<Point>();
         _doomed.Clear();
+        _edible.Clear();
+
+        // A card that kills outright below a threshold marks everybody
+        // already under it the moment it is in hand — the question it asks is
+        // "who is nearly gone", and that is answered before aiming, not after.
+        if ((_selectedCard ?? HoveredCard()) is { DevourUnder: > 0 } teeth && Acting != null)
+            foreach (var weak in CatchableBy(Acting, teeth)
+                         .Where(w => BelowFraction(w, teeth.DevourUnder)))
+                _edible.Add(weak);
 
         // While a channel is open the aim is already fixed, so the purple shows
         // where the shot is going to land instead of following the cursor. It
@@ -270,6 +295,20 @@ public partial class IsoLevelScreen
     {
         var here = Tile(me);
         if (card.Delivery == Delivery.Cone) return here;
+
+        // A card that strikes from behind does not ask about range at all: it
+        // asks about ONE square, the one its target has its back to. Either
+        // the caster can reach that square or the card cannot be played.
+        if (card.FromBehind)
+        {
+            if (targets.Count != 1) return null;
+            var wanted = BehindSquares(targets[0]).Where(t => CanStandOn(me, t)).ToList();
+            if (wanted.Count == 0) return null;
+            if (wanted.Contains(here)) return here;
+            return wanted.Where(_moveSet.ContainsKey)
+                .OrderBy(t => _moveSet[t]).Select(t => (Point?)t).FirstOrDefault();
+        }
+
         // measured to the nearest part of the target, so a four-tile body is in
         // reach of anything standing against any of its sides
         bool InRange(Point from) => targets.All(t => t.DistanceTo(from) <= card.Range);
@@ -278,4 +317,26 @@ public partial class IsoLevelScreen
         return _moveSet.Keys.Where(InRange)
             .OrderBy(t => _moveSet[t]).Select(t => (Point?)t).FirstOrDefault();
     }
+
+    /// <summary>
+    /// The square or squares somebody has their BACK to: the one step behind
+    /// each tile of their body, opposite the way they are facing.
+    ///
+    /// A body wider than a tile has one per tile along its back edge, so a
+    /// Living Stone can be crept up on from either of the squares behind it
+    /// rather than from one magic spot.
+    /// </summary>
+    private static IEnumerable<Point> BehindSquares(CharacterInstance who)
+    {
+        var step = Facings.GridStep(who.Facing);
+        foreach (var t in who.Footprint)
+        {
+            var back = new Point(t.X - step.X, t.Y - step.Y);
+            if (!who.Footprint.Contains(back)) yield return back;
+        }
+    }
+
+    /// <summary>Whether a square is floor this character could actually stand on.</summary>
+    private bool CanStandOn(CharacterInstance who, Point tile) =>
+        Pathfinder.Fits(_level, tile, who.SizeX, who.SizeY, _revealed, OccupiedExcept(who));
 }

@@ -232,7 +232,7 @@ Type: [cone] AoE damage
 Action Points: 1
 Friendly Fire: No
 Stops Movement: Yes
-Range: 3
+Range: 4
 Effects: Burning 1
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
@@ -280,6 +280,44 @@ Card Text: Throw a knife for 5 Stabby damage.
 Bottom Right: 5 Stabby
 []
 
+# The Dirtbag's two ways of not fighting fair.
+[]
+Card Name: Lurk
+Tags: Dirtbag
+Type: [cone] Single target, X hits.
+Action Points: 2
+Friendly Fire: No
+Stops Movement: Yes
+Range: 2
+Effects: Lurk 2
+Casting Sound: [Blank.wav]
+Casting Time: 0.2
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 12 damage.
+Card Text: Go still and go quiet. Nothing sees you, and anything that wanders within two squares gets 12 of the pointy end.
+Bottom Right: 12 Stabby
+[]
+
+[]
+Card Name: Ass-Stab
+Tags: Dirtbag
+Type: [melee] Single target, X hits.
+Action Points: 1
+Friendly Fire: No
+Stops Movement: Yes
+Range: 1
+Behind: Yes
+Effects: Stun 1, Shove 1
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 12
+Melee Time: 0.3
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 10 damage.
+Card Text: Like backstab. Not as classy.
+Bottom Right: 10 Stabby
+[]
+
 []
 Card Name: Claw 'Em
 Tags: Werewitch
@@ -323,6 +361,69 @@ Card Text: It's time to pounce.
 Bottom Right: 0 Spring
 []
 
+# The wolf's nose, and what the witch gets for standing up.
+[]
+Card Name: Devour
+Tags: Werewitch
+Form: Werewolf
+Type: [melee] Single target, X hits.
+Action Points: 1
+Friendly Fire: No
+Stops Movement: Yes
+Range: 1
+Effects: Devour 30
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 12
+Melee Time: 0.3
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: You smell blood. Anything under 30% of its health goes down whole.
+Bottom Right: 0 Teeth
+[]
+
+[]
+Card Name: Freecast
+Tags: Werewitch
+Form: Witch
+Type: [ranged] Single target, X hits.
+Action Points: 0
+Expendable: Yes
+Dealt: No
+Friendly Fire: No
+Stops Movement: No
+Effects: Freecast 1
+Range: 1
+Projectile Art: Ball.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: The shape change left something over. Your next witch card costs nothing.
+Bottom Right: 0 Free
+[]
+
+[]
+Card Name: Hex of Daggers
+Tags: Werewitch
+Form: Witch
+Type: [ranged] Single target, X hits.
+Action Points: 1
+Friendly Fire: No
+Stops Movement: Yes
+Range: 6
+Effects: Hex 6
+Projectile Art: Knife
+Casting Sound: [Blank.wav]
+Casting Time: 0.2
+Speed: 16
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 3 damage.
+Card Text: Three in the back now, and three more every time it comes round, for six turns. Kill it and the knives find somebody else.
+Bottom Right: 3 Stabby
+[]
+
 []
 Card Name: Witch Form
 Tags: Werewitch
@@ -331,7 +432,7 @@ Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
 Stops Movement: No
-Effects: Form Witch
+Effects: Form Witch, Grant Freecast
 Range: 1
 Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
@@ -339,7 +440,7 @@ Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: Stand up on two legs. The claws go away; the curses come out.
+Card Text: Stand up on two legs. The claws go away, the curses come out, and the change leaves enough over for one free cast.
 Bottom Right: 0 Change
 []
 
@@ -412,11 +513,11 @@ Stops Movement: Yes
 Explosion Range: 5
 Range: 12
 Effects: Channel 1, FireTiles 2
-Sky Angle: 110
-Projectile Art: Circle.png
-Casting Sound: [FireballCast.wav]
+Sky Angle: 90
+Projectile Art: Ball.png
+Casting Sound: [DefaultPop.wav]
 Casting Time: 0.6
-Speed: 22
+Speed: 2
 Hit Sound: [FireballBoom.wav]
 Effect: AoE 10 fire damage to enemies
 Card Text: Summon Uncle Sam's Finest. 
@@ -450,19 +551,18 @@ Bottom Right: 0 Gator
 # marks stay until the Florida Man dies or his next turn comes round.
 Card Name: Stand Your Ground State
 Tags: Florida Man
-Type: [ranged] Single target, X hits.
+Type: [cone] Single target, X hits.
 Action Points: 1
 Friendly Fire: Yes
 Stops Movement: Yes
-Range: 4
-Effects: Guard 4
-Projectile Art: Ball.png
+Range: 7
+Effects: Guard 7
 Casting Sound: [Blank.wav]
 Casting Time: 0.2
 Speed: 20
 Hit Sound: [DefaultPop.wav]
 Effect: Single target. 3 times x 2 damage.
-Card Text: Shoot anything that gets close, just like Jesus did.
+Card Text: Point it somewhere and dare them. Anything that walks into the wedge gets shot.
 Bottom Right: 2 Gunfire
 []
 
@@ -624,7 +724,7 @@ Type: [cone] AoE damage
 Action Points: 2
 Friendly Fire: No
 Stops Movement: Yes
-Range: 3
+Range: 4
 Effects: Stun 1
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time

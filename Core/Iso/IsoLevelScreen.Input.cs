@@ -109,7 +109,7 @@ public partial class IsoLevelScreen
         // gate is the points on hand, never "has a card been played yet"
         if (mover.IsChannelling)
         {
-            Toast(_ctx.Strings.Format("iso_channel_rooted", ("card", mover.ChannellingCard)));
+            AskToDropChannel(mover);
             return;
         }
         if (_mode is Mode.PlayerTurn or Mode.PlayerTarget && mover.MovePoints <= 0)
@@ -248,6 +248,18 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>
+    /// Anything a rooted caster tries to do other than end the turn asks
+    /// whether they meant to drop what they are holding. Saying yes costs
+    /// them the points they already spent; saying no leaves it running.
+    /// </summary>
+    private void AskToDropChannel(CharacterInstance who)
+    {
+        if (Asking) return;
+        Ask(_ctx.Strings.Format("iso_stop_channel", ("card", Caps(who.ChannellingCard))),
+            () => DropChannel(who));
+    }
+
+    /// <summary>
     /// Hands the turn's controls to one of the characters sharing it — the
     /// summoner or one of its pets. Clicking anybody else does nothing, since
     /// they do not act on this turn.
@@ -316,20 +328,13 @@ public partial class IsoLevelScreen
         // Releasing a channel does NOT ask where to aim. It was aimed on the
         // turn it was started, and it has been on its way ever since — being
         // asked again would be a second decision the caster never got to make.
-        if (Acting is CharacterInstance caster && caster.IsChannelling &&
-            card.Name.Equals(caster.ChannellingCard, StringComparison.OrdinalIgnoreCase))
+        // While a channel is open the only thing that card does is offer to
+        // let go of it: it aims and fires itself when the wait is up, so
+        // there is nothing left to tell it.
+        if (Acting is CharacterInstance caster && caster.IsChannelling)
         {
-            if (caster.ChannelTurnsLeft > 0)
-            {
-                Toast(_ctx.Strings.Format("iso_channel_waiting",
-                    ("card", caster.ChannellingCard),
-                    ("turns", caster.ChannelTurnsLeft.ToString())));
-                _selectedCard = null;
-                return;
-            }
-            // what it catches is settled now, where it lands, not when it was
-            // aimed — anyone who has since moved into the area is under it
-            PlayArea(AreaOf(card, Tile(caster), caster.ChannelAim), caster.ChannelAim);
+            _selectedCard = null;
+            AskToDropChannel(caster);
             return;
         }
 
@@ -339,7 +344,14 @@ public partial class IsoLevelScreen
         // A guard card goes off immediately even though it carries a damage
         // number, because that number is what the ground does to whoever walks
         // onto it later — there is nobody to point at now.
-        if (card.IsGuard || card.IsBathSalts || card.IsSelfCast)
+        // An AIMED guard — a cone — is the exception: it has a direction to be
+        // given, so it goes through targeting like any other cone.
+        if ((card.IsGuard || card.IsLurk) && card.IsAimedGuard)
+        {
+            _mode = Mode.PlayerTarget;
+            return;
+        }
+        if (card.IsGuard || card.IsLurk || card.IsBathSalts || card.IsSelfCast)
         {
             PlayCard(new List<CharacterInstance>(), Tile(Acting!));
             return;
@@ -356,6 +368,14 @@ public partial class IsoLevelScreen
         var card = _selectedCard!;
         var me = Acting!;
         if (_targets.Contains(enemy)) return;   // already picked; ignore the repeat
+
+        // A card that has to come from behind says so before the points are
+        // spent, rather than walking somebody round and finding out there.
+        if (card.FromBehind && BehindSquares(enemy).All(t => !CanStandOn(me, t)))
+        {
+            Toast(_ctx.Strings.Get("iso_no_back"));
+            return;
+        }
 
         _targets.Add(enemy);
         if (BestApproach(me, _targets, card) == null)

@@ -135,6 +135,7 @@ public partial class IsoLevelScreen
         // last, and over the top of everything: while the salts are working
         // there is nothing to see but the pictures
         DrawTrip(batch);
+        DrawAsk(batch);
         DrawMenu(batch);
         DrawDevMenu(batch);
         batch.End();
@@ -184,9 +185,11 @@ public partial class IsoLevelScreen
         _watchedGround.Clear();
         foreach (var g in Everyone.Where(g => g.Alive && g.IsGuarding))
             _watchedGround.UnionWith(g.Watch.Ground);
+        foreach (var l in Everyone.Where(l => l.Alive && l.IsLurking))
+            _watchedGround.UnionWith(l.Watch.Ground);
         if (armed && Acting is CharacterInstance planter &&
-            (_selectedCard ?? HoveredCard()) is { IsGuard: true } plant)
-            _watchedGround.UnionWith(GuardZoneAround(Tile(planter), plant.GuardReach));
+            (_selectedCard ?? HoveredCard()) is Card plant && (plant.IsGuard || plant.IsLurk))
+            _watchedGround.UnionWith(WatchedGroundFor(planter, plant));
 
         int band = int.MinValue;
         foreach (var block in _level.Blocks.Values
@@ -225,16 +228,22 @@ public partial class IsoLevelScreen
                 Region(batch, tile, block.Height, _blastSet, new Color(190, 100, 255),
                     _blastOpacityKey, 9f);
 
-            // Ground somebody is watching, and the same patch previewed in red
-            // while the card is still in hand. Skulls are what tells the two
-            // reds apart: plain red is "this card reaches here", red with a
-            // skull is "walk here and get shot".
+            // Ground somebody is watching, and the same patch previewed while
+            // the card is still in hand. A DASHED red border is what tells
+            // the two reds apart: a solid red edge is "this card reaches
+            // here", a broken one is "walk in here and something happens to
+            // you". No wash inside it, so what is standing on the ground
+            // stays readable.
             if (_watchedGround.Contains(tile))
-            {
-                Region(batch, tile, block.Height, _watchedGround, new Color(210, 40, 40),
-                    "Guard", 8f);
-                DrawSkull(batch, tile, block.Height);
-            }
+                DashedOutline(batch, tile, block.Height, _watchedGround,
+                    new Color(235, 50, 50), 8f);
+
+            // The squares a card wants its caster to stand on — behind
+            // somebody's back — in the same broken red, since it is the same
+            // kind of statement: this ground matters to the card in hand.
+            if (_approachSet.Contains(tile))
+                DashedOutline(batch, tile, block.Height, _approachSet,
+                    new Color(235, 50, 50), 8f);
 
             if (_level.TriggerAt(tile) is { Fired: false })
             {
@@ -459,6 +468,47 @@ public partial class IsoLevelScreen
             Ui.Line(batch, _ctx.Pixel, top, right, thickness, color);
     }
 
+    /// <summary>
+    /// The same border Outline draws, broken into dashes.
+    ///
+    /// A region needs to be able to say two different things in the same red,
+    /// and a broken edge is the one difference that survives being small,
+    /// being over busy ground, and being looked at out of the corner of an
+    /// eye. It used to be said with skulls scattered inside the area, which
+    /// covered the thing standing on the square you were trying to read.
+    /// </summary>
+    private void DashedOutline(SpriteBatch batch, Point tile, int height,
+        ICollection<Point> region, Color color, float thickness)
+    {
+        var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
+        var top = c + new Vector2(0, -IsoMath.TileH / 2f);
+        var right = c + new Vector2(IsoMath.TileW / 2f, 0);
+        var bottom = c + new Vector2(0, IsoMath.TileH / 2f);
+        var left = c + new Vector2(-IsoMath.TileW / 2f, 0);
+
+        if (!region.Contains(new Point(tile.X + 1, tile.Y))) Dashes(batch, right, bottom, color, thickness);
+        if (!region.Contains(new Point(tile.X - 1, tile.Y))) Dashes(batch, left, top, color, thickness);
+        if (!region.Contains(new Point(tile.X, tile.Y + 1))) Dashes(batch, bottom, left, color, thickness);
+        if (!region.Contains(new Point(tile.X, tile.Y - 1))) Dashes(batch, top, right, color, thickness);
+    }
+
+    /// <summary>
+    /// One edge, as a row of dashes. The dash length is fixed in art pixels
+    /// so the pattern looks the same on every side of the diamond rather than
+    /// stretching along the longer ones.
+    /// </summary>
+    private void Dashes(SpriteBatch batch, Vector2 a, Vector2 b, Color color, float thickness)
+    {
+        float dash = IsoMath.Px(7), gap = IsoMath.Px(5);
+        var span = b - a;
+        float len = span.Length();
+        if (len < 1f) return;
+        var dir = span / len;
+        for (float at = 0; at < len; at += dash + gap)
+            Ui.Line(batch, _ctx.Pixel, a + dir * at,
+                a + dir * Math.Min(at + dash, len), thickness, color);
+    }
+
     /// <summary>Grid lines: the diamond's outline, so the highlight reads as a mesh.</summary>
     private void Edge(SpriteBatch batch, Point tile, int height, Color color) =>
         batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayEdge.png"),
@@ -487,8 +537,13 @@ public partial class IsoLevelScreen
 
         // A cast or a walk stands in for the standing pose while it runs.
         var picture = AnimationFrame(c) ?? art;
-        batch.Draw(picture, ReferenceEquals(picture, art) ? rect : RectFor(c, picture),
-            Color.White * alpha);
+        var shown = ReferenceEquals(picture, art) ? rect : RectFor(c, picture);
+
+        // Lying in wait is drawn half there. It is the only thing on the board
+        // that says so: a lurker is still standing where they were, and
+        // nothing else about them changes.
+        float solidity = c.IsLurking ? 0.5f : 1f;
+        batch.Draw(picture, shown, Color.White * alpha * solidity);
 
         // A placeholder cube has no front, so the yellow triangle is the only
         // thing saying which way it is turned. It goes on AFTER the cube: the
@@ -499,9 +554,17 @@ public partial class IsoLevelScreen
         // About to be hit: a red line round them. Drawn for anything the aimed
         // card would actually catch, which with Friendly Fire on means your own
         // people light up alongside the enemies — the point being that you find
-        // that out while aiming rather than afterwards. Traced off the standing
-        // sprite even mid-cast, so the shape does not flicker frame to frame.
-        if (_doomed.Contains(c)) OutlineSprite(batch, art, rect);
+        // that out while aiming rather than afterwards.
+        //
+        // Traced off the frame BEING DRAWN, not off the standing pose. An imp
+        // hovers on the spot, and an outline drawn round the still picture sat
+        // a few pixels off whatever the wings were doing — a red smear beside
+        // the thing it was supposed to be marking.
+        if (_doomed.Contains(c)) OutlineSprite(batch, picture, shown);
+
+        // Within a bite of death, while the card that eats them is in hand.
+        // Their bar grows too — see BarRect.
+        if (_edible.Contains(c)) OutlineSprite(batch, picture, shown, new Color(255, 160, 40));
 
         var back = BarRect(c);
         if (_targets.Contains(c))
@@ -555,8 +618,11 @@ public partial class IsoLevelScreen
             .Where(c => c.Alive && _level.Shown(Tile(c), _revealed))
             .Where(c =>
             {
-                var solid = ArtBounds.Solid(ArtFor(c));
-                var rect = SpriteRect(c);
+                // the frame on screen, not the standing pose: pointing at a
+                // hovering imp has to hit the imp you can see
+                var picture = AnimationFrame(c) ?? ArtFor(c);
+                var solid = ArtBounds.Solid(picture);
+                var rect = RectFor(c, picture);
                 solid.Offset(rect.X, rect.Y);
                 return solid.Contains(at);
             })
@@ -701,6 +767,10 @@ public partial class IsoLevelScreen
         var solid = ArtBounds.Solid(art);
         var rect = SpriteRect(c);
         int w = Math.Clamp(solid.Width + IsoMath.Px(8), IsoMath.Px(32), IsoMath.Px(64)) / 2;
+        // Anything a card in hand could swallow whole gets a bigger bar while
+        // that card is up: the whole decision is "is there enough left in it",
+        // so the number you are deciding on is the thing to make easier to read.
+        if (_edible.Contains(c)) w = w * 3 / 2;
         return new Rectangle(
             rect.X + (solid.Left + solid.Right) / 2 - w / 2,
             rect.Y + solid.Top - (BarH + MindH + 5), w, BarH);
@@ -872,8 +942,8 @@ public partial class IsoLevelScreen
     /// outline is a texture built once per sprite and stretched over it, so
     /// this is one draw call however complicated the silhouette.
     /// </summary>
-    private void OutlineSprite(SpriteBatch batch, Texture2D art, Rectangle rect) =>
-        batch.Draw(_ctx.Assets.Outline(art, DoomedOutline), rect, new Color(255, 45, 45));
+    private void OutlineSprite(SpriteBatch batch, Texture2D art, Rectangle rect, Color? ink = null) =>
+        batch.Draw(_ctx.Assets.Outline(art, DoomedOutline), rect, ink ?? new Color(255, 45, 45));
 
     /// <summary>A small solid triangle pointing down, sitting on top of the health bar.</summary>
     private void DrawSelectionArrow(SpriteBatch batch, Rectangle bar)
@@ -995,25 +1065,32 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>
-    /// The box a card's own words are read in: beside the hand, on its left,
-    /// so it reads as belonging to the cards rather than to the corner.
+    /// The INFO WINDOW: the box beside the hand, on its left, that explains
+    /// whatever is being looked at — a card's own words, or everything
+    /// currently happening to the character under the pointer.
     ///
     /// It takes whatever room there is between the screen edge and the first
-    /// card. A hand wide enough to leave less than CardTextMinW gets no panel
-    /// at all — null — because a column three words wide is worse than none.
+    /// card. A hand wide enough to leave less than InfoMinW gets no window at
+    /// all — null — because a column three words wide is worse than none.
+    ///
+    /// It grows UPWARD from its floor to whatever height is asked for, since
+    /// it is anchored to the cards along the bottom of the screen; a list of
+    /// a dozen effects runs up the side rather than off the end.
     /// </summary>
-    private Rectangle? CardTextPanel()
+    private Rectangle? InfoWindow(int wantedHeight)
     {
         var rects = HandRects();
         int handLeft = rects.Count > 0 ? rects[0].X : VirtualViewport.Width / 2;
-        int right = handLeft - CardTextGap;
-        int x = Math.Max(60, right - CardTextW);
+        int right = handLeft - InfoGap;
+        int x = Math.Max(60, right - InfoW);
         int w = right - x;
-        if (w < CardTextMinW) return null;
+        if (w < InfoMinW) return null;
+
         // lifted clear of the very bottom of the screen: the cards rest half
         // off it, but words have to be read
-        int top = CardRestY - 40;
-        return new Rectangle(x, top, w, VirtualViewport.Height - top - 24);
+        int floor = VirtualViewport.Height - 24;
+        int h = Math.Clamp(wantedHeight, InfoMinH, floor - 40);
+        return new Rectangle(x, floor - h, w, h);
     }
 
     /// <summary>

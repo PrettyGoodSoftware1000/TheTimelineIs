@@ -292,6 +292,32 @@ public class CharacterInstance
     public bool IsStunned => StunTurns > 0;
 
     /// <summary>
+    /// Lying in wait: how far they watch, 0 when they are not. A lurker is
+    /// drawn half there, is passed over by anything choosing a target, and
+    /// stabs whatever walks inside that reach. It ends when they move, when
+    /// they play anything else, or when they are hit.
+    /// </summary>
+    public int LurkReach;
+
+    public bool IsLurking => LurkReach > 0;
+
+    /// <summary>What a lurker does to whoever walks in.</summary>
+    public int LurkDamage;
+
+    /// <summary>
+    /// Hexes cutting this character: how much each one does, how many of
+    /// their turns are left, and the side it came from so it knows where to
+    /// jump when they die. It lands as MELEE damage, so a curse makes every
+    /// tick worse.
+    /// </summary>
+    public List<(int Amount, int Turns)> Hexes = new();
+
+    public bool IsHexed => Hexes.Count > 0;
+
+    /// <summary>Their next card costs nothing. Spent by the next one they play.</summary>
+    public bool FreeCard;
+
+    /// <summary>
     /// Cards this character has swapped out, by name: the one they no longer
     /// hold, and the one they hold in its place. Loading different shells
     /// changes what is in the hand without touching the deck everyone reads
@@ -424,6 +450,7 @@ public class CharacterInstance
         copy.CastAnimTime = 0f;
         copy.Burns = new List<int>(Burns);   // don't share the stack lists with the original
         copy.Curses = new List<(int, int)>(Curses);
+        copy.Hexes = new List<(int, int)>(Hexes);
         copy.Stolen = new List<StolenCard>(Stolen);
         copy.Lost = new List<StolenCard>(Lost);
         copy.Swapped = new Dictionary<string, string>(Swapped, StringComparer.OrdinalIgnoreCase);
