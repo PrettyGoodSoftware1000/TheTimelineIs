@@ -173,9 +173,19 @@ public class DirectionalSprite
 
     /// <summary>
     /// How many frames an animation shows a second. One number for every
-    /// animation in the game, changeable from the ~ menu while looking at one.
+    /// animation in the game, typed into the ~ menu while looking at one.
+    ///
+    /// Nothing here wants it even or a factor of anything: it is a plain
+    /// multiplier on a clock, and the frame shown is (time * this) wrapped
+    /// round the frame count. Any number in the range works.
     /// </summary>
-    public static float Fps = 14f;
+    public static float Fps = DefaultFps;
+
+    /// <summary>Where the ~ menu opens, and what the game runs at until it is changed.</summary>
+    public const float DefaultFps = 16f;
+
+    /// <summary>The slowest and fastest the ~ menu will accept.</summary>
+    public const int MinFps = 1, MaxFps = 60;
 
     /// <summary>
     /// Frames for an animation in a direction, or null if there are none.

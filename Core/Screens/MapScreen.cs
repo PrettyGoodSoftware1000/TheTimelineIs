@@ -50,6 +50,13 @@ public class MapScreen : IScreen
         var size = AssetLoader.DisplaySize(_map, AssetKind.Map) * _scale;
         _mapSize = new Point((int)size.X, (int)size.Y);
         _destinations = DestinationTable.Load();
+
+        // The map opens on its BOTTOM-RIGHT corner. Everything placed so far
+        // is down there, and opening on the top-left meant the first thing
+        // anybody did was drag the whole map across to find it.
+        _camera = new Vector2(
+            Math.Max(0, _mapSize.X - VirtualViewport.Width),
+            Math.Max(0, _mapSize.Y - VirtualViewport.Height));
         // starting with --devmap is not news; only a change made with Ctrl+D is
         _devWasOn = ctx.DevWriter != null;
     }
