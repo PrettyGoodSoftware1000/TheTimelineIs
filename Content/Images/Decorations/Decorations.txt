@@ -19,3 +19,7 @@ trash can 02.png
 trash can 03.png
 old tires 03.png
 StandingPortal
+old tires 04.png
+lawnmower 01.png
+purple portal 01.png
+potted plant 01.png
