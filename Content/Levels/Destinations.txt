@@ -3,3 +3,4 @@
 # Coordinates are map-image pixels.
 PixelFlat               3900    2600
 PixelRooms              4600    2700
+PixelLabDemo            5084    1693

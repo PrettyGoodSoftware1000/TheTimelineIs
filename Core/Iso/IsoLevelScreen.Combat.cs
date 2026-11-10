@@ -228,6 +228,14 @@ public partial class IsoLevelScreen
         AgeFires(current);
         _overlayKey = null;
 
+        // The hand belongs to whoever's turn it is, and it is dealt HERE —
+        // ahead of every branch below, each of which can return early. A
+        // channelled card landing takes one of those ways out, so the turn it
+        // went off used to arrive with the LAST character's cards still on
+        // screen: the caster got their turn and nothing in their hand they
+        // could play, which reads as the game having stuck.
+        if (current.IsPlayer) _hand = HandOf(current);
+
         // A channelled card roots its caster: no movement until it goes off.
         // It also FIRES ITSELF once the wait is up. The player aimed it on the
         // turn they started it and has been rooted ever since — asking them to
@@ -296,7 +304,6 @@ public partial class IsoLevelScreen
                 pet.MovePoints = pet.MoveMax;
                 pet.RefreshActionPoints();
             }
-            _hand = HandOf(current);
             _mode = Mode.PlayerTurn;
         }
         else

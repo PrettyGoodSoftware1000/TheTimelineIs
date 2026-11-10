@@ -15,6 +15,7 @@ Dirtbag: 0, -12
 Florida Man: -6, -4
 Goblin: -2, -8
 Gun-O-Mancer: 15, -9
+Imp: 3, 1
 The Vessel: -1, -14
 VesselGate: -1, 38
 Werewitch WitchForm: -11, -9

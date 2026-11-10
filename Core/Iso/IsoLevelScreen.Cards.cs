@@ -158,7 +158,8 @@ public partial class IsoLevelScreen
             case Act.Casting when _actingCard is { Delivery: Delivery.Ranged } ranged:
                 _shots.Clear();
                 // a shot out of the sky needs no target on the ground and no
-                // caster to leave from - it falls onto the square that was aimed at
+                // caster to leave from - it falls onto the square that was
+                // aimed at, from SkyCubes cubes up
                 if (ranged.SkyAngle != 0f)
                 {
                     _salvoAims.Clear();
@@ -167,10 +168,11 @@ public partial class IsoLevelScreen
                     // walk back up the incoming line until the shot is off screen
                     float rad = MathHelper.ToRadians(ranged.SkyAngle);
                     var dir = new Vector2((float)Math.Cos(rad), (float)Math.Sin(rad));
-                    _projFrom = _projTo - dir * SkyRunUp;
+                    float runUp = SkyRunUp(ranged.SkyAngle);
+                    _projFrom = _projTo - dir * runUp;
                     _projRotation = rad;
                     _projWander = 0f;
-                    EnterAct(Act.Projectile, SkyRunUp / Math.Max(1f, ranged.Speed * IsoMath.TileW));
+                    EnterAct(Act.Projectile, runUp / Math.Max(1f, ranged.Speed * IsoMath.TileW));
                     break;
                 }
 

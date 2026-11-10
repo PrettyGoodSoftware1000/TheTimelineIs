@@ -251,11 +251,12 @@ public partial class IsoLevelScreen
             if (CheckGuards(_walker)) { StopWalk(); break; }
             if (_walkPause > 0f) break;
 
-            // Stepping onto a portal puts you out beside its far end. The walk
-            // stops there: the path that was planned started from the square
-            // just left behind and means nothing from the other side of the
-            // level.
-            if (TakeGate(_walker, arrived)) { StopWalk(); break; }
+            // A portal takes whoever STOPS on it, not whoever crosses it. You
+            // have to mean it: a path that happens to run over a portal on its
+            // way somewhere else used to drop the walker out the far side and
+            // abandon the rest of the walk, which is a trap rather than a door.
+            // Clicking the portal itself is how you go through.
+            if (_walkPath.Count == 0 && TakeGate(_walker, arrived)) { StopWalk(); break; }
 
             if (_walker.IsPlayer && FireTrigger(arrived)) { StopWalk(); break; }
 
@@ -323,10 +324,11 @@ public partial class IsoLevelScreen
             Ignite(e.Who);
             if (!e.Who.Alive) { _escorts.RemoveAt(i); continue; }
             CheckGuards(e.Who);
-            // a portal takes whoever stands on it, escort or leader; the rest
-            // of their path is from the wrong side of the level now
-            if (TakeGate(e.Who, arrived)) { _escorts.RemoveAt(i); continue; }
-            if (e.Path.Count == 0) _escorts.RemoveAt(i);
+            // a portal takes whoever STOPS on it, escort or leader — crossing
+            // one on the way past is walking over ordinary ground
+            if (e.Path.Count > 0) continue;
+            TakeGate(e.Who, arrived);
+            _escorts.RemoveAt(i);
         }
         _overlayKey = null;
     }

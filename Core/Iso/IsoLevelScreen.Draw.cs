@@ -458,13 +458,26 @@ public partial class IsoLevelScreen
     /// <summary>What the gate is called in the anchor menu and in Anchors.txt.</summary>
     private const string GateArtKey = "VesselGate";
 
+    /// <summary>How high a shot out of the sky starts, in cubes — the editor's cubes.</summary>
+    private const int SkyCubes = 12;
+
     /// <summary>
-    /// How far back along its angle a sky shot starts, in art pixels. Well
-    /// past the top of the screen, so it is already falling when it appears —
-    /// which means it has to grow with the tiles, or a bigger grid starts the
-    /// shot inside the picture.
+    /// How far back along its angle a sky shot starts, in art pixels.
+    ///
+    /// It is a HEIGHT first: twelve cubes above the square it lands on, which
+    /// the angle then turns into a distance along the incoming line. A shot
+    /// coming in nearly flat would want an enormous run-up for the same
+    /// height, so the angle is held away from the horizontal.
+    ///
+    /// It used to be a flat 3000 pixels, which at the tomahawk's speed is
+    /// twenty-three seconds of falling — most of it off the top of the screen
+    /// with nothing to see. That does not read as slow, it reads as stuck.
     /// </summary>
-    private static float SkyRunUp => IsoMath.Px(3000);
+    private static float SkyRunUp(float angleDegrees)
+    {
+        float drop = Math.Abs((float)Math.Sin(MathHelper.ToRadians(angleDegrees)));
+        return SkyCubes * IsoMath.TileH / Math.Max(0.25f, drop);
+    }
 
     private Rectangle DiamondRect(Point tile, int height)
     {
