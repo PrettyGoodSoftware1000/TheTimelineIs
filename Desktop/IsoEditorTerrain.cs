@@ -273,9 +273,30 @@ public partial class IsoEditorScreen
         if (!result.Ok) { Status(result.Message); return; }
 
         Keep(zipPath);
+
+        // The import wrote into the source tree. The game reads the copy next
+        // to the executable, so everything it wrote is carried across before
+        // anything tries to draw it — otherwise the tiles and the new objects
+        // are there on disk and missing on screen.
+        var missed = (result.Wrote ?? Array.Empty<string>())
+            .Select(p => (Path: p, Why: MirrorContent(p)))
+            .Where(m => m.Why != null).ToList();
+        if (missed.Count > 0)
+            Console.WriteLine($"[import] {missed.Count} file(s) not copied next to the " +
+                $"executable, first: {missed[0].Path} — {missed[0].Why}");
+
         TerrainCatalog.Reset();
+        BlockCatalog.Reset();           // new object art has to be offered straight away
         BeginEdit();
         foreach (var b in result.Blocks!) _level.Blocks[new Point(b.X, b.Y)] = b;
+
+        // The objects standing on it. Each blocks its square, which is what a
+        // decoration does here, so nothing walks through the tyres.
+        foreach (var d in result.Decorations ?? Array.Empty<LevelDecoration>())
+        {
+            _level.Decorations.RemoveAll(had => had.X == d.X && had.Y == d.Y);
+            _level.Decorations.Add(d);
+        }
         RebuildCorners();
         RecountProblems();
 

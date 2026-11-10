@@ -43,25 +43,42 @@ public partial class IsoEditorScreen
     /// </summary>
     private void ReloadGroundArt()
     {
-        const string relative = "Images/Blocks/Blocks.txt";
-        string source = Path.Combine(SourceContentDir, relative.Replace('/', Path.DirectorySeparatorChar));
-        string output = Path.Combine(AppContext.BaseDirectory, "Content",
-            relative.Replace('/', Path.DirectorySeparatorChar));
-        try
-        {
-            if (File.Exists(source) && !string.Equals(
-                    Path.GetFullPath(source), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase))
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-                File.Copy(source, output, overwrite: true);
-            }
-        }
-        catch (Exception ex)
-        {
-            Status($"could not refresh the built copy of Blocks.txt: {ex.Message}");
-        }
+        if (MirrorContent("Content/Images/Blocks/Blocks.txt") is string why)
+            Status($"could not refresh the built copy of Blocks.txt: {why}");
         BlockCatalog.Reset();
         RecountProblems();
+    }
+
+    /// <summary>
+    /// Copies one content file from the source tree to the copy next to the
+    /// executable, which is the one the game actually reads.
+    ///
+    /// Anything the editor writes — a saved level, a reloaded Blocks.txt, art
+    /// that has just been imported — goes into the source tree, because that
+    /// is what gets committed. Without this step it is written and invisible.
+    ///
+    /// The path is content-relative and starts with "Content/", the way every
+    /// other path in the game is written. Returns null when it worked, and
+    /// why when it did not.
+    /// </summary>
+    private static string? MirrorContent(string contentPath)
+    {
+        try
+        {
+            string tail = contentPath.StartsWith("Content/", StringComparison.OrdinalIgnoreCase)
+                ? contentPath["Content/".Length..] : contentPath;
+            tail = tail.Replace('/', Path.DirectorySeparatorChar);
+            string source = Path.Combine(SourceContentDir, tail);
+            string output = Path.Combine(AppContext.BaseDirectory, "Content", tail);
+            if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(output),
+                    StringComparison.OrdinalIgnoreCase))
+                return null;                      // a shipped build: one copy only
+            if (!File.Exists(source)) return $"{contentPath} is not there";
+            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+            File.Copy(source, output, overwrite: true);
+            return null;
+        }
+        catch (Exception ex) { return ex.Message; }
     }
 
     /// <summary>The Reload button: pick up Blocks.txt as it stands on disk.</summary>
