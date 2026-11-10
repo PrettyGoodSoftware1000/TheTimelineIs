@@ -1,0 +1,15 @@
+# How far a picture is nudged on its square, in pixels.
+#   <Name>: east-west
+#   <Name>: east-west, north-south      (positive north, up the screen)
+#
+# Both numbers move it across the ground. Nothing is lifted off the
+# floor: height comes from the lowest solid pixel of the picture.
+#
+# A character is '<Character> <Art folder>'. An object is its picture's
+# own name.
+#
+# Written by the Anchor Art page of the ~ menu.
+
+Cyber Smith: -6, -4
+Dirtbag: 0, -12
+Goblin: -2, -8
