@@ -15,3 +15,9 @@ B: grass 01
 Tile: 96 x 48
 Wall: 48
 
+Set: AsphaltToGrass
+A: asphalt
+B: Grass
+Tile: 96 x 48
+Wall: 48
+
