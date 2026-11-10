@@ -143,6 +143,14 @@ public partial class IsoLevelScreen
             Ui.Button(batch, _ctx.Pixel, _ctx.Font, DevButton(3), _ctx.Strings.Get("dev_anchor"), _tap))
             OpenAnchorMenu();
 
+        // What the board is magnified by, read off the camera. Not a button:
+        // the zoom is set with Ctrl and the wheel while looking at the level,
+        // and this is for saying which of the eight you ended up on.
+        Ui.DrawTextCentered(batch, _ctx.Font,
+            _ctx.Strings.Format("dev_zoom", ("zoom", _camera.Zoom.ToString())),
+            new Rectangle(DevPanel.X, DevPanel.Bottom - 170, DevPanel.Width, 70),
+            Color.White * 0.85f, 0.36f);
+
         Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("dev_close"),
             new Rectangle(DevPanel.X, DevPanel.Bottom - 90, DevPanel.Width, 70),
             Color.White * 0.7f, 0.32f);

@@ -591,7 +591,8 @@ public static class ContentValidator
             "dev_title", "dev_win", "dev_die", "dev_fps", "dev_fps_typing", "dev_fps_hint", "dev_anchor", "dev_close",
             "dev_anchor_title", "dev_anchor_object", "dev_anchor_page",
             "dev_anchor_hint", "dev_anchor_keys",
-            "dev_anchor_saved", "dev_anchor_unsaved",
+            "dev_anchor_saved", "dev_anchor_unsaved", "dev_zoom",
+            "map_scroll_hint",
         };
         foreach (var key in required)
             if (strings.Get(key) == $"[{key}]")

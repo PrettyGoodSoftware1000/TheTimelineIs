@@ -82,7 +82,7 @@ public class MapScreen : IScreen
         else
         {
             _camera += input.PanDelta;
-            _tap = input.Tap;
+            Drag(input);
             if (input.Cancel)
                 _ctx.SwitchTo(new TitleScreen(_ctx));
         }
@@ -90,6 +90,50 @@ public class MapScreen : IScreen
         _camera.X = MathHelper.Clamp(_camera.X, 0, Math.Max(0, _mapSize.X - VirtualViewport.Width));
         _camera.Y = MathHelper.Clamp(_camera.Y, 0, Math.Max(0, _mapSize.Y - VirtualViewport.Height));
         if (_toastTimer > 0) _toastTimer -= dt;
+    }
+
+    /// <summary>
+    /// How far the pointer may wander between pressing and letting go and
+    /// still count as a click rather than a drag, in design pixels.
+    /// </summary>
+    private const int DragSlop = 24;
+
+    /// <summary>Where the button went down, and where it was last frame.</summary>
+    private Point _pressedAt;
+    private Point? _dragFrom;
+    private bool _dragged;
+
+    /// <summary>
+    /// Left-drag scrolls the map, and the map follows the cursor one for one —
+    /// the point you grabbed stays under the pointer.
+    ///
+    /// A press is not a CLICK until the button comes up having barely moved.
+    /// Without that every drag also opened whichever pin it happened to start
+    /// on, and the map was unusable anywhere near one.
+    /// </summary>
+    private void Drag(InputState input)
+    {
+        if (input.Tap is Point down)
+        {
+            _pressedAt = down;
+            _dragFrom = down;
+            _dragged = false;
+        }
+
+        if (input.PointerHeld && _dragFrom is Point last)
+        {
+            _camera -= (input.PointerPos - last).ToVector2();
+            _dragFrom = input.PointerPos;
+            if (Math.Abs(input.PointerPos.X - _pressedAt.X) > DragSlop ||
+                Math.Abs(input.PointerPos.Y - _pressedAt.Y) > DragSlop)
+                _dragged = true;
+        }
+
+        if (input.Released is Point up)
+        {
+            if (!_dragged) _tap = up;
+            _dragFrom = null;
+        }
     }
 
     private void UpdateDevTyping(InputState input)
@@ -147,6 +191,10 @@ public class MapScreen : IScreen
 
         if (_ctx.DevWriter != null)
             DrawDevOverlay(batch);
+
+        // Bottom left, out of the way of the toast, which is centred.
+        Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("map_scroll_hint"),
+            new Rectangle(60, 2010, 1200, 80), Color.White * 0.75f, 0.38f);
 
         if (_toastTimer > 0)
             Ui.DrawTextCentered(batch, _ctx.Font, _toastText,

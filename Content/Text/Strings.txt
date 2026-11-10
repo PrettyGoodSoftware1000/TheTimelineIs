@@ -15,6 +15,7 @@ menu_continue = Continue
 
 # --- Map & room ---
 map_save = Save
+map_scroll_hint = Scroll with the arrows or WASD
 saved = Game saved.
 
 # --- Battle (placeholder) ---
@@ -194,6 +195,7 @@ dev_fps_typing = Frame rate: {fps}_
 dev_fps_hint = type a number, Enter to keep it, Esc to leave it
 dev_anchor = Anchor Art
 dev_close = ~ closes this
+dev_zoom = Zoom: {zoom}x
 dev_anchor_title = Anchor Art
 dev_anchor_object = object
 dev_anchor_page = page {page}/{of}
