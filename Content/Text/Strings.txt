@@ -74,7 +74,6 @@ iso_burning = {name} is burning ({stacks} stacks).
 iso_burn_out = {gone} stack(s) of fire burn out on {name} ({left} left).
 iso_armored = {name} now has {armor} armour.
 iso_nimble = {name} can still move {points}.
-iso_nothing_on = Nothing on them right now.
 fx_burning = Burning
 fx_burning_d = {dmg} damage at the start of each of its turns.
 fx_hex = Hex of Daggers

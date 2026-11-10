@@ -161,20 +161,40 @@ public partial class IsoLevelScreen
     /// folder, then black again — the fade at each end is why the board never
     /// snaps back into view with the bodies already rearranged.
     /// </summary>
+    /// <summary>
+    /// How black the screen is right now: in over the first moments, out over
+    /// the last, solid in between. Zero when nobody is tripping.
+    /// </summary>
+    private float TripDarkness
+    {
+        get
+        {
+            if (_trip == null) return 0f;
+            float fade = BathSaltsTrip.FadeSeconds;
+            float dark = _tripT < fade ? _tripT / fade
+                : _tripT > _trip.Duration - fade
+                    ? Math.Max(0f, (_trip.Duration - _tripT) / fade)
+                    : 1f;
+            return Math.Clamp(dark, 0f, 1f);
+        }
+    }
+
     private void DrawTrip(SpriteBatch batch)
     {
         if (_trip == null) return;
-        var full = new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height);
+        float dark = TripDarkness;
 
-        // in over the first moments, out over the last, solid in between
-        float fade = BathSaltsTrip.FadeSeconds;
-        float dark = _tripT < fade ? _tripT / fade
-            : _tripT > _trip.Duration - fade ? Math.Max(0f, (_trip.Duration - _tripT) / fade)
-            : 1f;
-        Ui.FillRect(batch, _ctx.Pixel, full, Color.Black * Math.Clamp(dark, 0f, 1f));
+        // Blacked out TWICE, and both are needed. DrawSelf covers the whole
+        // WINDOW before this pass starts, which is the only way to reach the
+        // letterbox bars down the sides where the board was still showing.
+        // This one covers the 3840x2160 rectangle again, after the HUD, which
+        // is drawn into it and would otherwise sit on top of the dark.
+        Ui.FillRect(batch, _ctx.Pixel,
+            new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height),
+            Color.Black * dark);
 
         // which shot are we in, and how far into it
-        float t = _tripT - fade;
+        float t = _tripT - BathSaltsTrip.FadeSeconds;
         if (t < 0f) return;
         for (int i = 0; i < _trip.Shots.Count; i++)
         {

@@ -561,8 +561,8 @@ public partial class IsoLevelScreen
     {
         if (_glideTo is not Point world || _windowSize == Point.Zero) return;
         var goal = new Point(
-            world.X - _windowSize.X / (2 * _camera.Zoom),
-            world.Y - _windowSize.Y / (2 * _camera.Zoom));
+            world.X - (int)(_windowSize.X / (2 * _camera.Zoom)),
+            world.Y - (int)(_windowSize.Y / (2 * _camera.Zoom)));
         var gap = goal - _camera.Corner;
         if (Math.Abs(gap.X) <= 1 && Math.Abs(gap.Y) <= 1)
         {

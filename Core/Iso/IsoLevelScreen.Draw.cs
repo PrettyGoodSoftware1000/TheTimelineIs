@@ -137,6 +137,19 @@ public partial class IsoLevelScreen
         DrawBoard(batch);
         batch.End();
 
+        // The salts black out the WHOLE WINDOW, and this is the only pass that
+        // can: the one below is letterboxed onto 3840x2160, so a black
+        // rectangle there leaves the board showing in the bars down the sides.
+        // Drawn with no camera matrix, so it is window pixels and nothing else.
+        if (TripDarkness > 0f)
+        {
+            batch.Begin();
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(0, 0, _windowSize.X, _windowSize.Y),
+                Color.Black * TripDarkness);
+            batch.End();
+        }
+
         _ctx.Viewport.Apply(device);
         batch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
             SamplerState.LinearClamp, null, null, null, _ctx.Viewport.Matrix);
@@ -766,11 +779,6 @@ public partial class IsoLevelScreen
             Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, armW, back.Height),
                 new Color(168, 172, 180));
 
-        // One division per point of health, so the bar can be counted rather
-        // than estimated. Armour is part of the span, so a character with
-        // armour up has more divisions than points of health, which is the
-        // truth about what has to be chewed through.
-        Pips(batch, back, span);
         Outline(batch, back);
 
         // The mind bar under it. Purple for anything with nerve to lose; grey
@@ -802,35 +810,6 @@ public partial class IsoLevelScreen
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(r.X, r.Y, 1, r.Height), Color.White);
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(r.Right - 1, r.Y, 1, r.Height), Color.White);
     }
-
-    /// <summary>
-    /// The dividing lines that cut a health bar into one box per point.
-    ///
-    /// They are drawn only while they would leave something to see between
-    /// them. A Werewitch has eighty health in a bar forty pixels wide: a line
-    /// every half pixel is not eighty boxes, it is a white bar, and it would
-    /// cost the player the one thing the bar is for. So below
-    /// <see cref="PipMinPx"/> of colour per point the divisions are left off
-    /// and the bar reads as a bar. The bars under the turn strip are far
-    /// wider and keep theirs much longer.
-    /// </summary>
-    private void Pips(SpriteBatch batch, Rectangle bar, int points)
-    {
-        if (points <= 1) return;
-        float each = bar.Width / (float)points;
-        if (each < PipMinPx) return;
-        for (int i = 1; i < points; i++)
-            Ui.FillRect(batch, _ctx.Pixel,
-                new Rectangle(bar.X + (int)Math.Round(i * each), bar.Y, 1, bar.Height),
-                Color.White);
-    }
-
-    /// <summary>
-    /// How much bar one point of health has to be worth before it is given
-    /// its own box: the dividing line plus two pixels of colour to read.
-    /// </summary>
-    private const float PipMinPx = 3f;
-
 
     /// <summary>How big a status icon is, in art pixels.</summary>
     private static int MarkPx => IsoMath.Px(8);

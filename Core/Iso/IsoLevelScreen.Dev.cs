@@ -147,7 +147,7 @@ public partial class IsoLevelScreen
         // the zoom is set with Ctrl and the wheel while looking at the level,
         // and this is for saying which of the eight you ended up on.
         Ui.DrawTextCentered(batch, _ctx.Font,
-            _ctx.Strings.Format("dev_zoom", ("zoom", _camera.Zoom.ToString())),
+            _ctx.Strings.Format("dev_zoom", ("zoom", _camera.ZoomLabel)),
             new Rectangle(DevPanel.X, DevPanel.Bottom - 170, DevPanel.Width, 70),
             Color.White * 0.85f, 0.36f);
 

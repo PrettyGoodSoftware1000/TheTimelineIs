@@ -568,7 +568,7 @@ public static class ContentValidator
             "iso_move_spent", "iso_dialogue_next",
             "iso_pick_more", "iso_needs_enemy", "iso_needs_ally", "iso_hit_armor",
             "iso_burning", "iso_burn_out", "iso_armored", "iso_nimble",
-            "iso_cursed", "iso_form", "iso_granted", "iso_nothing_on",
+            "iso_cursed", "iso_form", "iso_granted",
             "fx_burning", "fx_burning_d", "fx_hex", "fx_hex_d", "fx_curse", "fx_curse_d",
             "fx_vulnerable", "fx_vulnerable_d", "fx_armor", "fx_armor_d", "fx_stun", "fx_stun_d",
             "fx_fear", "fx_fear_d", "fx_lurk", "fx_lurk_d", "fx_guard", "fx_guard_d",

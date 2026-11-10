@@ -11,18 +11,34 @@ namespace TheTimelineIs.Core.Pixel;
 /// hardware smears the difference. That is fine for painted art and fatal for
 /// pixel art.
 ///
-/// Here the only transform is a WHOLE-number multiply and a whole-number
+/// Here the transform is a multiply off a fixed ladder and a whole-number
 /// scroll. One art pixel is exactly Zoom screen pixels square — the same
-/// everywhere on screen, at every zoom level, in every asset. Zooming changes
-/// how many pixels you can see, never what a pixel looks like.
+/// everywhere on screen, in every asset. Zooming changes how many pixels you
+/// can see, never what a pixel looks like.
 /// </summary>
 public class PixelCamera
 {
-    public const int MinZoom = 1;
-    public const int MaxZoom = 8;
+    /// <summary>
+    /// The zoom levels, in order, in screen pixels per art pixel.
+    ///
+    /// Whole numbers but for the FIRST. A half step means one art pixel
+    /// covers one and a half screen pixels, which the hardware has to smear —
+    /// the exact thing the rest of this class exists to avoid. There is one
+    /// of them and it is the bottom rung, because seeing more of the board at
+    /// once was worth it; everything above it is exact.
+    /// </summary>
+    private static readonly float[] Steps = { 1.5f, 2f, 3f, 4f, 5f, 6f, 7f, 8f };
 
-    /// <summary>Screen pixels per art pixel. Whole numbers only, on purpose.</summary>
-    public int Zoom { get; private set; } = 3;
+    /// <summary>Where a level opens: far enough out to see a fight, still exact.</summary>
+    private const int OpeningStep = 1;
+
+    public static float MinZoom => Steps[0];
+    public static float MaxZoom => Steps[^1];
+
+    private int _step = OpeningStep;
+
+    /// <summary>Screen pixels per art pixel.</summary>
+    public float Zoom { get; private set; } = Steps[OpeningStep];
 
     /// <summary>
     /// Where the window's top-left corner sits in world pixels. Kept whole:
@@ -44,8 +60,8 @@ public class PixelCamera
     /// </summary>
     public void CentreOn(Point world, int windowW, int windowH) =>
         Corner = new Point(
-            world.X - windowW / (2 * Zoom),
-            world.Y - windowH / (2 * Zoom));
+            world.X - (int)(windowW / (2 * Zoom)),
+            world.Y - (int)(windowH / (2 * Zoom)));
 
     /// <summary>
     /// Zooms a step in or out, keeping the world point under the cursor under
@@ -56,16 +72,21 @@ public class PixelCamera
     {
         if (steps == 0) return;
         var before = ToWorld(atScreen);
-        Zoom = Math.Clamp(Zoom + steps, MinZoom, MaxZoom);
+        _step = Math.Clamp(_step + steps, 0, Steps.Length - 1);
+        Zoom = Steps[_step];
         var after = ToWorld(atScreen);
         Corner += new Point(before.X - after.X, before.Y - after.Y);
     }
 
     /// <summary>A point on the window, in world pixels.</summary>
     public Point ToWorld(Point screen) =>
-        new(Corner.X + screen.X / Zoom, Corner.Y + screen.Y / Zoom);
+        new(Corner.X + (int)(screen.X / Zoom), Corner.Y + (int)(screen.Y / Zoom));
 
     /// <summary>A point in the world, on the window.</summary>
     public Point ToScreen(Point world) =>
-        new((world.X - Corner.X) * Zoom, (world.Y - Corner.Y) * Zoom);
+        new((int)((world.X - Corner.X) * Zoom), (int)((world.Y - Corner.Y) * Zoom));
+
+    /// <summary>The zoom as the ~ menu shows it: "2" or "1.5", never "2.0".</summary>
+    public string ZoomLabel => Zoom.ToString("0.##",
+        System.Globalization.CultureInfo.InvariantCulture);
 }

@@ -19,13 +19,13 @@
 # any of its sides.
 
 Enemy: Goblin
-HP: 8
+HP: 16
 Movement: 5
 Actions: 2
 Colour: 104, 99, 76
 
 Enemy: Living Stone
-HP: 40
+HP: 80
 Movement: 2
 Actions: 2
 Size: 2
@@ -33,13 +33,13 @@ Colour: 106, 105, 109
 Mind: Infinite
 
 Enemy: Imp
-HP: 10
+HP: 20
 Movement: 5
 Actions: 2
 Colour: 126, 36, 33
 
 Enemy: Lich
-HP: 30
+HP: 60
 Movement: 4
 Actions: 2
 Colour: 70, 90, 110

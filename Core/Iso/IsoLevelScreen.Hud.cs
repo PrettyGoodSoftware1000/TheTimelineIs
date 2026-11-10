@@ -321,7 +321,9 @@ public partial class IsoLevelScreen
         string title = card != null ? Caps(card.Name) : who?.Name ?? "";
         string body = card?.CardText ?? "";
         if (title.Length == 0 || (card != null && body.Length == 0)) return;
-        if (who != null && rows.Count == 0) body = _ctx.Strings.Get("iso_nothing_on");
+        // Somebody with nothing on them gets their name and an empty window.
+        // It used to say so in words, which was a sentence to read every time
+        // the mouse crossed anybody to find out there was nothing to read.
 
         // measured first, because the window is built to fit what goes in it
         if (InfoWindow(InfoMinH) is not Rectangle probe) return;
