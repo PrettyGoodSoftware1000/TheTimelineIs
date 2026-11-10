@@ -1628,7 +1628,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
                 Billboard(batch, BlockCatalog.Turns(deco.File)
                         ? BlockCatalog.DecorationPath(deco.File, deco.Facing)
                         : BlockCatalog.DecorationPath(deco.File),
-                    tile, b.Height, origin, Color.White);
+                    tile, b.Height, origin, Color.White, deco.File);
             // An enemy goes down when the LAST square of its body is painted,
             // not the first. Drawn on its anchor, a body covering more than one
             // tile was buried by its own other squares — every one of them has
@@ -1855,7 +1855,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     private void DrawRotateHint(SpriteBatch batch, Point cursor, int height, Vector2 origin)
     {
         Billboard(batch, BlockCatalog.DecorationPath(DecoFile, _decoFacing),
-            cursor, height, origin, Color.White * 0.55f);
+            cursor, height, origin, Color.White * 0.55f, DecoFile);
 
         var c = IsoMath.ToScreen(cursor.X, cursor.Y, height, origin);
         var ink = new Color(190, 140, 255);
@@ -2136,13 +2136,21 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         }
     }
 
-    private void Billboard(SpriteBatch batch, string path, Point tile, int height, Vector2 origin, Color tint)
+    /// <summary>
+    /// A decoration on its square. Nudged by the same Anchors.txt the game
+    /// reads, so a trash can anchored in the ~ menu sits where the editor
+    /// shows it rather than somewhere else once the level is played.
+    /// </summary>
+    private void Billboard(SpriteBatch batch, string path, Point tile, int height, Vector2 origin,
+        Color tint, string? anchorKey = null)
     {
         var tex = _ctx.Assets.LoadTexture(path);
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, origin);
+        var by = anchorKey == null ? ArtAnchors.None : ArtAnchors.Current.For(anchorKey);
         int w = Math.Min(tex.Width, IsoMath.TileW);
         int h = (int)(w * tex.Height / (float)tex.Width);
-        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + 5 - h), w, h), tint);
+        batch.Draw(tex, new Rectangle(
+            (int)(c.X - w / 2f) + by.X, (int)(c.Y + 5 - h) - by.Y, w, h), tint);
     }
 
     /// <summary>

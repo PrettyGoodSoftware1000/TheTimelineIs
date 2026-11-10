@@ -47,16 +47,29 @@ public partial class IsoLevelScreen
         var solid = ArtBounds.Solid(art);
         var foot = FootOf(c);
         // whatever the artist left round the figure, nudged by hand from the
-        // ~ menu. Both are offsets from where the art already stands, so a
-        // nudge of nothing moves nothing — ticking Vertical alone included.
-        // Height only counts when the line asks for it, because the lowest
-        // solid pixel is normally exactly right.
+        // ~ menu. Both numbers move it across the GROUND — east-west and
+        // north-south — so a nudge of nothing moves nothing and nothing is
+        // ever lifted off the floor. Height stays with the lowest solid pixel.
         var nudge = _ctx.Anchors.For(c.Name, c.Art);
         return new Rectangle(
             (int)foot.X - (solid.Left + solid.Right) / 2 + nudge.X,
-            (int)foot.Y - solid.Bottom - (nudge.Vertical ? nudge.Y : 0),
+            (int)foot.Y - solid.Bottom - nudge.Y,
             art.Width, art.Height);
     }
+
+    /// <summary>
+    /// How many depth bands a southward nudge moves something.
+    ///
+    /// One band is half a tile down the screen, and a band's ground starts
+    /// exactly at the centre of the band behind it. So a picture pushed even a
+    /// pixel south overlaps ground that is painted after it, and its feet end
+    /// up underneath — which is what sinking into the floor looks like. Moving
+    /// it down the bands with the nudge keeps it standing ON the ground it has
+    /// moved onto. A northward nudge needs none of this: the ground it moves
+    /// over was already painted.
+    /// </summary>
+    private static int BandsSouth(int nudgeY) =>
+        nudgeY >= 0 ? 0 : (-nudgeY + IsoMath.TileH / 2 - 1) / (IsoMath.TileH / 2);
 
     /// <summary>
     /// The animation frame standing in for a character's rotation right now,
@@ -191,6 +204,11 @@ public partial class IsoLevelScreen
             (_selectedCard ?? HoveredCard()) is Card plant && (plant.IsGuard || plant.IsLurk))
             _watchedGround.UnionWith(WatchedGroundFor(planter, plant));
 
+        // Objects nudged south, waiting for the band of ground they have moved
+        // onto to be painted. Almost always empty: an object with no nudge, or
+        // one nudged north, is drawn with its own square as it always was.
+        _pendingObjects.Clear();
+
         int band = int.MinValue;
         foreach (var block in _level.Blocks.Values
                      .Where(b => _level.Shown(new Point(b.X, b.Y), _revealed))
@@ -201,6 +219,7 @@ public partial class IsoLevelScreen
             // and under everything nearer than they are
             if (block.X + block.Y != band)
             {
+                DrawBandObjects(batch, band);
                 DrawBandCast(batch, byDepth, band, alpha);
                 band = block.X + block.Y;
             }
@@ -261,21 +280,18 @@ public partial class IsoLevelScreen
             // practice - shows its open picture. With no open picture it is
             // faded instead, so it never looks shut after it has been opened.
             if (_level.DecorationAt(tile) is LevelDecoration deco)
-            {
-                bool open = OpenedWayAt(tile);
-                // one that turns is drawn from the rotation it was placed at;
-                // the rest have one picture and an open state
-                string art = BlockCatalog.Turns(deco.File)
-                    ? BlockCatalog.DecorationPath(deco.File, deco.Facing)
-                    : BlockCatalog.DecorationPath(deco.File, open);
-                Billboard(batch, art, tile, block.Height,
-                    (open && !BlockCatalog.Turns(deco.File) && !BlockCatalog.HasOpenArt(deco.File)
-                        ? Color.White * 0.35f : Color.White) * alpha);
-            }
+                Object(batch, new PendingObject(deco.File, tile, block.Height, alpha),
+                    band + BandsSouth(_ctx.Anchors.For(deco.File).Y), band);
             if (_fires.ContainsKey(tile)) DrawFire(batch, tile, block.Height, alpha);
-            if (IsGateTile(tile)) DrawGate(batch, tile, block.Height, alpha);
+            if (IsGateTile(tile))
+                Object(batch, new PendingObject(GateArtKey, tile, block.Height, alpha),
+                    band + BandsSouth(_ctx.Anchors.For(GateArtKey).Y), band);
         }
+        DrawBandObjects(batch, band);
         DrawBandCast(batch, byDepth, band, alpha);
+        // anything nudged past the last band of ground still has to be drawn
+        foreach (var late in _pendingObjects.Keys.OrderBy(b => b).ToList())
+            DrawBandObjects(batch, late);
 
         // Anybody left is standing on ground the level never drew — off its
         // edge. They go down last rather than being dropped, so a character in
@@ -295,8 +311,9 @@ public partial class IsoLevelScreen
     /// The depth band a body standing on a square occupies — its far corner,
     /// since that is the band its whole footprint is clear of.
     /// </summary>
-    private static int DepthOf(CharacterInstance c, Point at) =>
-        at.X + c.SizeX - 1 + at.Y + c.SizeY - 1;
+    private int DepthOf(CharacterInstance c, Point at) =>
+        at.X + c.SizeX - 1 + at.Y + c.SizeY - 1 +
+        BandsSouth(_ctx.Anchors.For(c.Name, c.Art).Y);
 
     private void DrawBandCast(SpriteBatch batch,
         Dictionary<int, List<CharacterInstance>> byDepth, int depth, float alpha)
@@ -309,6 +326,46 @@ public partial class IsoLevelScreen
         // them all the way across the board.
         foreach (var c in standing.Where(p => Picked.Contains(p))) DrawPickedGround(batch, c);
         foreach (var c in standing) DrawCharacter(batch, c, alpha);
+    }
+
+    /// <summary>An object waiting for the band of ground it was nudged onto.</summary>
+    private readonly record struct PendingObject(string Key, Point Tile, int Height, float Alpha);
+
+    private readonly Dictionary<int, List<PendingObject>> _pendingObjects = new();
+
+    /// <summary>
+    /// Draws an object now if it belongs on the band being painted, or files it
+    /// under the band it was nudged onto.
+    /// </summary>
+    private void Object(SpriteBatch batch, PendingObject obj, int wants, int band)
+    {
+        if (wants <= band) { DrawObject(batch, obj); return; }
+        if (!_pendingObjects.TryGetValue(wants, out var list))
+            _pendingObjects[wants] = list = new List<PendingObject>();
+        list.Add(obj);
+    }
+
+    private void DrawBandObjects(SpriteBatch batch, int band)
+    {
+        if (!_pendingObjects.Remove(band, out var waiting)) return;
+        foreach (var obj in waiting) DrawObject(batch, obj);
+    }
+
+    private void DrawObject(SpriteBatch batch, PendingObject obj)
+    {
+        if (obj.Key == GateArtKey) { DrawGate(batch, obj.Tile, obj.Height, obj.Alpha); return; }
+
+        bool open = OpenedWayAt(obj.Tile);
+        bool turns = BlockCatalog.Turns(obj.Key);
+        // one that turns is drawn from the rotation it was placed at; the rest
+        // have one picture and an open state
+        string art = turns
+            ? BlockCatalog.DecorationPath(obj.Key, _level.DecorationAt(obj.Tile)?.Facing ?? Facing8.SouthEast)
+            : BlockCatalog.DecorationPath(obj.Key, open);
+        Billboard(batch, art, obj.Tile, obj.Height,
+            (open && !turns && !BlockCatalog.HasOpenArt(obj.Key)
+                ? Color.White * 0.35f : Color.White) * obj.Alpha,
+            _ctx.Anchors.For(obj.Key));
     }
 
     /// <summary>The green diamond under a selected character, sliding with them.</summary>
@@ -381,9 +438,11 @@ public partial class IsoLevelScreen
         {
             var tex = _ctx.Assets.LoadTexture(GateArtPath);
             var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
+            var by = _ctx.Anchors.For(GateArtKey);
             int w = IsoMath.TileW;
             int h = (int)(w * tex.Height / (float)tex.Width);
-            batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y - h / 2f), w, h),
+            batch.Draw(tex, new Rectangle(
+                (int)(c.X - w / 2f) + by.X, (int)(c.Y - h / 2f) - by.Y, w, h),
                 Color.White * pulse * alpha);
             return;
         }
@@ -393,6 +452,9 @@ public partial class IsoLevelScreen
 
     /// <summary>The Vessel's gate, lying open on a square. A wash when it is not drawn yet.</summary>
     private const string GateArtPath = "Content/Images/Pixel/Effects/VesselGate.png";
+
+    /// <summary>What the gate is called in the anchor menu and in Anchors.txt.</summary>
+    private const string GateArtKey = "VesselGate";
 
     /// <summary>
     /// How far back along its angle a sky shot starts, in art pixels. Well
@@ -514,7 +576,8 @@ public partial class IsoLevelScreen
         batch.Draw(_ctx.Assets.LoadTexture("Content/Images/Blocks/OverlayEdge.png"),
             DiamondRect(tile, height), color);
 
-    private void Billboard(SpriteBatch batch, string path, Point tile, int height, Color tint)
+    private void Billboard(SpriteBatch batch, string path, Point tile, int height, Color tint,
+        ArtAnchor? nudge = null)
     {
         var tex = _ctx.Assets.LoadTexture(path);
         var c = IsoMath.ToScreen(tile.X, tile.Y, height, Origin);
@@ -522,7 +585,9 @@ public partial class IsoLevelScreen
         // squeezed to a tile's width when it is still an old painted picture
         int w = Math.Min(tex.Width, IsoMath.TileW);
         int h = (int)(w * tex.Height / (float)tex.Width);
-        batch.Draw(tex, new Rectangle((int)(c.X - w / 2f), (int)(c.Y + IsoMath.Px(5) - h), w, h), tint);
+        var by = nudge ?? ArtAnchors.None;
+        batch.Draw(tex, new Rectangle(
+            (int)(c.X - w / 2f) + by.X, (int)(c.Y + IsoMath.Px(5) - h) - by.Y, w, h), tint);
     }
 
     /// <param name="alpha">

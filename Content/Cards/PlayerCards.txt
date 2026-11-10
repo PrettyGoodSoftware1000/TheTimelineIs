@@ -284,7 +284,7 @@ Bottom Right: 5 Stabby
 []
 Card Name: Lurk
 Tags: Dirtbag
-Type: [cone] Single target, X hits.
+Type: Single target, X hits.
 Action Points: 2
 Friendly Fire: No
 Stops Movement: Yes

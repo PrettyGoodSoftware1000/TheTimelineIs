@@ -10,39 +10,63 @@ using TheTimelineIs.Core.Render;
 namespace TheTimelineIs.Core.Iso;
 
 /// <summary>
-/// Anchor Art: nudging a character's picture on its square while looking at it.
+/// Anchor Art: nudging a picture on its square while looking at it.
 ///
-/// Art arrives with the figure wherever the artist drew it, and on a one-square-wide
-/// square being a couple of pixels off centre is plain to see. Rather than
+/// Art arrives with the figure wherever the artist drew it, and on a square one
+/// tile wide being a couple of pixels off centre is plain to see. Rather than
 /// re-export, the offset is tuned here by eye and written to Anchors.txt.
 ///
-/// SIDEWAYS by default. Height comes from the lowest solid pixel of the
-/// picture, which is a character's feet whatever canvas they were drawn on, and
-/// that has been right every time so far. Vertical is a box to tick for the
-/// exceptions rather than a second number everybody has to get right.
+/// Both arrows move it ACROSS THE GROUND — left and right is east and west, up
+/// and down is north and south. Nothing is lifted: something nudged south is
+/// drawn with the band of ground it has moved onto, so it never sinks under
+/// tiles painted after it. Height still comes from the lowest solid pixel.
+///
+/// Objects are in the list too — doors, trash cans, the Vessel's gate — because
+/// a portal drawn a few pixels off its square looks exactly as wrong as a
+/// character does. Six to a page; Tab turns the page.
 ///
 /// It runs over the LEVEL, not the map, because the whole point is watching the
-/// character move against ground you can see.
+/// nudge land against ground you can see.
 /// </summary>
 public partial class IsoLevelScreen
 {
     private bool _anchorMenu;
 
-    /// <summary>Which of the cast is being nudged.</summary>
+    /// <summary>Which row is being nudged, counted through the whole list.</summary>
     private int _anchorWho;
 
-    private static readonly Rectangle AnchorPanel = new(60, 1180, 1500, 800);
+    /// <summary>One thing that can be nudged: a row, and a key in Anchors.txt.</summary>
+    private readonly record struct AnchorTarget(string Key, bool IsObject);
+
+    private const int AnchorRows = 6;
+
+    private static readonly Rectangle AnchorPanel = new(60, 1100, 1500, 880);
 
     private static Rectangle AnchorRow(int i) =>
         new(AnchorPanel.X + 40, AnchorPanel.Y + 150 + i * 96, AnchorPanel.Width - 80, 84);
 
-    /// <summary>Everybody on the board worth nudging, one row each.</summary>
-    private List<CharacterInstance> AnchorCast() =>
-        Everyone.Where(c => c.Alive)
-            .GroupBy(c => ArtAnchors.KeyFor(c.Name, c.Art), StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.First())
-            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+    /// Everything on the board worth nudging: the cast first, then the objects
+    /// standing on it. One row per PICTURE, not per body — two imps share a
+    /// nudge because they share their art.
+    /// </summary>
+    private List<AnchorTarget> AnchorList()
+    {
+        var rows = Everyone.Where(c => c.Alive)
+            .Select(c => ArtAnchors.KeyFor(c.Name, c.Art))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .Select(k => new AnchorTarget(k, false))
             .ToList();
+
+        var objects = _level.Decorations.Select(d => d.File).ToList();
+        if (_gates.Count > 0) objects.Add(GateArtKey);
+        rows.AddRange(objects
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .Select(k => new AnchorTarget(k, true)));
+        return rows;
+    }
 
     private void OpenAnchorMenu()
     {
@@ -52,52 +76,49 @@ public partial class IsoLevelScreen
     }
 
     /// <summary>
-    /// Arrows nudge, V toggles vertical, Tab picks the next character, Enter
-    /// saves, Esc leaves it alone. Returns true while it owns the frame.
+    /// Arrows nudge, Tab turns the page, Enter saves, Esc leaves it alone.
+    /// Returns true while it owns the frame.
     /// </summary>
     private bool UpdateAnchorMenu(InputState input)
     {
         if (!_anchorMenu) return false;
-        var cast = AnchorCast();
-        if (cast.Count == 0) { _anchorMenu = false; return true; }
-        _anchorWho = Math.Clamp(_anchorWho, 0, cast.Count - 1);
+        var rows = AnchorList();
+        if (rows.Count == 0) { _anchorMenu = false; return true; }
+        _anchorWho = Math.Clamp(_anchorWho, 0, rows.Count - 1);
 
         if (input.Cancel) { _anchorMenu = false; return true; }
         if (input.Submit) { SaveAnchors(); _anchorMenu = false; return true; }
 
+        // Tab turns the PAGE, not the row: there are more pictures on a board
+        // than fit down one panel, and stepping one row at a time to reach the
+        // last of them was the slowest way to do it. Clicking picks the row.
+        if (input.SelectAll)
+        {
+            int page = (_anchorWho / AnchorRows + 1) % Pages(rows.Count);
+            _anchorWho = page * AnchorRows;
+        }
+
         if (_tap is Point press)
         {
             _tap = null;
-            for (int i = 0; i < cast.Count; i++)
-                if (AnchorRow(i).Contains(press)) { _anchorWho = i; break; }
-            // the tick box at the right of the row toggles vertical
-            var box = AnchorTickBox(AnchorRow(_anchorWho));
-            if (box.Contains(press)) Nudge(cast[_anchorWho], 0, 0, flipVertical: true);
+            int first = _anchorWho / AnchorRows * AnchorRows;
+            for (int i = 0; i < AnchorRows && first + i < rows.Count; i++)
+                if (AnchorRow(i).Contains(press)) { _anchorWho = first + i; break; }
         }
 
-        if (input.SelectAll) _anchorWho = (_anchorWho + 1) % cast.Count;   // Tab
-        foreach (char ch in input.TypedChars)
-            if (ch is 'v' or 'V') Nudge(cast[_anchorWho], 0, 0, flipVertical: true);
-
-        // Arrows move the picture a pixel at a time. Up and down only do
-        // anything once vertical is ticked, which is the whole of the
-        // difference between the two axes.
-        var by = new Point(
-            (input.Nudge.X != 0 ? Math.Sign(input.Nudge.X) : 0),
-            (input.Nudge.Y != 0 ? Math.Sign(input.Nudge.Y) : 0));
-        if (by != Point.Zero) Nudge(cast[_anchorWho], by.X, by.Y);
+        // A pixel a press, across the ground: left and right is east and west,
+        // up and down is north and south.
+        var by = new Point(Math.Sign(input.Nudge.X), Math.Sign(input.Nudge.Y));
+        if (by != Point.Zero) Nudge(rows[_anchorWho].Key, by.X, by.Y);
         return true;
     }
 
-    private static Rectangle AnchorTickBox(Rectangle row) =>
-        new(row.Right - 420, row.Y + 14, 56, 56);
+    private static int Pages(int count) => Math.Max(1, (count + AnchorRows - 1) / AnchorRows);
 
-    private void Nudge(CharacterInstance who, int dx, int dy, bool flipVertical = false)
+    private void Nudge(string key, int dx, int dy)
     {
-        var now = _ctx.Anchors.For(who.Name, who.Art);
-        bool vertical = flipVertical ? !now.Vertical : now.Vertical;
-        _ctx.Anchors.Set(who.Name, who.Art,
-            new ArtAnchor(now.X + dx, vertical ? now.Y - dy : now.Y, vertical));
+        var now = _ctx.Anchors.For(key);
+        _ctx.Anchors.Set(key, new ArtAnchor(now.X + dx, now.Y - dy));
     }
 
     private void SaveAnchors()
@@ -110,8 +131,8 @@ public partial class IsoLevelScreen
     private void DrawAnchorMenu(SpriteBatch batch)
     {
         if (!_anchorMenu) return;
-        var cast = AnchorCast();
-        if (cast.Count == 0) return;
+        var rows = AnchorList();
+        if (rows.Count == 0) return;
 
         // a panel down one side only: the board stays visible, because seeing
         // the nudge land is the entire point of doing this here
@@ -120,36 +141,46 @@ public partial class IsoLevelScreen
             new Rectangle(AnchorPanel.X, AnchorPanel.Y + 30, AnchorPanel.Width, 80),
             Color.Yellow, 0.42f);
 
-        for (int i = 0; i < cast.Count && i < 6; i++)
+        int pages = Pages(rows.Count);
+        int page = _anchorWho / AnchorRows;
+        Ui.DrawTextCentered(batch, _ctx.Font,
+            _ctx.Strings.Format("dev_anchor_page",
+                ("page", (page + 1).ToString()), ("of", pages.ToString())),
+            new Rectangle(AnchorPanel.Right - 300, AnchorPanel.Y + 40, 260, 60),
+            Color.White * 0.7f, 0.3f);
+
+        for (int i = 0; i < AnchorRows && page * AnchorRows + i < rows.Count; i++)
         {
             var row = AnchorRow(i);
-            var who = cast[i];
-            var a = _ctx.Anchors.For(who.Name, who.Art);
-            bool picked = i == _anchorWho;
+            var target = rows[page * AnchorRows + i];
+            var a = _ctx.Anchors.For(target.Key);
+            bool picked = page * AnchorRows + i == _anchorWho;
             Ui.FillRect(batch, _ctx.Pixel, row,
                 picked ? new Color(44, 44, 76) : new Color(22, 22, 30));
 
-            batch.DrawString(_ctx.Font, ArtAnchors.KeyFor(who.Name, who.Art),
+            batch.DrawString(_ctx.Font, target.Key,
                 new Vector2(row.X + 22, row.Y + 20), picked ? Color.White : Color.Gray,
                 0f, Vector2.Zero, 0.32f, SpriteEffects.None, 0f);
 
-            var box = AnchorTickBox(row);
-            Ui.FillRect(batch, _ctx.Pixel, box, new Color(0, 0, 0, 200));
-            if (a.Vertical)
-                Ui.DrawTextCentered(batch, _ctx.Font, "x", box, Color.LightGreen, 0.4f);
-            batch.DrawString(_ctx.Font, _ctx.Strings.Get("dev_anchor_vertical"),
-                new Vector2(box.Right + 12, row.Y + 22), Color.White * 0.8f,
-                0f, Vector2.Zero, 0.26f, SpriteEffects.None, 0f);
+            // objects are called out, because "Door.png" and a character's name
+            // read the same in a list and are nudged for different reasons
+            if (target.IsObject)
+                batch.DrawString(_ctx.Font, _ctx.Strings.Get("dev_anchor_object"),
+                    new Vector2(row.Right - 560, row.Y + 24), Color.SkyBlue * 0.8f,
+                    0f, Vector2.Zero, 0.26f, SpriteEffects.None, 0f);
 
-            string shown = a.Vertical ? $"{a.X:+#;-#;0}, {a.Y:+#;-#;0}" : $"{a.X:+#;-#;0}";
+            string shown = a.Y == 0 ? $"{a.X:+#;-#;0}" : $"{a.X:+#;-#;0}, {a.Y:+#;-#;0}";
             Ui.DrawTextCentered(batch, _ctx.Font, shown,
                 new Rectangle(row.Right - 190, row.Y, 170, row.Height),
                 a == ArtAnchors.None ? Color.Gray : Color.LightGreen, 0.34f);
         }
 
         Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("dev_anchor_hint"),
-            new Rectangle(AnchorPanel.X, AnchorPanel.Bottom - 90, AnchorPanel.Width, 70),
+            new Rectangle(AnchorPanel.X, AnchorPanel.Bottom - 150, AnchorPanel.Width, 60),
             Color.White * 0.75f, 0.26f);
+        Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("dev_anchor_keys"),
+            new Rectangle(AnchorPanel.X, AnchorPanel.Bottom - 90, AnchorPanel.Width, 60),
+            Color.White * 0.6f, 0.24f);
         _tap = null;
     }
 }

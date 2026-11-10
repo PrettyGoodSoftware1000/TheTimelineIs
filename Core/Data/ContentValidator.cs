@@ -589,7 +589,8 @@ public static class ContentValidator
             "iso_stunned", "iso_stun_skip", "iso_swapped",
             "iso_trip_start", "iso_trip_empty", "iso_trip_survivor", "iso_trip_woke",
             "dev_title", "dev_win", "dev_die", "dev_fps", "dev_fps_typing", "dev_fps_hint", "dev_anchor", "dev_close",
-            "dev_anchor_title", "dev_anchor_vertical", "dev_anchor_hint",
+            "dev_anchor_title", "dev_anchor_object", "dev_anchor_page",
+            "dev_anchor_hint", "dev_anchor_keys",
             "dev_anchor_saved", "dev_anchor_unsaved",
         };
         foreach (var key in required)

@@ -5,30 +5,35 @@ using System.Text;
 
 namespace TheTimelineIs.Core.Data;
 
-/// <summary>How far one character's art is nudged, and whether height is set by hand.</summary>
-public record ArtAnchor(int X, int Y, bool Vertical);
+/// <summary>
+/// How far one picture is nudged on its square: X sideways, Y north and south.
+/// </summary>
+public record ArtAnchor(int X, int Y);
 
 /// <summary>
-/// Content/Cast/Anchors.txt: which way a character's picture is nudged on its
-/// square.
+/// Content/Cast/Anchors.txt: which way a picture is nudged on its square.
 ///
 /// Art comes out of the tool with the figure wherever the artist drew it, and a
 /// character drawn a little left of centre stands a little left of centre — on
-/// a square that is plain to see. So each one gets an offset, tuned by
-/// eye from the ~ menu while looking at the level, and written back here.
+/// a square that is plain to see. So each one gets an offset, tuned by eye from
+/// the ~ menu while looking at the level, and written back here.
 ///
-/// SIDEWAYS ONLY, unless asked otherwise. Height already works: a character is
-/// hung by the lowest solid pixel of its picture, which is its feet whatever
-/// canvas it came on. Tick Vertical for the exceptions — something drawn
-/// mid-air, or a body whose lowest pixel is a shadow rather than a foot — and
-/// the Y offset applies too.
+/// Both numbers move it ACROSS THE GROUND. X is east and west, Y is north and
+/// south — positive north, up the screen. Nothing is lifted off the floor:
+/// something nudged south is drawn with the ground it has moved onto, so it
+/// never ends up under tiles painted later.
+///
+/// Height is not set here. A picture is hung by its lowest solid pixel, which
+/// is a character's feet whatever canvas it came on.
 ///
 ///   Werewitch WitchForm: -2
-///   Gator Gator: 3, -4, vertical
+///   Gator Gator: 3, -4
+///   VesselGate: 0, 6
 ///
-/// The name is the character and the art folder, which is what tells one form
-/// from another: a wolf and a witch are drawn from different pictures and
-/// rarely want the same nudge.
+/// For a character the name is the character and the art folder, which is what
+/// tells one form from another: a wolf and a witch are drawn from different
+/// pictures and rarely want the same nudge. For an object it is the picture's
+/// own name, as Decorations.txt spells it.
 /// </summary>
 public class ArtAnchors
 {
@@ -43,14 +48,19 @@ public class ArtAnchors
         art.Length > 0 ? $"{name} {art}" : name;
 
     /// <summary>Nothing moved, which is what everybody starts as.</summary>
-    public static readonly ArtAnchor None = new(0, 0, false);
+    public static readonly ArtAnchor None = new(0, 0);
 
-    public ArtAnchor For(string name, string art) =>
-        _anchors.TryGetValue(KeyFor(name, art), out var a) ? a : None;
+    public ArtAnchor For(string name, string art) => For(KeyFor(name, art));
 
-    public void Set(string name, string art, ArtAnchor anchor)
+    /// <summary>The nudge filed under a key — an object's picture name, say.</summary>
+    public ArtAnchor For(string key) =>
+        _anchors.TryGetValue(key, out var a) ? a : None;
+
+    public void Set(string name, string art, ArtAnchor anchor) =>
+        Set(KeyFor(name, art), anchor);
+
+    public void Set(string key, ArtAnchor anchor)
     {
-        string key = KeyFor(name, art);
         if (anchor == None) _anchors.Remove(key);
         else _anchors[key] = anchor;
     }
@@ -68,27 +78,28 @@ public class ArtAnchors
             if (colon <= 0)
             {
                 diag.Error(Path, lineNo, $"unrecognized line '{line}' — expected " +
-                    "'Character Folder: x' or 'Character Folder: x, y, vertical'");
+                    "'Name: x' or 'Name: x, y'");
                 continue;
             }
             string who = line[..colon].Trim();
-            var bits = line[(colon + 1)..]
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string rest = line[(colon + 1)..].Trim();
+            var bits = rest.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-            bool vertical = bits.Any(b => b.Equals("vertical", StringComparison.OrdinalIgnoreCase));
-            var numbers = bits.Where(b => !b.Equals("vertical", StringComparison.OrdinalIgnoreCase)).ToList();
-            if (numbers.Count is 0 or > 2 || !int.TryParse(numbers[0], out int x) ||
-                (numbers.Count == 2 && !int.TryParse(numbers[1], out _)))
+            if (bits.Any(b => b.Equals("vertical", StringComparison.OrdinalIgnoreCase)))
             {
-                diag.Error(Path, lineNo, $"'{who}': expected one or two whole numbers of pixels, " +
-                    $"optionally followed by 'vertical' — got '{line[(colon + 1)..].Trim()}'");
+                diag.Error(Path, lineNo, $"'{who}': 'vertical' is gone. The second number " +
+                    "moves it north and south across the ground now, and always counts — " +
+                    "drop the word and keep the numbers.");
                 continue;
             }
-            int y = numbers.Count == 2 ? int.Parse(numbers[1]) : 0;
-            if (y != 0 && !vertical)
-                diag.Warn(Path, lineNo, $"'{who}': has a vertical nudge of {y} but does not say " +
-                    "'vertical', so it is ignored — the lowest solid pixel decides the height");
-            lib._anchors[who] = new ArtAnchor(x, y, vertical);
+            if (bits.Length is 0 or > 2 || !int.TryParse(bits[0], out int x) ||
+                (bits.Length == 2 && !int.TryParse(bits[1], out _)))
+            {
+                diag.Error(Path, lineNo, $"'{who}': expected one or two whole numbers of " +
+                    $"pixels — east-west, then north-south — got '{rest}'");
+                continue;
+            }
+            lib._anchors[who] = new ArtAnchor(x, bits.Length == 2 ? int.Parse(bits[1]) : 0);
         }
         Current = lib;
         return lib;
@@ -98,18 +109,20 @@ public class ArtAnchors
     public string Serialize()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# How far a character's art is nudged on its square, in pixels.");
-        sb.AppendLine("#   <Character> <Art folder>: x");
-        sb.AppendLine("#   <Character> <Art folder>: x, y, vertical");
+        sb.AppendLine("# How far a picture is nudged on its square, in pixels.");
+        sb.AppendLine("#   <Name>: east-west");
+        sb.AppendLine("#   <Name>: east-west, north-south      (positive north, up the screen)");
         sb.AppendLine("#");
-        sb.AppendLine("# Sideways only unless the line says 'vertical'. Height normally comes");
-        sb.AppendLine("# from the lowest solid pixel of the picture, which is a character's");
-        sb.AppendLine("# feet whatever size canvas it was drawn on.");
+        sb.AppendLine("# Both numbers move it across the ground. Nothing is lifted off the");
+        sb.AppendLine("# floor: height comes from the lowest solid pixel of the picture.");
+        sb.AppendLine("#");
+        sb.AppendLine("# A character is '<Character> <Art folder>'. An object is its picture's");
+        sb.AppendLine("# own name.");
         sb.AppendLine("#");
         sb.AppendLine("# Written by the Anchor Art page of the ~ menu.");
         sb.AppendLine();
         foreach (var (key, a) in _anchors.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
-            sb.AppendLine(a.Vertical ? $"{key}: {a.X}, {a.Y}, vertical" : $"{key}: {a.X}");
+            sb.AppendLine(a.Y == 0 ? $"{key}: {a.X}" : $"{key}: {a.X}, {a.Y}");
         return sb.ToString();
     }
 }
