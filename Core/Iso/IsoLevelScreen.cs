@@ -485,6 +485,7 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
                 ActionsPerTurn = def.Actions,
                 SizeX = def.SizeX, SizeY = def.SizeY,
                 GX = spawn.X, GY = spawn.Y,
+                Facing = spawn.Facing,
             });
         }
     }

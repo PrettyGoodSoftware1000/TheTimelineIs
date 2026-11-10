@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Microsoft.Xna.Framework;
 using TheTimelineIs.Core.Data;
+using TheTimelineIs.Core.Pixel;
 
 namespace TheTimelineIs.Core.Iso;
 
@@ -27,22 +28,39 @@ public partial class IsoLevelScreen
     private readonly List<Gate> _gates = new();
 
     /// <summary>
-    /// Where a portal puts you down: the square one step SOUTH-WEST of the far
-    /// end, so you arrive beside it rather than on it. Landing ON the far end
-    /// would send you straight back and the two would bounce you forever.
+    /// Where a portal puts you down, in the order the squares are tried:
+    /// south-east of the far end first, then south, south-west, west and east.
+    /// If all five are taken, whatever else is beside it will do — arriving
+    /// round the back beats not arriving at all.
     ///
-    /// The grid is turned 45 degrees on screen, so +Y is what the player calls
-    /// south-west — see <see cref="Pixel.Facings.Towards"/>.
+    /// Never the far end itself: landing on it would send you straight back
+    /// and the pair would bounce you forever.
+    ///
+    /// These are compass directions as the player SEES them. The grid is
+    /// turned 45 degrees on screen, so south-east is +X and south is +X+Y —
+    /// which is what Facing8.GridStep answers, rather than this working it
+    /// out again.
     /// </summary>
-    private static Point SouthWestOf(Point tile) => new(tile.X, tile.Y + 1);
+    private static readonly Pixel.Facing8[] GateExits =
+    {
+        Pixel.Facing8.SouthEast, Pixel.Facing8.South, Pixel.Facing8.SouthWest,
+        Pixel.Facing8.West, Pixel.Facing8.East,
+        Pixel.Facing8.NorthEast, Pixel.Facing8.NorthWest, Pixel.Facing8.North,
+    };
+
+    private static IEnumerable<Point> ExitsAround(Point far) =>
+        GateExits.Select(f => far + f.GridStep());
 
     /// <summary>
     /// Drops a pair of portals on the two squares the card was aimed at.
     ///
     /// Both ends are placed at once, from the card's own aims, so the player
-    /// sees the whole thing before anything can walk into it. A gate already
-    /// using one of these squares is replaced rather than stacked: one portal
-    /// per square keeps "step here, come out there" a single answer.
+    /// sees the whole thing before anything can walk into it.
+    ///
+    /// TWO PORTALS, NOT FOUR. Casting it again moves the pair rather than
+    /// adding a second one: the card is one doorway with two ends, and a board
+    /// with four of them is a board where "step here, come out there" stops
+    /// having one answer.
     /// </summary>
     private void OpenGate(IReadOnlyList<Point> aims, StringBuilder report)
     {
@@ -54,7 +72,7 @@ public partial class IsoLevelScreen
         }
         var (a, b) = (aims[0], aims[1]);
         if (a == b) return;
-        _gates.RemoveAll(g => g.A == a || g.B == a || g.A == b || g.B == b);
+        _gates.Clear();
         _gates.Add(new Gate { A = a, B = b });
         report.AppendLine(_ctx.Strings.Get("iso_gate_opened"));
     }
@@ -76,9 +94,17 @@ public partial class IsoLevelScreen
         var far = _gates.Select(g => g.Far(tile)).FirstOrDefault(p => p != null);
         if (far is not Point other) return false;
 
-        var exit = SouthWestOf(other);
         var taken = OccupiedExcept(walker);
-        if (!Pathfinder.Fits(_level, exit, walker.SizeX, walker.SizeY, _revealed, taken))
+        Point? landing = null;
+        foreach (var square in ExitsAround(other))
+            if (Pathfinder.Fits(_level, square, walker.SizeX, walker.SizeY, _revealed, taken))
+            {
+                landing = square;
+                break;
+            }
+        // every square round the far end is a wall, a drop or somebody else:
+        // nothing happens and the walk carries on as if this were ordinary ground
+        if (landing is not Point exit)
         {
             Toast(_ctx.Strings.Get("iso_gate_blocked"));
             return false;

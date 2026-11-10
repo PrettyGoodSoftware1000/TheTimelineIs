@@ -431,9 +431,11 @@ public partial class IsoLevelScreen
     private void DrawGate(SpriteBatch batch, Point tile, int height, float alpha)
     {
         // It lies FLAT, on the square rather than standing on it, so it is
-        // drawn into the diamond instead of billboarded like a tree. Both ends
-        // breathe on the same clock, which is what reads them as one thing.
-        float pulse = 0.78f + 0.22f * (float)Math.Sin(_clock * 3.0);
+        // drawn into the diamond instead of billboarded like a tree.
+        //
+        // Drawn SOLID. It used to breathe on a clock, fading in and out, which
+        // read as a thing half there rather than a thing you can step into.
+        // The only fade left is the one Ctrl puts over the whole board.
         if (AssetLoader.Exists(GateArtPath))
         {
             var tex = _ctx.Assets.LoadTexture(GateArtPath);
@@ -443,10 +445,10 @@ public partial class IsoLevelScreen
             int h = (int)(w * tex.Height / (float)tex.Width);
             batch.Draw(tex, new Rectangle(
                 (int)(c.X - w / 2f) + by.X, (int)(c.Y - h / 2f) - by.Y, w, h),
-                Color.White * pulse * alpha);
+                Color.White * alpha);
             return;
         }
-        Fill(batch, tile, height, new Color(150, 70, 230) * (pulse - 0.38f) * alpha);
+        Fill(batch, tile, height, new Color(150, 70, 230) * alpha);
         Edge(batch, tile, height, new Color(220, 170, 255) * alpha);
     }
 

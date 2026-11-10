@@ -333,19 +333,37 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// </summary>
     private Facing8 _decoFacing = Facings.Default;
 
+    /// <summary>
+    /// Which way the enemy brush is turned. Its own setting, kept apart from
+    /// the decoration's: pointing a portal one way and then placing a goblin
+    /// should not point the goblin that way too.
+    /// </summary>
+    private Facing8 _enemyFacing = Facings.Default;
+
     /// <summary>Whether the wheel should be turning something rather than raising it.</summary>
     private bool RotatingDeco =>
         _tool == Tool.Decoration && BlockCatalog.Decorations.Count > 0 && BlockCatalog.Turns(DecoFile);
+
+    /// <summary>
+    /// Everybody is drawn from eight rotations, so the enemy brush always
+    /// turns — there is no such thing as an enemy that cannot face a way.
+    /// </summary>
+    private bool RotatingEnemy => _tool == Tool.Enemy && _ctx.Enemies.EnemyNames.Count > 0;
+
+    /// <summary>Whichever way the brush in hand is pointing.</summary>
+    private Facing8 BrushFacing => RotatingEnemy ? _enemyFacing : _decoFacing;
 
     /// <summary>The decoration the brush will place, as Decorations.txt writes it.</summary>
     private string DecoFile => BlockCatalog.Decorations.Count > 0
         ? BlockCatalog.Decorations[Math.Clamp(_decoIndex, 0, BlockCatalog.Decorations.Count - 1)] : "";
 
-    /// <summary>Wheel up turns it one eighth one way, wheel down the other.</summary>
-    private void TurnDeco(int steps)
+    /// <summary>Wheel up turns the brush one eighth one way, wheel down the other.</summary>
+    private void TurnBrush(int steps)
     {
-        int at = Array.IndexOf(Facings.All, _decoFacing);
-        _decoFacing = Facings.All[((at + steps) % 8 + 8) % 8];
+        Facing8 Turned(Facing8 from) =>
+            Facings.All[((Array.IndexOf(Facings.All, from) + steps) % 8 + 8) % 8];
+        if (RotatingEnemy) _enemyFacing = Turned(_enemyFacing);
+        else _decoFacing = Turned(_decoFacing);
     }
 
     private string DecoName => BlockCatalog.Decorations.Count > 0
@@ -441,7 +459,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         ["deco"] = "a tree, a rock: something standing on a square, blocking it. "
                    + "The wheel turns the ones that turn",
         ["door"] = "paint two pads, then right-click one and its far end to join them",
-        ["enemy"] = "drop one enemy per click on a square that has ground",
+        ["enemy"] = "drop one enemy per click on a square that has ground. The wheel turns it",
         ["start"] = "where the party stands when the level opens, up to four",
         ["trigger"] = "a square that plays a dialogue when somebody steps on it",
         ["room"] = "which room the Paint room tool writes onto squares",
@@ -720,13 +738,13 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         // The wheel sets the placement height; with Ctrl it zooms instead, in
         // whole steps, so a pixel stays a whole number of screen pixels.
         //
-        // While a turning decoration is the brush it TURNS that instead. A
-        // thing that stands on a square cannot be raised off it anyway, so
-        // the wheel has nothing else to do there.
+        // While a turning decoration or an enemy is the brush it TURNS that
+        // instead. A thing that stands on a square cannot be raised off it
+        // anyway, so the wheel has nothing else to do there.
         if (input.ScrollDelta != 0)
         {
             if (input.CtrlHeld) _camera.ZoomBy(Math.Sign(input.ScrollDelta), input.RawPointer);
-            else if (RotatingDeco) TurnDeco(input.ScrollDelta);
+            else if (RotatingDeco || RotatingEnemy) TurnBrush(input.ScrollDelta);
             else _height = Math.Clamp(_height + input.ScrollDelta, 0, 12);
         }
 
@@ -1078,7 +1096,11 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             case Tool.Enemy when _level.BlockAt(tile) != null && _ctx.Enemies.EnemyNames.Count > 0:
                 _level.Enemies.RemoveAll(e => e.X == tile.X && e.Y == tile.Y);
                 _level.Enemies.Add(new LevelEnemy
-                    { X = tile.X, Y = tile.Y, Name = _ctx.Enemies.EnemyNames[_enemyIndex] });
+                {
+                    X = tile.X, Y = tile.Y,
+                    Name = _ctx.Enemies.EnemyNames[_enemyIndex],
+                    Facing = _enemyFacing,
+                });
                 break;
             // painted like any other overlay; which squares form one pad is
             // decided by which of them touch, not by anything stored
@@ -1249,6 +1271,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             if (which >= 0)
             {
                 _enemyIndex = which;
+                _enemyFacing = standing.Facing;   // the way it is turned comes too
                 _tool = Tool.Enemy;
                 Status($"picked up {standing.Name} - the ground under it is untouched");
                 return;
@@ -1635,7 +1658,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             // a greater X+Y, so every one of them painted over its legs.
             foreach (var e in EnemiesEndingAt(tile))
                 if (_ctx.Enemies.Get(e.Name) is EnemyDef def)
-                    Cast(batch, new Point(e.X, e.Y), b.Height, origin, Color.White * 0.9f, def);
+                    Cast(batch, new Point(e.X, e.Y), b.Height, origin, Color.White * 0.9f, def, e.Facing);
             if (_level.PlayerStarts.Contains(tile))
                 DrawTop(batch, b.X, b.Y, b.Height, origin, Color.LimeGreen * 0.35f);
             if (_level.TriggerAt(tile) is LevelTrigger trig)
@@ -1679,7 +1702,8 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
             var far = new Point(e.X + def.SizeX - 1, e.Y + def.SizeY - 1);
             if (_level.BlockAt(far) != null) continue;
             Cast(batch, new Point(e.X, e.Y),
-                _level.BlockAt(new Point(e.X, e.Y))?.Height ?? 0, origin, Color.Red * 0.8f, def);
+                _level.BlockAt(new Point(e.X, e.Y))?.Height ?? 0, origin, Color.Red * 0.8f,
+                def, e.Facing);
         }
 
         // a fill box covers squares that have no block yet, so it is painted
@@ -1840,7 +1864,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         Label(IsoMath.ToScreen(cursor.X, cursor.Y, cursorHeight, origin),
             Tall(cursorHeight), Color.Yellow, 0.36f);
 
-        if (RotatingDeco) DrawRotateHint(batch, cursor, cursorHeight, origin);
+        if (RotatingDeco || RotatingEnemy) DrawRotateHint(batch, cursor, cursorHeight, origin);
     }
 
     /// <summary>
@@ -1854,8 +1878,11 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// </summary>
     private void DrawRotateHint(SpriteBatch batch, Point cursor, int height, Vector2 origin)
     {
-        Billboard(batch, BlockCatalog.DecorationPath(DecoFile, _decoFacing),
-            cursor, height, origin, Color.White * 0.55f, DecoFile);
+        if (RotatingEnemy && _ctx.Enemies.Get(EnemyName) is EnemyDef ghost)
+            Cast(batch, cursor, height, origin, Color.White * 0.55f, ghost, _enemyFacing);
+        else
+            Billboard(batch, BlockCatalog.DecorationPath(DecoFile, _decoFacing),
+                cursor, height, origin, Color.White * 0.55f, DecoFile);
 
         var c = IsoMath.ToScreen(cursor.X, cursor.Y, height, origin);
         var ink = new Color(190, 140, 255);
@@ -1864,7 +1891,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         TurnArrow(batch, c, rx, ry, 200f, 340f, ink);
         TurnArrow(batch, c, rx, ry, 20f, 160f, ink);
 
-        Label(c + new Vector2(0, IsoMath.TileH * 1.1f), _decoFacing.FileName(), ink, 0.30f);
+        Label(c + new Vector2(0, IsoMath.TileH * 1.1f), BrushFacing.FileName(), ink, 0.30f);
     }
 
     /// <summary>
@@ -1978,7 +2005,7 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         new("right-click",     "on a trigger, opens that level's dialogue file"),
         new("Ctrl+Z",          "undo the last stroke"),
         new("Ctrl+S",          "save"),
-        new("scroll wheel",    "placement height, in blocks: one cube tall is 1"),
+        new("scroll wheel",    "placement height, in blocks: one cube tall is 1 - but turns an enemy, or a decoration that turns"),
         new("Ctrl+wheel",      "zoom, in whole pixels"),
         new("WASD, ARROWS",    "pan the view"),
         new("ALT",             "block heights: hold for a glance, tap to leave it up"),
@@ -2081,11 +2108,13 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
     /// rotation, or its cube, hung by the lowest solid pixel on the middle of
     /// its footprint.
     /// </summary>
-    private void Cast(SpriteBatch batch, Point tile, int height, Vector2 origin, Color tint, EnemyDef def)
+    private void Cast(SpriteBatch batch, Point tile, int height, Vector2 origin, Color tint,
+        EnemyDef def, Facing8 facing)
     {
         var art = _ctx.Sprites.Standing(new CharacterInstance
         {
             Name = def.Name, IsPlayer = false, SizeX = def.SizeX, SizeY = def.SizeY,
+            Facing = facing,
         });
         var solid = ArtBounds.Solid(art);
         var foot = IsoMath.ToScreen(tile.X, tile.Y, height, origin);

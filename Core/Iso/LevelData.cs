@@ -40,6 +40,13 @@ public class LevelEnemy
 {
     public int X, Y;
     public string Name = "";
+
+    /// <summary>
+    /// Which way it is standing when the level opens. Everybody is drawn from
+    /// eight rotations, so every enemy turns — unlike a decoration, where only
+    /// the ones drawn as a folder of directions can.
+    /// </summary>
+    public Pixel.Facing8 Facing = Pixel.Facings.Default;
 }
 
 /// <summary>A painted square that plays a dialogue block the first time anyone steps on it.</summary>
@@ -74,7 +81,7 @@ public class LevelTransition
 ///
 ///   Block: x, y, height, type, room      (room '-' means a doorway square)
 ///   Decoration: x, y, file[, facing]   facing only for the ones that turn
-///   Enemy: x, y, name
+///   Enemy: x, y, name[, facing]
 ///   PlayerStart: x, y
 ///   Trigger: x, y, dialogueName
 ///   Transition: x, y, pair
@@ -235,7 +242,16 @@ public class LevelData
                         "side instead, link them, and put a door decoration on the square");
                     break;
                 case "enemy" when Num(0, out int ex) && Num(1, out int ey) && parts.Length >= 3:
-                    level.Enemies.Add(new LevelEnemy { X = ex, Y = ey, Name = parts[2] });
+                    // a fourth field is the way it is standing; an older level
+                    // without one gets the default, which is what it used to be
+                    var looking = Pixel.Facings.Default;
+                    if (parts.Length >= 4 && parts[3].Length > 0 &&
+                        !Pixel.Facings.TryParse(parts[3], out looking))
+                        Diagnostics.Current.Error(path, lineNo,
+                            $"'{parts[3]}' is not a direction — " +
+                            $"use one of {string.Join(", ", Pixel.Facings.All.Select(f => f.FileName()))}");
+                    level.Enemies.Add(new LevelEnemy
+                        { X = ex, Y = ey, Name = parts[2], Facing = looking });
                     break;
                 case "trigger" when Num(0, out int tx) && Num(1, out int ty) && parts.Length >= 3:
                     level.Triggers.Add(new LevelTrigger { X = tx, Y = ty, Dialogue = parts[2] });
@@ -284,7 +300,7 @@ public class LevelData
         // restored a level with none of either: placing one enemy and pressing
         // Ctrl+Z took every enemy on the map with it.
         copy.Enemies.AddRange(Enemies.Select(e =>
-            new LevelEnemy { X = e.X, Y = e.Y, Name = e.Name }));
+            new LevelEnemy { X = e.X, Y = e.Y, Name = e.Name, Facing = e.Facing }));
         copy.Transitions.AddRange(Transitions.Select(t =>
             new LevelTransition { X = t.X, Y = t.Y, Pair = t.Pair }));
         copy.PlayerStarts.AddRange(PlayerStarts);
@@ -317,7 +333,7 @@ public class LevelData
                 ? $"Decoration: {d.X}, {d.Y}, {d.File}, {d.Facing.FileName()}"
                 : $"Decoration: {d.X}, {d.Y}, {d.File}");
         foreach (var e in Enemies)
-            sb.AppendLine($"Enemy: {e.X}, {e.Y}, {e.Name}");
+            sb.AppendLine($"Enemy: {e.X}, {e.Y}, {e.Name}, {e.Facing.FileName()}");
         foreach (var t in Triggers.OrderBy(t => t.Y).ThenBy(t => t.X))
             sb.AppendLine($"Trigger: {t.X}, {t.Y}, {t.Dialogue}");
         foreach (var t in Transitions.OrderBy(t => t.Pair).ThenBy(t => t.Y).ThenBy(t => t.X))
