@@ -12,4 +12,10 @@
 
 Cyber Smith: -6, -4
 Dirtbag: 0, -12
+Florida Man: -6, -4
 Goblin: -2, -8
+Gun-O-Mancer: 15, -9
+The Vessel: -1, -14
+VesselGate: -1, 38
+Werewitch WitchForm: -11, -9
+Werewitch WolfForm: -6, -9
