@@ -238,6 +238,11 @@ public partial class IsoLevelScreen
     {
         _walker = mover;
         _walkFrom = Tile(mover);
+        // The same grace BeginWalk cancels, cancelled here too. Without it an
+        // enemy that was standing in a guard zone when it went down kept its
+        // "already here" mark for the whole walk, so it could cross the wedge
+        // untouched — which is the one path enemies closing the distance take.
+        ForgetWhereTheyStood(mover);
         _escorts.Clear();
         _walkPath = path;
         if (path.Count > 0) mover.Face(_walkFrom, path[0]);
@@ -483,7 +488,14 @@ public partial class IsoLevelScreen
         // however many people happen to be near where the creature lands. A
         // mower catches people too, but only once it has driven into them —
         // who that turns out to be is settled by the run, not by the aim.
-        var caught = card.IsSummon || card.IsMower || card.IsGate
+        //
+        // A GUARD CARD POINTS; IT DOES NOT SHOOT. Its damage is what the
+        // watched ground does to whoever walks in on their own turn, so
+        // standing in the wedge when it goes down costs nothing. Aiming it at
+        // somebody and collecting the damage on the spot made it a cone attack
+        // that also left a trap, which is two cards for one action point.
+        var caught = card.IsSummon || card.IsMower || card.IsGate ||
+                     card.IsGuard || card.IsLurk
             ? new List<CharacterInstance>()
             : CatchableBy(Acting, card).Where(c => c.Footprint.Any(area.Contains)).ToList();
         // the ground the card covered is remembered here, because by the time
