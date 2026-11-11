@@ -201,6 +201,19 @@ public class Card
     /// <summary>Whether the card actually said, so the validator can ask for it.</summary>
     public bool StopsMovementDeclared;
 
+    /// <summary>
+    /// Cards that root the caster whatever the player has chosen in Settings.
+    ///
+    /// Planting yourself and then walking away from the ground you planted is
+    /// not a rule anybody wants; neither is carrying a channelled card around
+    /// while it winds up. Both of those ARE the card, so the setting does not
+    /// reach them.
+    /// </summary>
+    public bool AlwaysStopsMovement => IsGuard || IsLurk || IsChannelled;
+
+    /// <summary>How far this card's AMS ring reaches, or 0 for a card that puts none up.</summary>
+    public int AmsRadius => EffectNamed(Data.Effects.Ams)?.Amount ?? 0;
+
     /// <summary>A card that only helps (Armor, no damage) is aimed at the party instead.</summary>
     public bool TargetsAllies => Damage <= 0 && Effects.Exists(e => Effects_IsFriendly(e));
 
@@ -324,8 +337,18 @@ public class Card
     /// nothing, and took nobody's nerve.
     /// </summary>
     public bool IsSelfCast =>
-        Damage <= 0 && !TargetsGround &&
-        Effects.Count > 0 && Effects.TrueForAll(e => Data.Effects.IsSelfCast(e.Name));
+        OnSelf ||
+        (Damage <= 0 && !TargetsGround &&
+         Effects.Count > 0 && Effects.TrueForAll(e => Data.Effects.IsSelfCast(e.Name)));
+
+    /// <summary>
+    /// "Self: Yes" — the card lands on whoever played it, with nothing to aim.
+    ///
+    /// Needed where the same effect is friendly on one card and personal on
+    /// another: Reinforce welds a pad of health onto somebody across the room,
+    /// Wereblood is the wolf's own blood and can be nobody else's.
+    /// </summary>
+    public bool OnSelf;
 
     /// <summary>
     /// Whether this card is handed out at the start. "Dealt: No" keeps a card
@@ -425,6 +448,7 @@ public class CardLibrary
         "explosion range", "aims", "fire chance", "action points", "friendly fire", "stops movement", "mind damage",
         "mind effect", "sky angle", "animation", "expendable", "acts as", "behind", "effects", "effect",
         "speed", "range", "summons", "replaces", "blast", "dealt", "with", "form", "tags", "type", "sounds",
+        "self",
     };
 
     private static readonly Regex TrailingNote = new(@"\s*\([^()]*\)\s*$");
@@ -614,6 +638,13 @@ public class CardLibrary
 
             case "acts as":
                 card.ActsAs = value;
+                break;
+
+            case "self":
+                if (value.Equals("yes", StringComparison.OrdinalIgnoreCase)) card.OnSelf = true;
+                else if (value.Equals("no", StringComparison.OrdinalIgnoreCase)) card.OnSelf = false;
+                else diag.Error(card.Source, lineNo,
+                    $"'{card.Name}': Self must be Yes or No, got '{value}'");
                 break;
 
             case "behind":

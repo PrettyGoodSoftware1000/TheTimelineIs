@@ -103,6 +103,10 @@ public partial class IsoLevelScreen
         foreach (var c in Everyone)
         {
             c.ResetActionPoints();
+            c.Armor = 0;
+            c.TempHp = 0;
+            c.TempHpForm = "";
+            c.AmsTurns = c.AmsShots = c.AmsRadius = 0;
             StopGuarding(c);
         }
     }
@@ -226,6 +230,7 @@ public partial class IsoLevelScreen
         else if (current.IsShaken)
             Log(_ctx.Strings.Format("iso_mind_shaken", ("name", current.Name)));
         AgeFires(current);
+        AgeAms(current);
         _overlayKey = null;
 
         // The hand belongs to whoever's turn it is, and it is dealt HERE —
@@ -295,14 +300,16 @@ public partial class IsoLevelScreen
 
         if (current.IsPlayer)
         {
-            // a summoner's turn is also its pets': they get their points and
-            // movement now, and the player picks between them by clicking
+            // A summoner's turn is also its pets'. They get their own
+            // MOVEMENT now — both can walk on the same turn — and the player
+            // picks between them by clicking. The POINTS are not refreshed
+            // here: a pet spends its owner's, so refreshing them again would
+            // hand the pair a second turn's worth.
             _petControl = null;
             foreach (var pet in LivingParty.Where(p => p.Owner == current))
             {
                 if (pet.IsGuarding) StopGuarding(pet);
                 pet.MovePoints = pet.MoveMax;
-                pet.RefreshActionPoints();
             }
             _mode = Mode.PlayerTurn;
         }

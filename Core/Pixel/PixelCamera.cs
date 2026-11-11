@@ -21,16 +21,16 @@ public class PixelCamera
     /// <summary>
     /// The zoom levels, in order, in screen pixels per art pixel.
     ///
-    /// Whole numbers but for the FIRST. A half step means one art pixel
+    /// Whole numbers but for the MIDDLE one. A half step means one art pixel
     /// covers one and a half screen pixels, which the hardware has to smear —
     /// the exact thing the rest of this class exists to avoid. There is one
-    /// of them and it is the bottom rung, because seeing more of the board at
-    /// once was worth it; everything above it is exact.
+    /// of them, between the two exact rungs, because a single step from end
+    /// to end was too coarse to aim with.
     /// </summary>
-    private static readonly float[] Steps = { 1.5f, 2f, 3f, 4f, 5f, 6f, 7f, 8f };
+    private static readonly float[] Steps = { 1f, 1.5f, 2f };
 
-    /// <summary>Where a level opens: far enough out to see a fight, still exact.</summary>
-    private const int OpeningStep = 1;
+    /// <summary>Where a level opens, and as close as it goes: the top of the ladder.</summary>
+    private const int OpeningStep = 2;
 
     public static float MinZoom => Steps[0];
     public static float MaxZoom => Steps[^1];

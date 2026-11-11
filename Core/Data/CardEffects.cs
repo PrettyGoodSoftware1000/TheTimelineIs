@@ -146,12 +146,31 @@ public static class Effects
     /// </summary>
     public const string Freecast = "Freecast";
 
+    /// <summary>
+    /// Temp HP N: a pad of hit points that soaks damage before real health
+    /// and before armour, shown on the bar in pale pink. It is a thing of the
+    /// fight, cleared when the fight ends — and, where a form granted it, when
+    /// that form is left.
+    /// </summary>
+    public const string TempHp = "Temp HP";
+
+    /// <summary>
+    /// AMS N: a ring N squares across that travels with the caster. An enemy
+    /// shot whose flight crosses it is knocked down instead of landing. It
+    /// runs out after <see cref="AmsTurns"/> turns or <see cref="AmsShots"/>
+    /// shots, whichever comes first.
+    /// </summary>
+    public const string Ams = "AMS";
+
+    /// <summary>How long an AMS stays up, and how many shots it can take down.</summary>
+    public const int AmsTurns = 3, AmsShots = 3;
+
     /// <summary>Longest first, so "Form" isn't mistaken for the start of something else.</summary>
     public static readonly string[] Known =
     {
         Burning, Armor, Nimble, Leap, Curse, Form, Steal, Channel, FireTiles,
         Summon, Guard, Vulnerable, Mower, Stun, Swap, BathSalts, Fear,
-        Grant, Gate, Lurk, Devour, Hex, Shove, Freecast,
+        Grant, Gate, Lurk, Devour, Hex, Shove, Freecast, TempHp, Ams,
     };
 
     /// <summary>Damage each stack of Burning deals at the victim's turn start.</summary>
@@ -188,9 +207,10 @@ public static class Effects
     public static bool IsKnown(string name) =>
         Known.Any(k => k.Equals(name, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Armor helps its holder, so a card carrying it aims at friends.</summary>
+    /// <summary>Armour and a pad of temporary health both help, so those cards aim at friends.</summary>
     public static bool IsFriendly(string name) =>
-        name.Equals(Armor, StringComparison.OrdinalIgnoreCase);
+        name.Equals(Armor, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(TempHp, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Effects that act on the caster rather than on whatever was hit.</summary>
     public static bool IsSelfCast(string name) =>
@@ -205,6 +225,7 @@ public static class Effects
         name.Equals(Gate, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Lurk, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(Freecast, StringComparison.OrdinalIgnoreCase) ||
+        name.Equals(Ams, StringComparison.OrdinalIgnoreCase) ||
         name.Equals(BathSalts, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>These carry a word (a form or card name) instead of a number.</summary>

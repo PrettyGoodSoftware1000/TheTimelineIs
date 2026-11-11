@@ -24,6 +24,16 @@ public class PlayerSettings
 {
     public BarVisibility Bars = BarVisibility.Selected;
 
+    /// <summary>
+    /// Whether a card leaves the movement it has not spent.
+    ///
+    /// OFF is the game's own rule: most cards plant you, and choosing between
+    /// walking and acting is the whole of a turn. On, a turn is a card and a
+    /// walk in either order. A handful of cards root the caster whatever this
+    /// says — see <see cref="Card.AlwaysStopsMovement"/>.
+    /// </summary>
+    public bool MoveAfterCard;
+
     /// <summary>The order the left and right arrows step through.</summary>
     public static readonly BarVisibility[] BarOrder =
         { BarVisibility.Always, BarVisibility.Selected, BarVisibility.Damaged };

@@ -302,7 +302,7 @@ public partial class IsoLevelScreen
         for (int i = 0; i < _hand.Count && i < HandKeys.Length; i++)
             Ui.DrawTextCentered(batch, _ctx.Font, HandKeys[i].ToString(),
                 new Rectangle(drawn[i].X, drawn[i].Y - 62, drawn[i].Width, 56),
-                Acting is CharacterInstance who && who.ActionPoints >= _hand[i].ActionCost
+                Acting is CharacterInstance who && who.CanAfford(_hand[i])
                     ? Color.White : Color.White * 0.35f,
                 0.42f);
     }
@@ -422,6 +422,13 @@ public partial class IsoLevelScreen
         if (c.Armor > 0)
             all.Add(new Status(S("fx_armor"), S("fx_armor_d", ("armor", c.Armor.ToString())),
                 null, new Color(168, 172, 180)));
+        if (c.TempHp > 0)
+            all.Add(new Status(S("fx_temp_hp"), S("fx_temp_hp_d", ("hp", c.TempHp.ToString())),
+                null, new Color(255, 170, 200)));
+        if (c.HasAms)
+            all.Add(new Status(S("fx_ams"),
+                S("fx_ams_d", ("turns", c.AmsTurns.ToString()), ("shots", c.AmsShots.ToString())),
+                null, new Color(60, 240, 255)));
         if (c.IsStunned)
             all.Add(new Status(S("fx_stun"), S("fx_stun_d", ("turns", c.StunTurns.ToString())),
                 Fx("Stun.png"), new Color(120, 180, 255)));
@@ -466,7 +473,7 @@ public partial class IsoLevelScreen
         float s = rect.Width / (float)CardW;
         // a card the holder cannot currently afford is greyed out card by card,
         // so with 1 point left the cheap ones stay lit and the dear ones dim
-        bool spent = Acting == null || Acting.ActionPoints < card.ActionCost;
+        bool spent = Acting == null || !Acting.CanAfford(card);
         Ui.FillRect(batch, _ctx.Pixel, rect,
             spent ? new Color(20, 20, 26, 250) : new Color(24, 24, 40, 250));
         var border = card == _selectedCard ? Color.Gold

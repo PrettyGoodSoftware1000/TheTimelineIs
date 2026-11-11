@@ -319,7 +319,7 @@ public partial class IsoLevelScreen
             TakeControlOf(pet);     // clears any card already armed
         }
 
-        if (Acting is CharacterInstance holder && holder.ActionPoints < card.ActionCost)
+        if (Acting is CharacterInstance holder && !holder.CanAfford(card))
         {
             Toast(_ctx.Strings.Format("iso_no_actions",
                 ("cost", card.ActionCost.ToString()),
@@ -358,7 +358,13 @@ public partial class IsoLevelScreen
         }
         if (card.IsGuard || card.IsLurk || card.IsBathSalts || card.IsSelfCast)
         {
-            PlayCard(new List<CharacterInstance>(), Tile(Acting!));
+            // "Self: Yes" means the caster is also the one hit, so an effect
+            // that normally lands on a target — a pad of temporary health —
+            // lands on them without anything being aimed.
+            PlayCard(card.OnSelf
+                    ? new List<CharacterInstance> { Acting! }
+                    : new List<CharacterInstance>(),
+                Tile(Acting!));
             return;
         }
         _mode = Mode.PlayerTarget;

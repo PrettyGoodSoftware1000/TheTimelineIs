@@ -79,7 +79,13 @@ public partial class IsoLevelScreen
         // do not — a shapeshift or a shell swap changes what you are holding
         // rather than doing something with it. Nimble is added afterwards
         // either way, so it tops up whatever is left.
-        if (card.StopsMovement)
+        //
+        // The Settings switch hands the walk back for the ordinary ones. It
+        // never reaches the few that ARE standing still — see
+        // Card.AlwaysStopsMovement.
+        bool roots = card.StopsMovement &&
+            (card.AlwaysStopsMovement || !_ctx.Settings.MoveAfterCard);
+        if (roots)
             _actor.MovePoints = 0;
         _overlayKey = null;
 
@@ -243,6 +249,8 @@ public partial class IsoLevelScreen
         _ctx.Sounds.Play(_hitIndex < card.HitEvents.Count ? card.HitEvents[_hitIndex].Sound : null);
 
         var report = new StringBuilder();
+        // shots are knocked down as they arrive, once, before the first blow
+        if (_hitIndex == 0) InterceptShots(card, report);
         var struck = _victims.Where(v => v.Alive).ToList();
         foreach (var v in struck)
         {
@@ -332,9 +340,14 @@ public partial class IsoLevelScreen
         HandOf(e).Any(c => !c.TargetsAllies && c.ActionCost <= e.ActionPoints);
 
     /// <summary>
-    /// Armor is an extension of health: it soaks damage first and only what's
-    /// left over reaches hit points, so 6 damage against 5 armor strips the
-    /// armor and takes 1 off health.
+    /// Armour and temporary health are both extensions of health: they soak
+    /// damage first and only what is left over reaches hit points, so 6
+    /// damage against 5 armor strips the armor and takes 1 off health.
+    ///
+    /// The pad of temporary health goes FIRST, because it is the thing most
+    /// recently handed out and the thing that disappears at the end of the
+    /// fight anyway — spending it before the armour under it is what anybody
+    /// would expect of a shield laid over a plate.
     /// </summary>
     private void ApplyHit(CharacterInstance target, int dmg, string type, StringBuilder report)
     {
@@ -354,14 +367,16 @@ public partial class IsoLevelScreen
                 ("target", target.Name), ("bonus", bonus.ToString())));
         }
 
-        int soaked = Math.Min(target.Armor, dmg);
+        int padded = Math.Min(target.TempHp, dmg);
+        target.TempHp -= padded;
+        int soaked = Math.Min(target.Armor, dmg - padded);
         target.Armor -= soaked;
-        int through = dmg - soaked;
+        int through = dmg - padded - soaked;
         target.Hp -= through;
 
         // the number that floats off them is what actually got through, plus
         // whatever the armour ate, since both came off the bar
-        target.Popups.Add((through + soaked, type, PopupSeconds));
+        target.Popups.Add((through + soaked + padded, type, PopupSeconds));
 
         report.AppendLine(soaked > 0
             ? _ctx.Strings.Format("iso_hit_armor", ("target", target.Name),
@@ -447,7 +462,8 @@ public partial class IsoLevelScreen
                 SizeX = def.SizeX, SizeY = def.SizeY,
                 GX = at.X, GY = at.Y,
             };
-            pet.RefreshActionPoints();
+            // no points of its own: it spends its summoner's, and the
+            // summoner has already paid for the card that called it up
             _party.Add(pet);
             report.AppendLine(_ctx.Strings.Format("iso_summoned",
                 ("owner", owner.Name), ("name", def.Name)));
@@ -699,6 +715,16 @@ public partial class IsoLevelScreen
                         ("name", _actor.Name), ("range", effect.Amount.ToString()),
                         ("dmg", card.Damage.ToString())));
                 }
+                else if (effect.Is(Data.Effects.Ams))
+                {
+                    _actor.AmsRadius = Math.Max(1, effect.Amount);
+                    _actor.AmsTurns = Data.Effects.AmsTurns;
+                    _actor.AmsShots = Data.Effects.AmsShots;
+                    report.AppendLine(_ctx.Strings.Format("iso_ams_up",
+                        ("name", _actor.Name), ("range", _actor.AmsRadius.ToString()),
+                        ("turns", _actor.AmsTurns.ToString()),
+                        ("shots", _actor.AmsShots.ToString())));
+                }
                 else if (effect.Is(Data.Effects.Freecast))
                 {
                     _actor.FreeCard = true;
@@ -723,6 +749,15 @@ public partial class IsoLevelScreen
                     c.Armor += effect.Amount;
                     report.AppendLine(_ctx.Strings.Format("iso_armored",
                         ("name", c.Name), ("armor", c.Armor.ToString())));
+                }
+                else if (effect.Is(Data.Effects.TempHp))
+                {
+                    // the form that granted it is remembered, so leaving that
+                    // form takes the pad with it
+                    c.TempHp += effect.Amount;
+                    c.TempHpForm = c.Form;
+                    report.AppendLine(_ctx.Strings.Format("iso_temp_hp",
+                        ("name", c.Name), ("hp", c.TempHp.ToString())));
                 }
                 else if (effect.Is(Data.Effects.Curse))
                 {
@@ -760,7 +795,7 @@ public partial class IsoLevelScreen
                     {
                         // armour and all: it is a throat, not a damage roll,
                         // and 5 points of plate is not what saves you from it
-                        ApplyHit(c, c.Hp + c.Armor, "Teeth", report);
+                        ApplyHit(c, c.Hp + c.Armor + c.TempHp, "Teeth", report);
                         report.AppendLine(_ctx.Strings.Format("iso_devoured",
                             ("name", _actor?.Name ?? "?"), ("victim", c.Name)));
                     }
@@ -950,6 +985,18 @@ public partial class IsoLevelScreen
             _ctx.ReportProblem(ClassLibrary.Path,
                 $"'{who.Name}' has no form called '{form}', so the card could not change shape");
             return;
+        }
+        // A pad of temporary health belongs to the shape that grew it. The
+        // wolf's blood is the wolf's: shifting out of that form sheds it, and
+        // shedding it can never be fatal, because the pad was never part of
+        // the health underneath it.
+        if (who.TempHp > 0 && who.TempHpForm.Length > 0 &&
+            !who.TempHpForm.Equals(target.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            who.TempHp = 0;
+            who.TempHpForm = "";
+            who.Hp = Math.Max(1, who.Hp);
+            report.AppendLine(_ctx.Strings.Format("iso_temp_hp_gone", ("name", who.Name)));
         }
         who.Form = target.Name;
         if (who == Current)

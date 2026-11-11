@@ -136,7 +136,26 @@ public class CharacterInstance
     /// topped up to ActionsPerTurn at the start of their turn, plus at most
     /// ActionRollover carried over from what they didn't spend last time.
     /// </summary>
-    public int ActionPoints;
+    private int _actionPoints;
+
+    /// <summary>
+    /// Action points, which a PET SHARES WITH ITS OWNER.
+    ///
+    /// A summoner and what it summoned take one turn between them, and that
+    /// turn is one pile of points: biting with the Gator spends the Florida
+    /// Man's action, exactly as if he had swung himself. They each keep their
+    /// own MOVEMENT — both can walk on the same turn, and a card played by
+    /// one never spends the other's legs.
+    /// </summary>
+    public int ActionPoints
+    {
+        get => Owner?.ActionPoints ?? _actionPoints;
+        set
+        {
+            if (Owner != null) Owner.ActionPoints = value;
+            else _actionPoints = value;
+        }
+    }
 
     /// <summary>
     /// Fresh points granted at the start of every turn, from the "Actions:"
@@ -268,6 +287,29 @@ public class CharacterInstance
     /// <summary>Soaks damage before health does, and shows grey on the bar.</summary>
     public int Armor;
 
+    /// <summary>
+    /// A pad of hit points that soaks before armour and before health, shown
+    /// on the bar in pale pink. It belongs to the fight, not to the
+    /// character: cleared when combat ends, and when the form that granted it
+    /// is left.
+    /// </summary>
+    public int TempHp;
+
+    /// <summary>
+    /// The form that handed the pad out, or empty when nothing in particular
+    /// did. Leaving that form sheds the pad.
+    /// </summary>
+    public string TempHpForm = "";
+
+    /// <summary>Turns of AMS cover left, and how many more shots it can take down.</summary>
+    public int AmsTurns, AmsShots;
+
+    /// <summary>How far the AMS ring reaches, in squares, from wherever they stand.</summary>
+    public int AmsRadius;
+
+    /// <summary>Whether a shot crossing their ring right now would be knocked down.</summary>
+    public bool HasAms => AmsTurns > 0 && AmsShots > 0 && AmsRadius > 0;
+
     /// <summary>One entry per curse: extra melee damage taken, and its own remaining turns.</summary>
     public List<(int Amount, int Turns)> Curses = new();
 
@@ -316,6 +358,17 @@ public class CharacterInstance
 
     /// <summary>Their next card costs nothing. Spent by the next one they play.</summary>
     public bool FreeCard;
+
+    /// <summary>
+    /// Whether they can play this card right now.
+    ///
+    /// A free cast pays for ANY card, whatever it costs — that is what makes
+    /// it worth having. It used to be checked against the points in hand
+    /// first, so with one point left a free cast could still not reach a
+    /// two-point card and the card sat there greyed out with the free cast
+    /// still unspent.
+    /// </summary>
+    public bool CanAfford(Card card) => FreeCard || ActionPoints >= card.ActionCost;
 
     /// <summary>
     /// Cards this character has swapped out, by name: the one they no longer

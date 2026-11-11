@@ -244,6 +244,23 @@ Bottom Right: 5 Stabby
 []
 
 []
+Card Name: AMS
+Tags: Cyber Smith
+Type: Single target, X hits.
+Action Points: 1
+Friendly Fire: No
+Stops Movement: Yes
+Range: 1
+Effects: AMS 3
+Casting Sound: [Blank.wav]
+Casting Time: 0.3
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: Put up a bubble. Enemy shots that cross the blue line are knocked out of the air. Three turns, or three shots, whichever runs out first. It walks with you.
+Bottom Right: 3 Tiles
+[]
+
+[]
 Card Name: Reinforce
 Tags: Cyber Smith
 Type: [ranged] Single target, X hits.
@@ -251,15 +268,15 @@ Action Points: 1
 Friendly Fire: No
 Stops Movement: Yes
 Range: 3
-Effects: Armor 8
+Effects: Temp HP 8
 Projectile Art: Ball.png
 Casting Sound: [Blank.wav]
 Casting Time: Use Sound Time
 Speed: 20
 Hit Sound: [DefaultPop.wav]
 Effect: Single target. 1 times x 0 damage.
-Card Text: Bolt a plate onto a friend. Adds 5 Armor.
-Bottom Right: 8 Armor
+Card Text: Weld a friend some spare. 8 temporary hit points, gone when the fight is.
+Bottom Right: 8 Temp HP
 []
 
 []
@@ -405,6 +422,29 @@ Bottom Right: 0 Free
 []
 
 []
+Card Name: Wereblood
+Tags: Werewitch
+Form: Werewolf
+Type: [ranged] Single target, X hits.
+Action Points: 0
+Expendable: Yes
+Dealt: No
+Self: Yes
+Friendly Fire: No
+Stops Movement: No
+Effects: Temp HP 20
+Range: 1
+Projectile Art: Ball.png
+Casting Sound: [Blank.wav]
+Casting Time: Use Sound Time
+Speed: 20
+Hit Sound: [DefaultPop.wav]
+Effect: Single target. 1 times x 0 damage.
+Card Text: The wolf runs hot. 20 temporary hit points, and they stay with the wolf.
+Bottom Right: 20 Temp HP
+[]
+
+[]
 Card Name: Hex of Daggers
 Tags: Werewitch
 Form: Witch
@@ -452,7 +492,7 @@ Type: [ranged] Single target, X hits.
 Action Points: 1
 Friendly Fire: No
 Stops Movement: No
-Effects: Form Werewolf, Nimble 5
+Effects: Form Werewolf, Nimble 5, Grant Wereblood
 Range: 1
 Projectile Art: Ball.png
 Casting Sound: [Blank.wav]

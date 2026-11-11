@@ -167,6 +167,9 @@ public partial class IsoLevelScreen : IScreen, IDrawsItself
     /// </summary>
     private readonly HashSet<Point> _watchedGround = new();
 
+    /// <summary>Ground an AMS is covering, gathered fresh every frame.</summary>
+    private readonly HashSet<Point> _amsGround = new();
+
     /// <summary>
     /// Squares an armed card wants its caster to stand on: the ones behind an
     /// enemy's back, for a card that only works from there.

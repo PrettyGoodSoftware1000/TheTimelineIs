@@ -217,6 +217,21 @@ public partial class IsoLevelScreen
             (_selectedCard ?? HoveredCard()) is Card plant && (plant.IsGuard || plant.IsLurk))
             _watchedGround.UnionWith(WatchedGroundFor(planter, plant));
 
+        // The ground every AMS is covering, worked out from where its owner
+        // is standing THIS frame, which is what makes the ring travel with
+        // them. Previewed from the hand the same way a guard zone is.
+        _amsGround.Clear();
+        foreach (var op in AmsOperators)
+            _amsGround.UnionWith(AmsGround(op));
+        if (armed && Acting is CharacterInstance oper &&
+            (_selectedCard ?? HoveredCard()) is Card ring && ring.AmsRadius > 0)
+            foreach (var block in _level.Blocks.Values)
+            {
+                var tile = new Point(block.X, block.Y);
+                if (oper.Footprint.Any(f => IsoMath.GridDistance(f, tile) <= ring.AmsRadius))
+                    _amsGround.Add(tile);
+            }
+
         // Objects nudged south, waiting for the band of ground they have moved
         // onto to be painted. Almost always empty: an object with no nudge, or
         // one nudged north, is drawn with its own square as it always was.
@@ -269,6 +284,15 @@ public partial class IsoLevelScreen
             if (_watchedGround.Contains(tile))
                 DashedOutline(batch, tile, block.Height, _watchedGround,
                     new Color(235, 50, 50), 8f);
+
+            // Ground an AMS is covering: a solid CYAN edge, drawn thick.
+            // Blue was the obvious colour and the wrong one — the movement
+            // budget is already blue, and the two lines sat side by side
+            // looking like one thing. Cyan is still read as blue and is not
+            // mistaken for where you can walk.
+            if (_amsGround.Contains(tile))
+                Outline(batch, tile, block.Height, _amsGround,
+                    new Color(60, 240, 255), 12f);
 
             // The squares a card wants its caster to stand on — behind
             // somebody's back — in the same broken red, since it is the same
@@ -756,12 +780,14 @@ public partial class IsoLevelScreen
     /// </summary>
     private void DrawBars(SpriteBatch batch, CharacterInstance c, Rectangle back, Rectangle mindBar)
     {
-        // Armor extends the health bar in metallic grey, so 10 health plus 5
-        // armor makes the grey a third of its width.
+        // Armour extends the health bar in metallic grey and a pad of
+        // temporary health extends it in pale pink, so 10 health plus 5 of
+        // either makes that colour a third of the width.
         Ui.FillRect(batch, _ctx.Pixel, back, Color.Black * 0.72f);
 
-        int span = Math.Max(1, c.MaxHp + c.Armor);
+        int span = Math.Max(1, c.MaxHp + c.Armor + c.TempHp);
         int hpW = (int)(back.Width * Math.Clamp(c.Hp / (float)span, 0f, 1f));
+        int padW = (int)(back.Width * Math.Clamp(c.TempHp / (float)span, 0f, 1f));
         int armW = (int)(back.Width * Math.Clamp(c.Armor / (float)span, 0f, 1f));
 
         // The part that has been lost but not yet caught up shows pale behind
@@ -775,8 +801,13 @@ public partial class IsoLevelScreen
 
         Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X, back.Y, hpW, back.Height),
             c.IsPlayer ? new Color(70, 190, 70) : new Color(200, 60, 60));
+        // the pad first, then the plate under it, in the order damage eats them
+        if (padW > 0)
+            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, padW, back.Height),
+                new Color(255, 170, 200));
         if (armW > 0)
-            Ui.FillRect(batch, _ctx.Pixel, new Rectangle(back.X + hpW, back.Y, armW, back.Height),
+            Ui.FillRect(batch, _ctx.Pixel,
+                new Rectangle(back.X + hpW + padW, back.Y, armW, back.Height),
                 new Color(168, 172, 180));
 
         Outline(batch, back);
@@ -901,7 +932,7 @@ public partial class IsoLevelScreen
     private void DrawBarNumbers(SpriteBatch batch, CharacterInstance c, Rectangle back, Rectangle mindBox)
     {
         Ui.DrawTextCentered(batch, _ctx.Font,
-            c.Armor > 0 ? $"{c.Hp}+{c.Armor}" : c.Hp.ToString(), back, Color.White,
+            c.Armor + c.TempHp > 0 ? $"{c.Hp}+{c.Armor + c.TempHp}" : c.Hp.ToString(), back, Color.White,
             back.Height * BarTextScale);
 
         // Nerve, in its own bar. An infinity sign for anything that cannot be

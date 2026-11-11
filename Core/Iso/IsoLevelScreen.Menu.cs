@@ -125,7 +125,8 @@ public partial class IsoLevelScreen
     /// </summary>
     private void DrawSettings(SpriteBatch batch)
     {
-        var panel = MenuPanelFor(2);
+        // room for two rows of setting and the Back button under them
+        var panel = MenuPanelFor(3);
 
         Ui.FillRect(batch, _ctx.Pixel,
             new Rectangle(0, 0, VirtualViewport.Width, VirtualViewport.Height), Color.Black * 0.6f);
@@ -157,7 +158,26 @@ public partial class IsoLevelScreen
         Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get(_ctx.Settings.BarsKey),
             value, Color.Gold, 0.34f);
 
-        if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, MenuButton(panel, 1),
+        // A tick box rather than arrows: it is on or it is off, and a pair of
+        // arrows for two states is a stile where a gate would do.
+        var row2 = new Rectangle(row.X, row.Y + SetRowH + 30, row.Width, SetRowH);
+        var box = new Rectangle(row2.Right - (SetRowH - 60), row2.Y + 30,
+            SetRowH - 60, SetRowH - 60);
+        // the name gets everything up to the box, and a smaller face than the
+        // row above: it is a whole sentence where that one is three words
+        Ui.DrawTextCentered(batch, _ctx.Font, _ctx.Strings.Get("set_move_after"),
+            new Rectangle(row2.X, row2.Y, box.X - row2.X - 24, row2.Height), Color.White, 0.26f);
+        Ui.FillRect(batch, _ctx.Pixel, box, new Color(0, 0, 0, 200));
+        Outline(batch, box);
+        if (_ctx.Settings.MoveAfterCard)
+            Ui.DrawTextCentered(batch, _ctx.Font, "x", box, Color.LightGreen, 0.5f);
+        if (_tap is Point hit && box.Contains(hit))
+        {
+            _ctx.Settings.MoveAfterCard = !_ctx.Settings.MoveAfterCard;
+            _tap = null;
+        }
+
+        if (Ui.Button(batch, _ctx.Pixel, _ctx.Font, MenuButton(panel, 2),
                 _ctx.Strings.Get("iso_menu_back"), _tap))
         {
             _settings = false;
