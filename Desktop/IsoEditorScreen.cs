@@ -583,9 +583,18 @@ public partial class IsoEditorScreen : IScreen, IDrawsItself
         if (id == "terrain") return TerrainMenuRects(btn.Rect);
         var items = MenuItems(id);
         var rects = new List<Rectangle>();
+        int width = Math.Max(btn.Rect.Width, 460), step = BarH - 12;
+        int top = btn.Rect.Bottom + 6;
+
+        // A list too long for the screen carries on in a second column beside
+        // the first, rather than running off the bottom with its last entries
+        // out of reach — twenty-nine decorations did exactly that.
+        int perColumn = Math.Max(1, (VirtualViewport.Height - top - 8) / step);
+        int columns = (items.Count + perColumn - 1) / perColumn;
+        int left = Math.Min(btn.Rect.X, BarRight - columns * (width + 6) + 6);
         for (int i = 0; i < items.Count; i++)
-            rects.Add(new Rectangle(btn.Rect.X, btn.Rect.Bottom + 6 + i * (BarH - 12),
-                Math.Max(btn.Rect.Width, 460), BarH - 14));
+            rects.Add(new Rectangle(left + (i / perColumn) * (width + 6),
+                top + (i % perColumn) * step, width, BarH - 14));
         return rects;
     }
 

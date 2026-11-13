@@ -23,3 +23,20 @@ old tires 04.png
 lawnmower 01.png
 purple portal 01.png
 potted plant 01.png
+lava portal 01.png
+maw portal 01.png
+horned portal 01.png
+stone portal 01.png
+skull portal 01.png
+bar stool 01.png
+garden chair 01.png
+office chair 01.png
+rocking chair 01.png
+gothic chair 01.png
+green armchair 01.png
+windsor chair 01.png
+parlour chair 01.png
+ladder chair 01.png
+folding chair 01.png
+throne 01.png
+rustic chair 01.png
